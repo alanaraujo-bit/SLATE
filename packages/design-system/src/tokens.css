@@ -1,0 +1,345 @@
+/*
+ * SLATE — Design System
+ *
+ * Fonte única dos tokens visuais do produto. O `tokens.ts` ao lado apenas
+ * espelha estes nomes de forma tipada; os valores vivem aqui, porque CSS é
+ * onde eles são consumidos e duplicá-los em JS garantiria divergência.
+ *
+ * Organização em duas camadas, e a distinção importa:
+ *
+ *   PRIMITIVAS  (--s-gray-700, --s-blue-500)
+ *     A paleta bruta. Nunca referenciada por um componente.
+ *
+ *   SEMÂNTICOS  (--s-surface, --s-text, --s-danger)
+ *     O que um componente usa. Trocar de tema reescreve esta camada e nada
+ *     mais. Um componente que referencia uma primitiva quebra o tema — é
+ *     defeito, não atalho.
+ *
+ * O Centro de Controle tem a própria folha e não consome este arquivo: é uma
+ * ferramenta interna de leitura, e o mandato §47 permite explicitamente que
+ * ferramenta e produto não se pareçam.
+ */
+
+:root {
+  color-scheme: dark light;
+
+  /* ===================================================================== */
+  /* PRIMITIVAS — paleta                                                    */
+  /* ===================================================================== */
+
+  /*
+   * Neutros de ardósia, levemente frios — o nome do produto é o ponto de
+   * partida da identidade, e não uma escolha arbitrária de cinza.
+   */
+  --s-slate-0: #ffffff;
+  --s-slate-50: #f6f7f9;
+  --s-slate-100: #eceef2;
+  --s-slate-200: #d8dce4;
+  --s-slate-300: #b4bcc9;
+  --s-slate-400: #8c96a7;
+  --s-slate-500: #6b7688;
+  --s-slate-600: #505a6b;
+  --s-slate-700: #3a4250;
+  --s-slate-800: #262c37;
+  --s-slate-850: #1c212a;
+  --s-slate-900: #141820;
+  --s-slate-950: #0c0f15;
+  --s-slate-1000: #06080c;
+
+  /* Acento: azul frio e preciso. Sinaliza ação, nunca decora. */
+  --s-blue-300: #93c4ff;
+  --s-blue-400: #5fa8ff;
+  --s-blue-500: #3b8df5;
+  --s-blue-600: #2b6fd6;
+  --s-blue-700: #1f54a8;
+
+  --s-green-400: #4ade80;
+  --s-green-500: #22c55e;
+  --s-green-600: #16a34a;
+
+  --s-amber-400: #fbbf24;
+  --s-amber-500: #f59e0b;
+  --s-amber-600: #d97706;
+
+  --s-red-400: #f87171;
+  --s-red-500: #ef4444;
+  --s-red-600: #dc2626;
+
+  --s-violet-400: #a78bfa;
+  --s-violet-500: #8b5cf6;
+
+  --s-cyan-400: #22d3ee;
+  --s-cyan-500: #06b6d4;
+  /*
+   * Existe porque o ciano-500 reprova sobre branco (2,4:1). Ciano é a matiz
+   * mais traiçoeira num tema claro: parece forte e não é. Detectado pelo teste
+   * de contraste, não a olho.
+   */
+  --s-cyan-600: #0891b2;
+
+  /* ===================================================================== */
+  /* PRIMITIVAS — paleta de controles                                       */
+  /* ===================================================================== */
+
+  /*
+   * Cores que o usuário atribui aos próprios controles.
+   *
+   * Escolhidas para serem distinguíveis entre si sobre fundo escuro e para
+   * aceitarem texto escuro por cima com contraste suficiente — um botão
+   * colorido precisa do rótulo legível, senão a cor vira enfeite que atrapalha.
+   * São doze porque além disso a distinção entre vizinhas deixa de ser
+   * confiável num toque rápido.
+   */
+  --s-control-red: #f2555a;
+  --s-control-orange: #f97d3c;
+  --s-control-amber: #f5a524;
+  --s-control-yellow: #e8c547;
+  --s-control-lime: #9dd549;
+  --s-control-green: #3fc06a;
+  --s-control-teal: #2dc3a6;
+  --s-control-cyan: #26bad6;
+  --s-control-blue: #3b8df5;
+  --s-control-indigo: #6b6ef0;
+  --s-control-violet: #9b6ef3;
+  --s-control-pink: #ee5fa7;
+
+  /* ===================================================================== */
+  /* ESCALAS                                                                */
+  /* ===================================================================== */
+
+  /* Espaço: passo de 4px. Um valor fora desta escala é defeito. */
+  --s-space-0: 0;
+  --s-space-1: 0.25rem;
+  --s-space-2: 0.5rem;
+  --s-space-3: 0.75rem;
+  --s-space-4: 1rem;
+  --s-space-5: 1.25rem;
+  --s-space-6: 1.5rem;
+  --s-space-8: 2rem;
+  --s-space-10: 2.5rem;
+  --s-space-12: 3rem;
+  --s-space-16: 4rem;
+
+  /*
+   * Raios contidos de propósito. O mandato §9 proíbe arredondamento excessivo:
+   * um control surface precisa parecer instrumento, não brinquedo.
+   */
+  --s-radius-xs: 0.25rem;
+  --s-radius-sm: 0.375rem;
+  --s-radius-md: 0.5rem;
+  --s-radius-lg: 0.75rem;
+  --s-radius-xl: 1rem;
+  --s-radius-full: 9999px;
+
+  /* Tipografia */
+  --s-font-sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+  --s-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, monospace;
+
+  --s-text-2xs: 0.6875rem;
+  --s-text-xs: 0.75rem;
+  --s-text-sm: 0.875rem;
+  --s-text-md: 1rem;
+  --s-text-lg: 1.125rem;
+  --s-text-xl: 1.375rem;
+  --s-text-2xl: 1.75rem;
+  --s-text-3xl: 2.25rem;
+
+  --s-weight-regular: 400;
+  --s-weight-medium: 500;
+  --s-weight-semibold: 600;
+
+  --s-leading-tight: 1.2;
+  --s-leading-normal: 1.5;
+
+  --s-tracking-tight: -0.01em;
+  --s-tracking-wide: 0.04em;
+  --s-tracking-caps: 0.07em;
+
+  /* ===================================================================== */
+  /* MOVIMENTO                                                              */
+  /* ===================================================================== */
+
+  /*
+   * Um control surface precisa parecer instantâneo (§36). Estas durações são
+   * teto, não sugestão: acima disso a interface começa a parecer que está
+   * pensando, e o produto vende precisão.
+   */
+  --s-duration-instant: 80ms;
+  --s-duration-fast: 140ms;
+  --s-duration-normal: 220ms;
+  --s-duration-slow: 400ms;
+
+  --s-ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --s-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  /* Resposta ao toque: passa um pouco do alvo e volta. Usar só em confirmação. */
+  --s-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ===================================================================== */
+  /* ELEVAÇÃO                                                               */
+  /* ===================================================================== */
+
+  --s-shadow-none: none;
+  --s-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+  --s-shadow-md: 0 4px 12px rgb(0 0 0 / 0.3);
+  --s-shadow-lg: 0 12px 32px rgb(0 0 0 / 0.36);
+  /* Anel de foco. Nunca removido — apenas redesenhado (§9, acessibilidade). */
+  --s-ring-focus: 0 0 0 2px var(--s-bg), 0 0 0 4px var(--s-accent);
+
+  /* ===================================================================== */
+  /* ALVO DE TOQUE                                                          */
+  /* ===================================================================== */
+
+  /*
+   * Mínimo de 44px porque é o menor alvo que uma pessoa acerta de forma
+   * confiável sem olhar — que é exatamente a situação de uso do SLATE: a
+   * atenção está no jogo ou no código, não no celular.
+   */
+  --s-touch-min: 2.75rem;
+  --s-control-gap: var(--s-space-2);
+
+  /* ===================================================================== */
+  /* SEMÂNTICOS — tema escuro (padrão)                                      */
+  /* ===================================================================== */
+
+  --s-bg: var(--s-slate-1000);
+  --s-surface: var(--s-slate-950);
+  --s-surface-raised: var(--s-slate-900);
+  --s-surface-overlay: var(--s-slate-850);
+  --s-surface-sunken: #04050a;
+
+  --s-border: #232a35;
+  --s-border-strong: #333c4a;
+
+  /*
+   * Os três níveis de texto passam em WCAG AA sobre --s-surface como texto
+   * normal, não apenas como texto grande. O nível terciário é o que costuma
+   * reprovar: foi escolhido por medição, não por aparência.
+   */
+  --s-text: #eef1f6;
+  --s-text-muted: #a2acbb;
+  --s-text-subtle: #7d8798;
+
+  --s-accent: var(--s-blue-400);
+  --s-accent-strong: var(--s-blue-500);
+  --s-accent-soft: rgb(95 168 255 / 0.14);
+  --s-on-accent: #04121f;
+
+  --s-success: var(--s-green-400);
+  --s-success-soft: rgb(74 222 128 / 0.14);
+  --s-warning: var(--s-amber-400);
+  --s-warning-soft: rgb(251 191 36 / 0.14);
+  --s-danger: var(--s-red-400);
+  --s-danger-soft: rgb(248 113 113 / 0.14);
+  --s-info: var(--s-cyan-400);
+  --s-info-soft: rgb(34 211 238 / 0.14);
+
+  /* Estados de conexão — os mesmos nomes do protocolo (§37). */
+  --s-state-connected: var(--s-success);
+  --s-state-connecting: var(--s-warning);
+  --s-state-offline: var(--s-danger);
+  --s-state-unavailable: var(--s-text-subtle);
+}
+
+/* ======================================================================= */
+/* Tema claro                                                              */
+/* ======================================================================= */
+
+/*
+ * O produto é escuro por padrão porque é usado em ambiente escuro — em frente
+ * a um monitor, muitas vezes à noite. O tema claro existe para quem precisa
+ * dele, e não é um afterthought: os mesmos nomes semânticos, remedidos.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --s-bg: var(--s-slate-50);
+    --s-surface: var(--s-slate-0);
+    --s-surface-raised: var(--s-slate-0);
+    --s-surface-overlay: var(--s-slate-0);
+    --s-surface-sunken: var(--s-slate-100);
+
+    --s-border: var(--s-slate-200);
+    --s-border-strong: var(--s-slate-300);
+
+    --s-text: var(--s-slate-900);
+    --s-text-muted: var(--s-slate-600);
+    --s-text-subtle: var(--s-slate-500);
+
+    --s-accent: var(--s-blue-600);
+    --s-accent-strong: var(--s-blue-700);
+    --s-accent-soft: rgb(43 111 214 / 0.1);
+    --s-on-accent: #ffffff;
+
+    --s-success: var(--s-green-600);
+    --s-success-soft: rgb(22 163 74 / 0.1);
+    --s-warning: var(--s-amber-600);
+    --s-warning-soft: rgb(217 119 6 / 0.1);
+    --s-danger: var(--s-red-600);
+    --s-danger-soft: rgb(220 38 38 / 0.1);
+    --s-info: var(--s-cyan-600);
+    --s-info-soft: rgb(8 145 178 / 0.1);
+
+    --s-shadow-sm: 0 1px 2px rgb(15 23 42 / 0.08);
+    --s-shadow-md: 0 4px 12px rgb(15 23 42 / 0.08);
+    --s-shadow-lg: 0 12px 32px rgb(15 23 42 / 0.12);
+  }
+}
+
+/* Escolha explícita do usuário vence a preferência do sistema, nos dois sentidos. */
+:root[data-theme="light"] {
+  --s-bg: var(--s-slate-50);
+  --s-surface: var(--s-slate-0);
+  --s-surface-raised: var(--s-slate-0);
+  --s-surface-overlay: var(--s-slate-0);
+  --s-surface-sunken: var(--s-slate-100);
+
+  --s-border: var(--s-slate-200);
+  --s-border-strong: var(--s-slate-300);
+
+  --s-text: var(--s-slate-900);
+  --s-text-muted: var(--s-slate-600);
+  --s-text-subtle: var(--s-slate-500);
+
+  --s-accent: var(--s-blue-600);
+  --s-accent-strong: var(--s-blue-700);
+  --s-accent-soft: rgb(43 111 214 / 0.1);
+  --s-on-accent: #ffffff;
+
+  --s-success: var(--s-green-600);
+  --s-success-soft: rgb(22 163 74 / 0.1);
+  --s-warning: var(--s-amber-600);
+  --s-warning-soft: rgb(217 119 6 / 0.1);
+  --s-danger: var(--s-red-600);
+  --s-danger-soft: rgb(220 38 38 / 0.1);
+  --s-info: var(--s-cyan-600);
+  --s-info-soft: rgb(8 145 178 / 0.1);
+
+  --s-shadow-sm: 0 1px 2px rgb(15 23 42 / 0.08);
+  --s-shadow-md: 0 4px 12px rgb(15 23 42 / 0.08);
+  --s-shadow-lg: 0 12px 32px rgb(15 23 42 / 0.12);
+}
+
+/* ======================================================================= */
+/* Acessibilidade                                                          */
+/* ======================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --s-duration-instant: 0.01ms;
+    --s-duration-fast: 0.01ms;
+    --s-duration-normal: 0.01ms;
+    --s-duration-slow: 0.01ms;
+  }
+}
+
+/*
+ * Alto contraste: reforça as bordas em vez de mudar as cores. Um control
+ * surface depende de saber onde um controle termina e o outro começa, e é isso
+ * que se perde primeiro para quem precisa deste modo.
+ */
+@media (prefers-contrast: more) {
+  :root {
+    --s-border: var(--s-slate-500);
+    --s-border-strong: var(--s-slate-300);
+    --s-text-subtle: var(--s-slate-300);
+  }
+}

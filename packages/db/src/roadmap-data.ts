@@ -237,10 +237,46 @@ export const ROADMAP: SeedItem[] = [
           "Tokens e primitivas de tipografia, espaçamento, raios, elevação, movimento, cor semântica e estados interativos (§47).",
         weight: 2,
         children: [
-          { key: "P1-M1-T1", kind: "TASK", title: "Conjunto de tokens e estratégia de tema" },
-          { key: "P1-M1-T2", kind: "TASK", title: "Primitivas centrais e estados interativos" },
-          { key: "P1-M1-T3", kind: "TASK", title: "Vocabulário de movimento e microinterações" },
-          { key: "P1-M1-T4", kind: "TASK", title: "Iconografia" },
+          {
+            key: "P1-M1-T1",
+            kind: "TASK",
+            title: "Conjunto de tokens e estratégia de tema",
+            description:
+              "Primitivas e semânticos separados, temas claro e escuro, paleta de controles e escalas de espaço, raio, tipo, movimento e elevação.",
+            gates: [
+              g("tokens", "Escalas e semânticos definidos"),
+              g("temas", "Tema claro e escuro completos e sem divergência"),
+              g("contraste", "Contraste medido automaticamente, não a olho"),
+            ],
+          },
+          {
+            key: "P1-M1-T2",
+            kind: "TASK",
+            title: "Primitivas centrais e estados interativos",
+            gates: [
+              g("primitivas", "Componentes base implementados"),
+              g("estados", "Todos os estados de controle representados"),
+              g("a11y", "Foco visível e navegação por teclado"),
+            ],
+          },
+          {
+            key: "P1-M1-T3",
+            kind: "TASK",
+            title: "Vocabulário de movimento e microinterações",
+            gates: [
+              g("movimento", "Durações e curvas aplicadas"),
+              g("reduced-motion", "Respeita preferência por menos movimento"),
+            ],
+          },
+          {
+            key: "P1-M1-T4",
+            kind: "TASK",
+            title: "Iconografia",
+            gates: [
+              g("conjunto", "Conjunto de ícones coerente"),
+              g("otimizado", "SVG limpo e acessível"),
+            ],
+          },
         ],
       },
       {
