@@ -40,6 +40,10 @@ USER slate
 
 EXPOSE 4500
 
-# tsx executa o TypeScript direto. Os pacotes do workspace são consumidos como
-# fonte, então compilar aqui só acrescentaria um passo sem mudar o resultado.
-CMD ["pnpm", "--filter", "@slate/api", "exec", "tsx", "src/main.ts"]
+# O executor é chamado pelo caminho, e não por `pnpm exec`.
+#
+# `pnpm exec` dentro do contêiner tenta rodar `pnpm install` antes de executar,
+# e a instalação falha num ambiente que já tem as dependências no lugar e roda
+# sem privilégio de escrita. O sintoma era o contêiner reiniciando em laço com
+# um erro sobre install, sem nenhuma menção ao servidor.
+CMD ["./services/api/node_modules/.bin/tsx", "services/api/src/main.ts"]

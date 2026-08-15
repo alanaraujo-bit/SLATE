@@ -14,7 +14,8 @@
     "@slate/protocol": "workspace:*",
     "drizzle-orm": "^0.44.7",
     "hono": "^4.13.2",
-    "postgres": "^3.4.7"
+    "postgres": "^3.4.7",
+    "tsx": "^4.20.6"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

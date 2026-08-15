@@ -236,6 +236,9 @@ importers:
       postgres:
         specifier: ^3.4.7
         version: 3.4.9
+      tsx:
+        specifier: ^4.20.6
+        version: 4.23.12
     devDependencies:
       '@types/node':
         specifier: ^24.3.0
