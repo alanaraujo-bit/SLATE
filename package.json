@@ -1,0 +1,26 @@
+{
+  "name": "slate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SLATE by Aionix — turn any phone or tablet into an intelligent, contextual control surface for your computer.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alanaraujo-bit/SLATE.git"
+  },
+  "license": "UNLICENSED",
+  "author": "Aionixdev",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.20.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "roadmap": "pnpm --filter @slate/roadmap-cli exec slate-roadmap"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}
