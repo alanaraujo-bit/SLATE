@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # Um push novo cancela a verificação do anterior no mesmo branch: o resultado
+  # do commit antigo deixou de importar no instante em que veio o próximo.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+  PNPM_VERSION: "11.20.0"
+
+jobs:
+  qualidade:
+    name: Tipos e testes unitários
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Checagem de tipos
+        run: pnpm -r typecheck
+
+      - name: Testes unitários
+        # Sem DATABASE_URL, as suítes que precisam de banco se pulam sozinhas
+        # em vez de falhar — quem não tem acesso ao banco ainda consegue rodar
+        # o resto.
+        run: pnpm --filter @slate/db --filter @slate/protocol --filter @slate/design-system test
+
+      - name: Build do Centro de Controle
+        run: pnpm --filter @slate/control-center exec next build
+
+  integracao:
+    name: Testes de integração
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Só roda quando o segredo existe. Um job que falha por falta de
+    # configuração treina todo mundo a ignorar CI vermelho.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Verificar se o banco de homologação está configurado
+        id: verificar
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DATABASE_URL_STAGING não configurado; testes de integração pulados."
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Testes de integração da CLI
+        if: steps.verificar.outputs.configurado == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+        run: pnpm --filter @slate/roadmap-cli test
+
+  e2e:
+    name: Testes ponta a ponta
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: qualidade
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Verificar se o banco de homologação está configurado
+        id: verificar
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DATABASE_URL_STAGING não configurado; testes ponta a ponta pulados."
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Instalar navegador
+        if: steps.verificar.outputs.configurado == 'true'
+        run: pnpm --filter @slate/control-center exec playwright install chromium --with-deps
+
+      - name: Subir o Centro de Controle
+        if: steps.verificar.outputs.configurado == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+        run: |
+          pnpm --filter @slate/control-center exec next build
+          pnpm --filter @slate/control-center exec next start -p 4300 &
+          # Espera o serviço responder de fato, em vez de dormir um tempo fixo
+          # e torcer para ter dado.
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4300/api/health > /dev/null; then
+              echo "no ar após ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::O Centro de Controle não respondeu em 60s"
+          exit 1
+
+      - name: Testes ponta a ponta
+        if: steps.verificar.outputs.configurado == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+          E2E_BASE_URL: http://localhost:4300
+        run: pnpm --filter @slate/control-center exec playwright test
+
+      - name: Guardar o relatório quando falhar
+        if: failure() && steps.verificar.outputs.configurado == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/control-center/playwright-report/
+          retention-days: 7

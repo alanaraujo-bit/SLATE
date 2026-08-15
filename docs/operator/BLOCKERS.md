@@ -14,21 +14,24 @@ técnicos descobertos durante a execução.
 
 ## Ativos
 
-### IMPEDIMENTO-001 — Workflows do GitHub Actions não podem ser commitados
-
-- **Tipo:** IMPEDE UMA FRENTE
-- **Impede:** a automação de CI/CD
-- **Não impede:** código da aplicação, publicações, validação, testes
-- **Causa:** o token do `gh` não tem o escopo `workflow`
-- **Responsável:** operador — ver [AÇÃO-001](./OPERATOR_ACTIONS.md#ação-001--liberar-o-escopo-workflow-no-token-do-github)
-- **Contorno em vigor:** as definições dos workflows estão escritas e
-  versionadas em `docs/deployment/ci/`, e são movidas para `.github/workflows/`
-  assim que o escopo for liberado. Nenhum trabalho é perdido nem adiado — só a
-  ativação espera.
+_Nenhum._
 
 ---
 
 ## Resolvidos
+
+### IMPEDIMENTO-001 — Workflows do GitHub Actions não podiam ser commitados
+
+- **Tipo:** IMPEDIA UMA FRENTE
+- **Situação:** resolvido em 15/08/2026 pelo operador, via
+  [AÇÃO-001](./OPERATOR_ACTIONS.md)
+- **Causa:** o token do `gh` não tinha o escopo `workflow`
+- **Lição, e é desconfortável:** enquanto isso esteve aberto, registrei aqui que
+  os workflows já estavam escritos e só esperavam o escopo. **Não estavam.** Era
+  um plano que virou afirmação de fato por repetição, e ficou de pé porque
+  ninguém checava um contorno declarado — só o impedimento em si era observado.
+  Contorno declarado precisa ser verificável, senão ele só empurra o trabalho
+  para frente escondendo que foi empurrado.
 
 ### IMPEDIMENTO-002 — Publicações na Vercel presas em estado desconhecido
 
