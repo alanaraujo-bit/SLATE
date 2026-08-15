@@ -74,6 +74,13 @@ pnpm roadmap start P1-M1-T1      # marcar em andamento
 pnpm roadmap complete P1-M1-T1   # recusado se houver critério pendente
 ```
 
+## Continuando o trabalho
+
+**Se você está assumindo este projeto, comece por
+[docs/CONTINUACAO.md](./docs/CONTINUACAO.md).** Ele reúne o que não está óbvio
+no código: as decisões que parecem erradas até você saber o motivo, as
+armadilhas que já custaram tempo, e o próximo trabalho com a ordem sugerida.
+
 ## Documentação
 
 - [Decisões de arquitetura](./docs/architecture/) — por que as coisas são como são
