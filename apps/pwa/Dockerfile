@@ -24,6 +24,18 @@ COPY --from=deps /repo/packages/design-system/node_modules ./packages/design-sys
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# O destino do proxy precisa existir **no build**, e não só em execução: o Next
+# resolve os rewrites ao compilar e grava o resultado no manifesto de rotas.
+# Definir só como variável de ambiente do contêiner não adianta — foi o que
+# aconteceu, e o efeito foi /api respondendo 404 em produção enquanto a API
+# estava no ar e saudável.
+#
+# O padrão é o endereço interno do Railway, onde os dois serviços se enxergam
+# pela rede privada. Um build fora dali passa outro valor com --build-arg.
+ARG API_URL=http://slate-api.railway.internal:4500
+ENV API_URL=$API_URL
+
 # Gera os ícones e o service worker versionado antes de compilar.
 RUN pnpm --filter @slate/pwa run build
 
