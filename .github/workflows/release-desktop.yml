@@ -58,9 +58,13 @@ jobs:
           }
 
       - name: Testar antes de publicar
+        # O build da interface vem antes do `cargo test` porque
+        # `tauri::generate_context!` exige `frontendDist` existente já na
+        # compilação dos testes.
         run: |
           pnpm --filter @slate/desktop typecheck
           pnpm --filter @slate/desktop test
+          pnpm --filter @slate/desktop build
           cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
 
       - name: Gerar release, instalador e latest.json

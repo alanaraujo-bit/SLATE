@@ -85,6 +85,13 @@ jobs:
           pnpm --filter @slate/desktop typecheck
           pnpm --filter @slate/desktop test
 
+      # `tauri::generate_context!` lê a configuração em tempo de compilação e
+      # exige que `frontendDist` exista — mesmo para `cargo test`, que não abre
+      # janela nenhuma. Como `apps/desktop/dist/` não é versionado, sem este
+      # passo o Rust falha aqui e passa na máquina de quem já rodou o build.
+      - name: Interface compilada para o contexto do Tauri
+        run: pnpm --filter @slate/desktop build
+
       - name: Agente nativo e assinatura de atualização
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
 
@@ -122,6 +129,15 @@ jobs:
           else
             echo "configurado=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # Sem isto, uma migração nova torna a suíte vermelha por estado do banco e
+      # não por defeito no código — foi o que aconteceu com a tabela de convites
+      # por QR, que existia no schema e não em homologação.
+      - name: Migrar o banco de homologação
+        if: steps.verificar.outputs.configurado == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+        run: pnpm --filter @slate/db exec tsx src/migrate.ts
 
       - name: Testes de integração
         if: steps.verificar.outputs.configurado == 'true'
