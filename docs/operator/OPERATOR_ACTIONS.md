@@ -224,13 +224,22 @@ cadastro.
 
 ---
 
-## AÇÃO-003 — Publicações na Vercel não saem da fila
+## AÇÃO-003 — Publicações na Vercel não saíam da fila
 
-**SITUAÇÃO:** ABERTA
+**SITUAÇÃO:** ✅ RESOLVIDA em 15/08/2026 — voltou a funcionar sozinha
 **TRAVA O PROJETO:** NÃO
-**IMPEDE:** nada hoje. O Centro de Controle roda localmente por decisão do
-operador ([D-007](./DECISIONS.md)). Precisa ser resolvido antes da PWA do SLATE,
-que é de fato hospedada na nuvem.
+
+> **Como foi resolvida:** não foi por nenhuma ação de código. Ao criar o projeto
+> `slate-pwa`, o deploy compilou e chegou a `READY` normalmente. O bloqueio era
+> mesmo do lado da conta ou da plataforma, exatamente como o diagnóstico
+> apontava — e deixou de valer sem que nada no repositório mudasse.
+>
+> Vale registrar o que isso confirma: o tempo gasto tentando contornar pelo
+> lado do código teria sido perdido de qualquer forma. Foi a leitura da
+> resposta crua da API, e não mais tentativas, que separou "problema meu" de
+> "problema deles".
+
+A PWA está publicada na Vercel, com deploy automático a cada push na `main`.
 
 ### Por que — causa identificada
 

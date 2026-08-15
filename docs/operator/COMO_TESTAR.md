@@ -29,7 +29,12 @@ em cada tela.
 
 É para isso que o produto existe, e é onde vale a pena olhar.
 
-**Endereço:** <https://slate-pwa-staging.up.railway.app>
+**Endereço:** <https://slate-pwa-theta.vercel.app>
+
+> Publicada na Vercel, ligada ao repositório: cada push na `main` gera uma
+> versão nova automaticamente. A API fica no Railway, e a PWA fala com ela por
+> `/api` na própria origem — o navegador enxerga um endereço só, que é o que
+> mantém o cookie de sessão funcionando em qualquer navegador.
 
 1. Abra o endereço no celular.
 2. Crie uma conta. Guarde a senha: a recuperação por e-mail ainda não está
