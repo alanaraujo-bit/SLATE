@@ -113,3 +113,41 @@ Então:
 - `Secure` em cookie não tem efeito em `http://localhost`, então um teste local
   passa mesmo com a configuração errada. A verificação de cookie precisa rodar
   ao menos uma vez contra HTTPS de verdade antes deste marco fechar.
+
+## Decisão 4 — PWA e API compartilham o domínio registrável
+
+Consequência direta de `SameSite=Lax`, e ela restringe a implantação:
+
+Um cookie `Lax` **não acompanha requisições entre sites diferentes** — nem POST,
+nem `fetch` disparado por script. E "site" é calculado pelo domínio registrável
+(eTLD+1); **a porta não entra na conta**.
+
+Na prática:
+
+| PWA | API | Mesmo site? | Sessão funciona? |
+|---|---|---|---|
+| `localhost:4400` | `localhost:4500` | sim | sim |
+| `slate.aionixdev.com` | `api.aionixdev.com` | sim | sim |
+| `slate.vercel.app` | `slate.up.railway.app` | **não** | **não** |
+
+A última linha é exatamente o que aconteceria com os domínios que as
+plataformas dão de graça. Descobrir isso em produção significaria um login que
+aparenta funcionar e uma sessão que some na requisição seguinte.
+
+Então a implantação exige subdomínios do mesmo domínio — registrado como
+[AÇÃO-005](../operator/OPERATOR_ACTIONS.md). Em desenvolvimento nada disso
+aparece, porque duas portas de `localhost` já são o mesmo site: é precisamente o
+tipo de diferença que só apareceria depois.
+
+As alternativas foram consideradas e descartadas:
+
+- **`SameSite=None`** funcionaria entre sites, mas devolve a exposição a CSRF
+  que o `Lax` remove de graça.
+- **Token em cabeçalho `Authorization`** dispensaria cookie, mas obrigaria a
+  guardar o token onde o JavaScript alcança — perdendo o `HttpOnly`, que é a
+  única barreira real contra uma injeção de script na PWA.
+
+Manter `Lax` com `HttpOnly` e pagar com uma exigência de DNS é o melhor
+resultado dos três. Como defesa adicional, o servidor confere o cabeçalho
+`Origin` em toda requisição que altera estado, o que não depende do
+comportamento do cookie.

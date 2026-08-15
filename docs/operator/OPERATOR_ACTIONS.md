@@ -113,6 +113,65 @@ desaparecem, e a atualização automática consegue verificar assinaturas.
 
 ---
 
+## AÇÃO-005 — Subdomínios para a PWA e para a API
+
+**SITUAÇÃO:** ABERTA
+**TRAVA O PROJETO:** NÃO
+**IMPEDE:** apenas a implantação em produção. Desenvolvimento e testes rodam
+normalmente.
+
+### Por que
+
+A sessão usa cookie `HttpOnly` com `SameSite=Lax`, que é a configuração mais
+segura disponível. Ela tem um preço: **o cookie não acompanha requisições entre
+sites diferentes**, e "site" é o domínio registrável — a porta não conta.
+
+| PWA | API | Mesmo site? | Sessão funciona? |
+|---|---|---|---|
+| `localhost:4400` | `localhost:4500` | sim | sim |
+| `slate.aionixdev.com` | `api.aionixdev.com` | sim | sim |
+| `slate.vercel.app` | `slate.up.railway.app` | **não** | **não** |
+
+A terceira linha é o que aconteceria usando os domínios que as plataformas dão
+de graça: o login pareceria funcionar e a sessão sumiria na requisição
+seguinte. Em desenvolvimento isso nunca apareceria, porque duas portas de
+`localhost` já são o mesmo site.
+
+### O que fazer
+
+Apontar dois subdomínios de `aionixdev.com`:
+
+1. `api.slate.aionixdev.com` → serviço da API no Railway (o painel do Railway
+   mostra o CNAME ao adicionar o domínio).
+2. `slate.aionixdev.com` → a PWA, onde ela for hospedada.
+
+Depois, definir no serviço da API:
+
+```
+ORIGENS_PERMITIDAS=https://slate.aionixdev.com
+DOMINIO_COOKIE=.aionixdev.com
+```
+
+### Como validar
+
+Entrar pela PWA publicada e recarregar a página. Se continuar conectado, o
+cookie está atravessando. Se cair para a tela de entrada, os domínios não estão
+no mesmo site.
+
+### O que já foi feito
+
+Toda a configuração é lida de variáveis de ambiente e validada na partida — o
+serviço se recusa a subir em produção sem `ORIGENS_PERMITIDAS`, em vez de
+aceitar qualquer origem em silêncio. A verificação de origem em requisições que
+alteram estado já está implementada e não depende do comportamento do cookie.
+
+### O que acontece depois
+
+A PWA passa a manter a sessão em produção, e o pareamento pode ser concluído
+fora do ambiente de desenvolvimento.
+
+---
+
 ## AÇÃO-004 — Provedor de envio de e-mail
 
 **SITUAÇÃO:** ABERTA
