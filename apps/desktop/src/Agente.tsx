@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { QRCodeSVG } from "qrcode.react";
 import { Atualizador } from "./atualizador";
@@ -15,6 +15,7 @@ interface Dispositivo {
   nome: string;
   papel: string;
   situacao: string;
+  online?: boolean;
 }
 
 interface Situacao {
@@ -182,8 +183,16 @@ function Pareamento({
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [modo, setModo] = useState<"qr" | "codigo">("qr");
+  const [removendo, setRemovendo] = useState<string | null>(null);
 
-  const superficies = situacao.dispositivos.filter((d) => d.papel === "surface");
+  const superficies = situacao.dispositivos.filter(
+    (d) => d.papel === "surface" && d.situacao !== "revogado",
+  );
+
+  // Quem ainda não pareou nada precisa parear: essa é a tela. Quem já tem
+  // aparelho não precisa de um QR Code na frente toda vez que abre o programa
+  // — ele só aparece quando a pessoa pede outro aparelho.
+  const [parear, setParear] = useState(superficies.length === 0);
 
   const confirmar = async (evento: React.FormEvent) => {
     evento.preventDefault();
@@ -197,6 +206,7 @@ function Pareamento({
       const dispositivo = await invoke<Dispositivo>("confirmar_pareamento", { codigo });
       setSucesso(`${dispositivo.nome} foi pareado com este computador.`);
       setCodigo("");
+      setParear(false);
       aoMudar();
     } catch (e) {
       setErro(String(e));
@@ -208,6 +218,21 @@ function Pareamento({
   const sair = async () => {
     await invoke("sair");
     aoMudar();
+  };
+
+  const remover = async (dispositivo: Dispositivo) => {
+    setErro(null);
+    setSucesso(null);
+    setRemovendo(dispositivo.id);
+    try {
+      await invoke("remover_dispositivo", { id: dispositivo.id });
+      setSucesso(`${dispositivo.nome} não controla mais este computador.`);
+      aoMudar();
+    } catch (e) {
+      setErro(String(e));
+    } finally {
+      setRemovendo(null);
+    }
   };
 
   return (
@@ -222,8 +247,63 @@ function Pareamento({
         </button>
       </div>
 
+      <section className="bloco">
+        <div className="linha">
+          <h2>Aparelhos pareados</h2>
+          {superficies.length > 0 && !parear && (
+            <button type="button" className="botao discreto" onClick={() => setParear(true)}>
+              Parear outro
+            </button>
+          )}
+        </div>
+
+        {superficies.length === 0 ? (
+          <p className="atenuado">Nenhum aparelho pareado ainda.</p>
+        ) : (
+          <ul className="lista">
+            {superficies.map((d) => (
+              <li key={d.id}>
+                <span>
+                  <span className="lista__nome">{d.nome}</span>
+                  <span className={d.online ? "etiqueta ativa" : "etiqueta"}>
+                    {d.online ? "conectado agora" : "desconectado"}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="botao discreto"
+                  disabled={removendo === d.id}
+                  onClick={() => void remover(d)}
+                >
+                  {removendo === d.id ? "Removendo…" : "Remover"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {erro && !parear && (
+          <p className="erro" role="alert">
+            {erro}
+          </p>
+        )}
+        {sucesso && !parear && (
+          <p className="sucesso" role="status">
+            {sucesso}
+          </p>
+        )}
+      </section>
+
+      {parear && (
       <section className="bloco pareamento-escolha">
-        <h2>Parear um aparelho</h2>
+        <div className="linha">
+          <h2>Parear um aparelho</h2>
+          {superficies.length > 0 && (
+            <button type="button" className="botao discreto" onClick={() => setParear(false)}>
+              Cancelar
+            </button>
+          )}
+        </div>
         <p className="atenuado">
           Escolha a forma mais confortável. As duas opções são temporárias e
           confirmam que você está na frente deste computador.
@@ -249,7 +329,12 @@ function Pareamento({
         </div>
 
         {modo === "qr" ? (
-          <PareamentoQr aoMudar={aoMudar} />
+          <PareamentoQr
+            aoMudar={aoMudar}
+            aoConcluir={() => {
+              if (superficies.length > 0) setParear(false);
+            }}
+          />
         ) : (
           <form className="pareamento-codigo" onSubmit={confirmar}>
             <p className="atenuado">
@@ -288,31 +373,26 @@ function Pareamento({
           </form>
         )}
       </section>
-
-      <section className="bloco">
-        <h2>Aparelhos pareados</h2>
-        {superficies.length === 0 ? (
-          <p className="atenuado">Nenhum aparelho pareado ainda.</p>
-        ) : (
-          <ul className="lista">
-            {superficies.map((d) => (
-              <li key={d.id}>
-                <span>{d.nome}</span>
-                <span className="atenuado pequeno">{d.situacao}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      )}
     </div>
   );
 }
 
-function PareamentoQr({ aoMudar }: { aoMudar: () => void }) {
+function PareamentoQr({
+  aoMudar,
+  aoConcluir,
+}: {
+  aoMudar: () => void;
+  aoConcluir: () => void;
+}) {
   const [convite, setConvite] = useState<ConviteQr | null>(null);
   const [restante, setRestante] = useState(0);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
+  // Guardada numa referência para que a consulta do convite não reinicie a
+  // cada quadro só porque o pai criou outra função com o mesmo corpo.
+  const aoConcluirRef = useRef(aoConcluir);
+  aoConcluirRef.current = aoConcluir;
 
   const criar = useCallback(async () => {
     setConvite(null);
@@ -354,6 +434,10 @@ function PareamentoQr({ aoMudar }: { aoMudar: () => void }) {
           setSucesso(`${resultado.dispositivo.nome} foi conectado com segurança.`);
           setConvite(null);
           aoMudar();
+          // Deixa a confirmação visível por um instante antes de voltar para a
+          // lista: fechar no mesmo quadro em que o pareamento deu certo faz
+          // parecer que a tela piscou sem motivo.
+          window.setTimeout(() => aoConcluirRef.current(), 2_500);
         } else if (resultado.situacao === "expirado") {
           setRestante(0);
         }

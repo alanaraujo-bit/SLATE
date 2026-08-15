@@ -15,7 +15,7 @@ import {
 } from "@/lib/identidade-local";
 import { TransporteWebRtc } from "@/lib/transporte-webrtc";
 import type { EstadoConexao } from "@/lib/estados-conexao";
-import { selecionarAgente } from "@/lib/selecionar-agente";
+import { decidirVinculo, type Vinculo } from "@/lib/vinculo";
 import { EstadoDaConexao } from "./estado-da-conexao";
 import { ControlesBasicos } from "./controles-basicos";
 import { ConvitePareamentoQr } from "./convite-pareamento-qr";
@@ -36,7 +36,10 @@ export function Aplicacao() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [dispositivos, setDispositivos] = useState<DispositivoResumo[]>([]);
   const [estadoConexao, setEstadoConexao] = useState<EstadoConexao>("PAIRING_REQUIRED");
-  const [temParConfiavel, setTemParConfiavel] = useState<boolean | null>(null);
+  const [vinculo, setVinculo] = useState<Vinculo | null>(null);
+  const [tentativa, setTentativa] = useState(0);
+  /** Chave deste aparelho, para saber qual item da lista é ele mesmo. */
+  const [chaveDestaSuperficie, setChaveDestaSuperficie] = useState<string | null>(null);
   const [agenteControlaMidia, setAgenteControlaMidia] = useState(false);
   const [agentePrincipalId, setAgentePrincipalId] = useState<string | null>(null);
   const [removendoDispositivo, setRemovendoDispositivo] = useState<string | null>(null);
@@ -58,7 +61,7 @@ export function Aplicacao() {
     if (eu.ok) {
       setUsuario(eu.dados.usuario);
       setSituacao("logado");
-      setTemParConfiavel(null);
+      setVinculo(null);
 
       const lista = await api.dispositivos();
       if (lista.ok) setDispositivos(lista.dados.dispositivos);
@@ -110,26 +113,27 @@ export function Aplicacao() {
     void Promise.all([obterOuCriarIdentidade(), listarParesConfiaveis()]).then(
       ([identidade, pares]) => {
       if (cancelado) return;
-      const superficie = dispositivos.find(
-        (d) =>
-          d.papel === "surface" &&
-          d.situacao === "ativo" &&
-          d.chavePublica === identidade.chavePublicaExportada,
+      setChaveDestaSuperficie(identidade.chavePublicaExportada);
+      const decidido = decidirVinculo(
+        identidade.chavePublicaExportada,
+        pares,
+        dispositivos,
       );
-      const agenteSelecionado = selecionarAgente(pares, dispositivos);
+      setVinculo(decidido);
 
-      if (!superficie || !agenteSelecionado) {
+      if (decidido.tipo !== "pronto") {
         setAgentePrincipalId(null);
-        setTemParConfiavel(false);
+        // Um computador que a conta tem mas este aparelho não reconhece não é
+        // "conectando": é pareamento pendente, e dizer o contrário deixaria a
+        // tela girando para sempre.
         setEstadoConexao("PAIRING_REQUIRED");
         return;
       }
 
-      setTemParConfiavel(true);
-      setAgentePrincipalId(agenteSelecionado.dispositivo.id);
+      setAgentePrincipalId(decidido.agente.dispositivo.id);
       transporte = new TransporteWebRtc({
         identidade,
-        agente: agenteSelecionado.par,
+        agente: decidido.agente.par,
         aoMudarEstado: setEstadoConexao,
         aoNegociarCapacidades: (capacidades) =>
           setAgenteControlaMidia(capacidades.includes("action.media")),
@@ -144,10 +148,19 @@ export function Aplicacao() {
       setAgenteControlaMidia(false);
       if (transporteAtual.current === transporte) transporteAtual.current = null;
     };
-  }, [situacao, dispositivos]);
+  }, [situacao, dispositivos, tentativa]);
+
+  // Vale acompanhar a presença tanto quando o computador confiável não
+  // responde quanto quando não há vínculo: nos dois casos a saída é o
+  // computador aparecer, e nos dois a pessoa está olhando para uma tela
+  // esperando que algo mude.
+  const acompanhandoPresenca =
+    situacao === "logado" &&
+    (estadoConexao === "AGENT_UNAVAILABLE" ||
+      (vinculo !== null && vinculo.tipo !== "pronto"));
 
   useEffect(() => {
-    if (situacao !== "logado" || estadoConexao !== "AGENT_UNAVAILABLE") return;
+    if (!acompanhandoPresenca) return;
 
     // A presença pode mudar sem a página ser recarregada. Uma consulta
     // moderada permite migrar para outra instalação confiável que ficou
@@ -172,25 +185,36 @@ export function Aplicacao() {
     void atualizarPresenca();
     const intervalo = window.setInterval(() => void atualizarPresenca(), 7_500);
     return () => window.clearInterval(intervalo);
-  }, [situacao, estadoConexao]);
+  }, [acompanhandoPresenca]);
 
   const sair = async () => {
     await api.sair();
     setUsuario(null);
     setDispositivos([]);
-    setTemParConfiavel(null);
+    setVinculo(null);
     setAgentePrincipalId(null);
     setSituacao("deslogado");
   };
 
-  const removerInstalacao = async (dispositivo: DispositivoResumo) => {
-    if (
-      !window.confirm(
-        `Remover a instalação ${dispositivo.nome}? Ela precisará ser pareada novamente para voltar.`,
-      )
-    ) {
-      return;
-    }
+  const reconectar = async () => {
+    setEstadoConexao("CONNECTING");
+    const lista = await api.dispositivos();
+    if (lista.ok) setDispositivos(lista.dados.dispositivos);
+    setTentativa((n) => n + 1);
+  };
+
+  const remover = async (dispositivo: DispositivoResumo) => {
+    const ehEste =
+      dispositivo.papel === "surface" && dispositivo.chavePublica === chaveDestaSuperficie;
+    const pergunta = ehEste
+      ? `Remover este aparelho da conta? Você precisará parear de novo para voltar a controlar o computador.`
+      : `Remover ${dispositivo.nome}? ${
+          dispositivo.papel === "agent"
+            ? "Este computador precisará ser pareado novamente para voltar."
+            : "Este aparelho deixa de controlar seus computadores."
+        }`;
+    if (!window.confirm(pergunta)) return;
+
     setRemovendoDispositivo(dispositivo.id);
     const resultado = await api.removerDispositivo(dispositivo.id);
     if (resultado.ok) {
@@ -265,20 +289,53 @@ export function Aplicacao() {
           />
         )}
 
-        {situacao === "logado" && !tokenConvite && temParConfiavel === null && (
+        {situacao === "logado" && !tokenConvite && vinculo === null && (
           <div className="aviso" aria-busy="true">
             <Rotulo tom="atenuado">Verificando o pareamento…</Rotulo>
           </div>
         )}
 
-        {situacao === "logado" && !tokenConvite && temParConfiavel === false && (
+        {/* O computador da conta não é o que este aparelho conhece — quase
+            sempre porque o Agente foi reinstalado e ganhou identidade nova.
+            Antes isto aparecia como "conectando" e não saía do lugar. */}
+        {situacao === "logado" && !tokenConvite && vinculo?.tipo === "computador-desconhecido" && (
+          <Superficie nivel="elevada" preenchida>
+            <div className="aviso">
+              <h1 className="aviso__titulo">Parear de novo com {vinculo.nome}</h1>
+              <p className="aviso__texto">
+                {vinculo.online
+                  ? `${vinculo.nome} está ligado agora, mas com uma identidade que este aparelho ainda não confirmou — é o que acontece depois de reinstalar o SLATE no computador.`
+                  : `A conta tem ${vinculo.nome}, mas com uma identidade que este aparelho não reconhece e que não está ligada agora.`}{" "}
+                Pareie uma vez e o aparelho volta a reconectar sozinho.
+              </p>
+              <PainelPareamento
+                aoParear={() => void carregar()}
+                aoLerConvite={setTokenConvite}
+              />
+            </div>
+          </Superficie>
+        )}
+
+        {situacao === "logado" && !tokenConvite && vinculo?.tipo === "sem-computador" && (
+          <Superficie nivel="elevada" preenchida>
+            <div className="aviso">
+              <h1 className="aviso__titulo">Nenhum computador na conta</h1>
+              <p className="aviso__texto">
+                Instale o SLATE no computador que você quer controlar e entre
+                com esta mesma conta. Ele aparece aqui assim que abrir.
+              </p>
+            </div>
+          </Superficie>
+        )}
+
+        {situacao === "logado" && !tokenConvite && vinculo?.tipo === "sem-superficie" && (
           <PainelPareamento
             aoParear={() => void carregar()}
             aoLerConvite={setTokenConvite}
           />
         )}
 
-        {situacao === "logado" && !tokenConvite && temParConfiavel === true && adicionandoComputador && (
+        {situacao === "logado" && !tokenConvite && vinculo?.tipo === "pronto" && adicionandoComputador && (
           <PainelPareamento
             aoParear={() => {
               setAdicionandoComputador(false);
@@ -289,30 +346,53 @@ export function Aplicacao() {
           />
         )}
 
-        {situacao === "logado" && !tokenConvite && temParConfiavel === true && !adicionandoComputador && (
+        {situacao === "logado" && !tokenConvite && vinculo?.tipo === "pronto" && !adicionandoComputador && (
           <Superficie nivel="elevada" preenchida>
             <div className="aviso">
               <h1 className="aviso__titulo">Dispositivos da sua conta</h1>
 
               <ul className="dispositivos">
                 {dispositivos
-                  .filter((d) => d.papel !== "agent" || d.id === agentePrincipalId)
+                  .filter(
+                    (d) =>
+                      d.situacao !== "revogado" &&
+                      (d.papel !== "agent" || d.id === agentePrincipalId),
+                  )
                   .map((d) => (
-                  <li className="dispositivo" key={d.id}>
-                    <span className="dispositivo__nome">{d.nome}</span>
-                    <Rotulo tamanho="xs" tom="sutil">
-                      {d.papel === "agent" ? "Computador" : "Superfície"} ·{" "}
-                      {d.papel === "agent"
-                        ? d.online
-                          ? "conectado agora"
-                          : "desconectado"
-                        : d.situacao === "ativo"
-                          ? "ativo"
-                          : d.situacao}
-                    </Rotulo>
+                  <li className="dispositivo dispositivo--gerenciavel" key={d.id}>
+                    <span>
+                      <span className="dispositivo__nome">
+                        {d.nome}
+                        {d.chavePublica === chaveDestaSuperficie && " (este aparelho)"}
+                      </span>
+                      <Rotulo tamanho="xs" tom="sutil">
+                        {d.papel === "agent" ? "Computador" : "Superfície"} ·{" "}
+                        {d.papel === "agent"
+                          ? d.online
+                            ? "conectado agora"
+                            : "desconectado"
+                          : d.situacao === "ativo"
+                            ? "ativo"
+                            : d.situacao}
+                      </Rotulo>
+                    </span>
+                    <Botao
+                      tamanho="sm"
+                      estado={removendoDispositivo === d.id ? "loading" : "idle"}
+                      onClick={() => void remover(d)}
+                    >
+                      Remover
+                    </Botao>
                   </li>
                 ))}
               </ul>
+
+              {/* A reconexão automática já tenta sozinha; este botão existe
+                  para quem acabou de ligar o computador e não quer esperar o
+                  próximo ciclo olhando para uma tela parada. */}
+              {estadoConexao !== "CONNECTED" && (
+                <Botao onClick={() => void reconectar()}>Reconectar agora</Botao>
+              )}
 
               {instalacoesAntigas.length > 0 && (
                 <details className="instalacoes-antigas">
@@ -337,7 +417,7 @@ export function Aplicacao() {
                         <Botao
                           tamanho="sm"
                           estado={removendoDispositivo === d.id ? "loading" : "idle"}
-                          onClick={() => void removerInstalacao(d)}
+                          onClick={() => void remover(d)}
                         >
                           Remover
                         </Botao>

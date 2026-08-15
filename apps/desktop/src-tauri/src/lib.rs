@@ -160,6 +160,25 @@ async fn consultar_convite_qr(
     Ok(resultado)
 }
 
+/// Remove um aparelho pareado.
+///
+/// A ordem importa: primeiro a nuvem, depois a raiz de confiança local. Se o
+/// servidor recusar, o par continua confiável aqui — o contrário deixaria o
+/// Agente recusando um aparelho que a conta ainda considera autorizado.
+#[tauri::command]
+async fn remover_dispositivo(estado: tauri::State<'_, Estado>, id: String) -> Result<(), String> {
+    estado
+        .api
+        .remover_dispositivo(&id)
+        .await
+        .map_err(|e| e.to_string())?;
+    estado
+        .pares
+        .remover_revogados(&[id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 async fn falha_inicial(estado: tauri::State<'_, Estado>) -> Result<Option<String>, String> {
     Ok(estado.falha_inicial.lock().await.clone())
@@ -231,6 +250,7 @@ pub fn run() {
             confirmar_pareamento,
             criar_convite_qr,
             consultar_convite_qr,
+            remover_dispositivo,
             falha_inicial
         ])
         .run(tauri::generate_context!())

@@ -57,6 +57,11 @@ pub struct Dispositivo {
     pub chave_publica: String,
     pub algoritmo: String,
     pub escopos: Vec<String>,
+    /// Presença no servidor de sinalização. Ausente nos pares confiáveis já
+    /// gravados em disco, que foram escritos antes deste campo existir — daí o
+    /// padrão, em vez de recusar o arquivo inteiro.
+    #[serde(default)]
+    pub online: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -271,6 +276,32 @@ impl ClienteApi {
         let corpo: RespostaDispositivos =
             resposta.json().await.map_err(|_| ErroApi::Inesperado(0))?;
         Ok(corpo.dispositivos)
+    }
+
+    /// Remove um aparelho da conta.
+    ///
+    /// O servidor revoga; a raiz de confiança local é atualizada por quem
+    /// chama, porque uma remoção que some da nuvem e continua confiável aqui
+    /// seria pior do que não ter removido.
+    pub async fn remover_dispositivo(&self, id: &str) -> Result<(), ErroApi> {
+        let resposta = self
+            .http
+            .delete(self.url(&format!("/dispositivos/{id}")))
+            .send()
+            .await
+            .map_err(|_| ErroApi::SemConexao)?;
+
+        // Já não existir é o mesmo resultado que remover: o aparelho não está
+        // mais na conta, que é o que a pessoa pediu.
+        if resposta.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+
+        if !resposta.status().is_success() {
+            return Err(self.erro_de(resposta).await);
+        }
+
+        Ok(())
     }
 
     pub async fn criar_convite_qr(

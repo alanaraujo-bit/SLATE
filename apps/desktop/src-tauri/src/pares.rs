@@ -191,6 +191,7 @@ mod testes {
             chave_publica: "a".repeat(43),
             algoritmo: "Ed25519".into(),
             escopos: vec!["state.read".into()],
+            online: false,
         }
     }
 

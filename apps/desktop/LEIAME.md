@@ -5,6 +5,16 @@ tablet, mantém o canal WebRTC e executa somente comandos registrados e
 autorizados. A versão 0.1.1 inclui o primeiro: reproduzir/pausar mídia no
 Windows.
 
+## O pareamento é uma cerimônia, não uma tela permanente
+
+A partir da 0.1.4, quem já tem aparelho pareado abre o Agente e vê **a lista de
+aparelhos**, com a presença de cada um e o botão de remover. O QR Code fica
+atrás de **Parear outro** e só é gerado quando alguém pede.
+
+Não é só arrumação visual: cada QR exibido consome um convite no servidor. A
+tela antiga pedia um convite por abertura do programa, para uma cerimônia que
+acontece uma vez por aparelho.
+
 ## Como rodar durante o desenvolvimento
 
 ```bash

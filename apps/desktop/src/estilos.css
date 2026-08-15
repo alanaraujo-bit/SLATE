@@ -300,6 +300,31 @@ p {
   background: var(--s-surface-raised);
 }
 
+.lista li > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lista__nome {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A presença é a informação que a pessoa procura primeiro nesta lista, então
+   ela é cor e não só texto — mas com o texto junto, porque cor sozinha não
+   chega para quem não a distingue. */
+.etiqueta {
+  font-size: var(--s-text-xs);
+  color: var(--s-text-muted);
+}
+
+.etiqueta.ativa {
+  color: var(--s-accent);
+}
+
 /* ---- Preferências ----------------------------------------------------- */
 
 .inicio-automatico {
