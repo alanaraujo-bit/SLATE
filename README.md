@@ -2,70 +2,92 @@
 
 # SLATE
 
-**Turn any phone or tablet into an intelligent, contextual control surface for your computer.**
+**Transforma qualquer celular ou tablet numa superfície de controle inteligente e contextual para o seu computador.**
 
-_SLATE by Aionix — a product of Aionixdev_
+_SLATE by Aionix — um produto da Aionixdev_
 
 </div>
 
 ---
 
-## What SLATE is
+## O que é o SLATE
 
-Your phone stops being a second screen and becomes an operational extension of
-your PC. SLATE understands what you are doing — which application has focus,
-which game is running, which branch you are on — and presents the right controls
-without being asked.
+Seu celular deixa de ser uma segunda tela e passa a ser uma extensão operacional
+do PC. O SLATE entende o que você está fazendo — qual aplicativo está em foco,
+qual jogo está rodando, em qual branch você está — e apresenta os controles
+certos sem você pedir.
 
-It is not a grid of buttons. It is a platform: a context engine, an action
-engine, and a bidirectional state channel, with control surfaces on top.
+Não é uma grade de botões. É uma plataforma: um motor de contexto, um motor de
+ações e um canal de estado bidirecional, com superfícies de controle por cima.
 
-## Architecture at a glance
+## Arquitetura em um olhar
 
 ```
         ┌──────────────┐   WebRTC DataChannel (DTLS)   ┌────────────────┐
-        │  SLATE PWA   │◄─────────── direct ──────────►│ Desktop  Agent │
-        │  phone/tablet│                                │    Windows     │
+        │  PWA SLATE   │◄─────────── direto ──────────►│ Agente Desktop │
+        │ celular/tablet│                               │    Windows     │
         └──────┬───────┘                                └───────┬────────┘
                │            ┌───────────────────┐               │
-               └───────────►│    Signaling      │◄──────────────┘
-                            │   SDP / ICE only  │
+               └───────────►│    Sinalização    │◄──────────────┘
+                            │   só SDP / ICE    │
                             └───────────────────┘
 ```
 
-Transport is WebRTC rather than a LAN WebSocket for reasons that are not
-obvious — see [ADR-0002](./docs/architecture/ADR-0002-transport.md). The short
-version: an HTTPS page cannot open `ws://`, no CA will certify a private IP, and
-Chrome 142 began gating local network access. WebRTC sidesteps all three.
+O transporte é WebRTC, e não um WebSocket na rede local, por motivos que não são
+óbvios — veja o [ADR-0002](./docs/architecture/ADR-0002-transporte.md). Em
+resumo: uma página HTTPS não consegue abrir `ws://`, nenhuma autoridade
+certificadora emite certificado para IP privado, e o Chrome 142 passou a exigir
+permissão para acesso à rede local. O WebRTC contorna os três.
 
-## Repository layout
+## Estrutura do repositório
 
-| Path | Purpose |
+| Caminho | Para que serve |
 |---|---|
-| `apps/pwa` | The SLATE control surface (PWA) |
-| `apps/control-center` | Development Control Center — live roadmap |
-| `apps/desktop` | Windows Desktop Agent (Tauri + Rust) |
-| `packages/protocol` | Wire contracts shared by every client |
-| `packages/design-system` | Design tokens and primitives |
-| `packages/db` | Postgres schema and migrations |
-| `packages/roadmap-cli` | Internal CLI driving roadmap state |
+| `apps/pwa` | A superfície de controle do SLATE (PWA) |
+| `apps/control-center` | Centro de Controle de Desenvolvimento — o plano ao vivo |
+| `apps/desktop` | Agente Desktop para Windows (Tauri + Rust) |
+| `packages/protocol` | Contratos de mensagem compartilhados por todos os clientes |
+| `packages/design-system` | Tokens e primitivas de design |
+| `packages/db` | Schema e migrações do Postgres |
+| `packages/roadmap-cli` | CLI interna que move o estado do plano |
 
-## Documentation
+## Acompanhar o desenvolvimento
 
-- [Architecture decisions](./docs/architecture/) — why things are the way they are
-- [Operator actions](./docs/operator/OPERATOR_ACTIONS.md) — what needs a human
-- [Blockers](./docs/operator/BLOCKERS.md)
-
-## Development
+O Centro de Controle mostra fases, marcos, critérios de qualidade, execução
+atual, atividade e o que depende de você — atualizando em tempo real, sem
+recarregar a página.
 
 ```bash
 pnpm install
+pnpm roadmap:ui      # abre em http://localhost:4300
 ```
 
-SLATE is cloud-first by mandate: there is no local database, no container to
-start, and no localhost workflow required to work on it. Validation happens
-against real preview deployments.
+Ele roda localmente contra o Postgres na nuvem: o estado é compartilhado e
+persistente, mas nenhuma publicação é necessária para refletir uma mudança
+(decisão [D-007](./docs/operator/DECISIONS.md)).
+
+Para mover o estado do plano:
+
+```bash
+pnpm roadmap report              # progresso calculado
+pnpm roadmap start P1-M1-T1      # marcar em andamento
+pnpm roadmap complete P1-M1-T1   # recusado se houver critério pendente
+```
+
+## Documentação
+
+- [Decisões de arquitetura](./docs/architecture/) — por que as coisas são como são
+- [Ações do operador](./docs/operator/OPERATOR_ACTIONS.md) — o que depende de você
+- [Registro de decisões](./docs/operator/DECISIONS.md)
+- [Impedimentos](./docs/operator/BLOCKERS.md)
+
+## Idioma
+
+Interface, plano de trabalho e documentação em português. Continuam em inglês,
+por serem contrato de dados e não interface: chaves dos itens do plano
+(`P0-M1-T1`), valores de status no banco (`COMPLETED`), nomes de tabelas e
+colunas, e identificadores de código.
 
 ---
 
-© Aionixdev. All rights reserved.
+© Aionixdev. Todos os direitos reservados.
