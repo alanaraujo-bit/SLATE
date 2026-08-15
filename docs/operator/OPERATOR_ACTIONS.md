@@ -165,11 +165,20 @@ obrigatória; Authenticode identifica a Aionixdev para o Windows e para a pessoa
 
 ## AÇÃO-008 — Token somente leitura para releases privadas do Agente
 
-**SITUAÇÃO:** ABERTA
+**SITUAÇÃO:** ✅ NÃO É MAIS NECESSÁRIA em 15/08/2026 — o repositório virou público
 **TRAVA O PROJETO:** NÃO
-**IMPEDE:** a busca automática alcançar uma release real enquanto o repositório
-do SLATE continuar privado. O código, a verificação de assinatura e os testes
-funcionam sem o token.
+
+> **Por que deixou de valer.** Esta ação existia porque assets de release de um
+> repositório privado não são baixáveis anonimamente. Com o repositório público,
+> o Agente lê `releases/latest/download/latest.json` direto do GitHub: sem token,
+> sem desvio pela API, e uma peça a menos que pode falhar entre a release e o
+> computador de quem usa.
+>
+> A rota `/atualizacoes/...` continua na API, com seus testes. Ela não é usada
+> pelo Agente 0.1.3 em diante e volta a fazer sentido se o repositório algum dia
+> for fechado de novo — por isso não foi apagada.
+>
+> O texto original fica abaixo.
 
 ### Por que
 

@@ -52,9 +52,15 @@ seis horas. A busca não interrompe o uso e falhas de internet silenciosas não
 viram alarme. Quando há versão nova, a pessoa escolhe baixar ou adiar, acompanha
 o progresso real e é avisada antes de o programa reiniciar.
 
-Como este repositório é privado, a API faz a leitura servidor-servidor da release
-e entrega apenas um redirecionamento temporário ao pacote. A configuração
-operacional está na [AÇÃO-008](../../docs/operator/OPERATOR_ACTIONS.md).
+O repositório é público desde 15/08/2026, então o Agente lê o manifesto direto
+das releases do GitHub — `releases/latest/download/latest.json` — sem token e sem
+passar pela API. O desvio servidor-servidor que existia para repositório privado
+deixou de ser necessário ([AÇÃO-008](../../docs/operator/OPERATOR_ACTIONS.md)).
+
+O endereço consultado é gravado no executável no momento do build. Uma versão já
+instalada continua consultando o endereço com que foi compilada: por isso a
+0.1.2, que apontava para a API, precisa de **uma última instalação manual** da
+0.1.3 por cima. Da 0.1.3 em diante a atualização é automática.
 
 ## Como testar o pareamento de ponta a ponta
 
@@ -69,7 +75,7 @@ operacional está na [AÇÃO-008](../../docs/operator/OPERATOR_ACTIONS.md).
 
 ## Como testar o primeiro controle real
 
-1. Instale `SLATE_0.1.2_x64-setup.exe` por cima da versão atual.
+1. Instale `SLATE_0.1.3_x64-setup.exe` por cima da versão atual.
 2. Abra um aplicativo de música ou vídeo no Windows e inicie a reprodução.
 3. Mantenha o Agente aberto e espere o PWA indicar **Conectado**.
 4. No celular, toque em **Reproduzir / pausar**.
