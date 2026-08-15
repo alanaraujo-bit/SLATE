@@ -1,0 +1,347 @@
+/*
+ * Estilos das primitivas do SLATE.
+ *
+ * Todo valor vem de `tokens.css`. Um número solto aqui é defeito — é o que
+ * mantém o produto coerente quando os controles forem escritos por partes
+ * diferentes do sistema.
+ */
+
+/* ======================================================================= */
+/* Utilitário                                                              */
+/* ======================================================================= */
+
+.s-visualmente-oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ======================================================================= */
+/* Botao                                                                   */
+/* ======================================================================= */
+
+.s-botao {
+  --cor-controle: var(--s-accent);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-space-2);
+
+  /*
+   * Nunca menor que o alvo mínimo, mesmo com conteúdo pequeno: quem usa o
+   * SLATE está olhando para o jogo ou para o editor, não para o celular.
+   */
+  min-width: var(--s-touch-min);
+  min-height: var(--s-touch-min);
+
+  padding: var(--s-space-2) var(--s-space-4);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface-raised);
+  color: var(--s-text);
+
+  font-family: var(--s-font-sans);
+  font-size: var(--s-text-sm);
+  font-weight: var(--s-weight-medium);
+  line-height: var(--s-leading-tight);
+  text-align: center;
+
+  cursor: pointer;
+  user-select: none;
+  /* Remove o atraso de 300ms e o zoom por duplo toque em superfícies táteis. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+
+  transition:
+    background var(--s-duration-fast) var(--s-ease-out),
+    border-color var(--s-duration-fast) var(--s-ease-out),
+    transform var(--s-duration-instant) var(--s-ease-out),
+    opacity var(--s-duration-fast) var(--s-ease-out);
+}
+
+.s-botao__conteudo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-space-2);
+  min-width: 0;
+}
+
+/* ---- Tamanhos --------------------------------------------------------- */
+
+.s-botao[data-tamanho="sm"] {
+  padding: var(--s-space-1) var(--s-space-3);
+  font-size: var(--s-text-xs);
+}
+
+.s-botao[data-tamanho="lg"] {
+  padding: var(--s-space-3) var(--s-space-5);
+  font-size: var(--s-text-md);
+  min-height: 3.25rem;
+}
+
+/* ---- Tons ------------------------------------------------------------- */
+
+.s-botao[data-tom="acento"] {
+  background: var(--s-accent);
+  border-color: var(--s-accent);
+  color: var(--s-on-accent);
+}
+
+.s-botao[data-tom="sucesso"] {
+  background: var(--s-success-soft);
+  border-color: var(--s-success);
+  color: var(--s-success);
+}
+
+.s-botao[data-tom="aviso"] {
+  background: var(--s-warning-soft);
+  border-color: var(--s-warning);
+  color: var(--s-warning);
+}
+
+.s-botao[data-tom="perigo"] {
+  background: var(--s-danger-soft);
+  border-color: var(--s-danger);
+  color: var(--s-danger);
+}
+
+/* Cor escolhida pelo usuário vence o tom. */
+.s-botao[data-cor] {
+  background: color-mix(in srgb, var(--cor-controle) 18%, var(--s-surface-raised));
+  border-color: color-mix(in srgb, var(--cor-controle) 55%, transparent);
+  color: var(--s-text);
+}
+
+/* ---- Estados ---------------------------------------------------------- */
+
+@media (hover: hover) {
+  .s-botao[data-estado="idle"]:hover,
+  .s-botao[data-estado="error"]:hover {
+    background: var(--s-surface-overlay);
+    border-color: var(--s-border-strong);
+  }
+
+  .s-botao[data-cor][data-estado="idle"]:hover {
+    background: color-mix(in srgb, var(--cor-controle) 28%, var(--s-surface-raised));
+  }
+}
+
+/*
+ * Recuo ao toque. É o feedback que confirma o acionamento sem esperar a
+ * resposta do computador — a viagem de ida e volta pode levar dezenas de
+ * milissegundos, e nesse intervalo o silêncio parece falha.
+ */
+.s-botao:active:not([aria-disabled="true"]):not([aria-busy="true"]) {
+  transform: scale(0.97);
+}
+
+.s-botao[data-estado="active"] {
+  background: var(--s-accent-soft);
+  border-color: var(--s-accent);
+  color: var(--s-accent);
+}
+
+.s-botao[data-cor][data-estado="active"] {
+  background: var(--cor-controle);
+  border-color: var(--cor-controle);
+  color: var(--s-slate-1000);
+}
+
+.s-botao[data-estado="loading"] {
+  cursor: progress;
+}
+
+/* A faixa que atravessa o botão comunica trabalho em curso sem deslocar o
+   conteúdo, o que faria o rótulo dançar a cada execução. */
+.s-botao[data-estado="loading"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--s-text) 12%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: s-botao-carregando 1.1s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes s-botao-carregando {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.s-botao[data-estado="disabled"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/*
+ * Indisponível é diferente de desativado, e precisa parecer diferente.
+ * Desativado é escolha de configuração; indisponível quer dizer que o
+ * computador está fora de alcance — e o hachurado sugere ausência em vez de
+ * proibição.
+ */
+.s-botao[data-estado="unavailable"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  border-style: dashed;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 6px,
+    color-mix(in srgb, var(--s-text) 4%, transparent) 6px,
+    color-mix(in srgb, var(--s-text) 4%, transparent) 12px
+  );
+}
+
+.s-botao[data-estado="error"] {
+  border-color: var(--s-danger);
+}
+
+.s-botao[data-estado="error"]::before {
+  content: "";
+  position: absolute;
+  inset-block-start: var(--s-space-1);
+  inset-inline-end: var(--s-space-1);
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: var(--s-radius-full);
+  background: var(--s-danger);
+}
+
+.s-botao:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+}
+
+/* ======================================================================= */
+/* Superficie                                                              */
+/* ======================================================================= */
+
+.s-superficie {
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-lg);
+}
+
+.s-superficie[data-nivel="elevada"] {
+  background: var(--s-surface-raised);
+  box-shadow: var(--s-shadow-sm);
+}
+
+.s-superficie[data-nivel="sobreposta"] {
+  background: var(--s-surface-overlay);
+  box-shadow: var(--s-shadow-lg);
+}
+
+.s-superficie[data-preenchida] {
+  padding: var(--s-space-4);
+}
+
+/* ======================================================================= */
+/* Indicador                                                               */
+/* ======================================================================= */
+
+.s-indicador {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-space-2);
+  font-family: var(--s-font-sans);
+  font-size: var(--s-text-xs);
+  color: var(--s-text-muted);
+}
+
+.s-indicador__ponto {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--s-radius-full);
+  background: var(--s-state-unavailable);
+  flex: none;
+}
+
+.s-indicador[data-situacao="ok"] .s-indicador__ponto {
+  background: var(--s-success);
+}
+.s-indicador[data-situacao="atencao"] .s-indicador__ponto {
+  background: var(--s-warning);
+}
+.s-indicador[data-situacao="erro"] .s-indicador__ponto {
+  background: var(--s-danger);
+}
+.s-indicador[data-situacao="ativo"] .s-indicador__ponto {
+  background: var(--s-accent);
+}
+
+.s-indicador[data-pulsando] .s-indicador__ponto {
+  animation: s-pulsar 2s var(--s-ease-in-out) infinite;
+}
+
+@keyframes s-pulsar {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ======================================================================= */
+/* Rotulo                                                                  */
+/* ======================================================================= */
+
+.s-rotulo {
+  font-family: var(--s-font-sans);
+  font-size: var(--s-text-sm);
+  color: var(--s-text);
+  line-height: var(--s-leading-normal);
+}
+
+.s-rotulo[data-tamanho="2xs"] {
+  font-size: var(--s-text-2xs);
+}
+.s-rotulo[data-tamanho="xs"] {
+  font-size: var(--s-text-xs);
+}
+.s-rotulo[data-tamanho="md"] {
+  font-size: var(--s-text-md);
+}
+.s-rotulo[data-tamanho="lg"] {
+  font-size: var(--s-text-lg);
+}
+
+.s-rotulo[data-tom="atenuado"] {
+  color: var(--s-text-muted);
+}
+.s-rotulo[data-tom="sutil"] {
+  color: var(--s-text-subtle);
+}
+
+/* Largura fixa por dígito: sem isso um valor que muda faz o layout tremer. */
+.s-rotulo[data-numerico] {
+  font-family: var(--s-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-rotulo[data-truncar] {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
