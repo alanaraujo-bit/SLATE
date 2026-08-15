@@ -48,3 +48,6 @@ test-results/
 playwright-report/
 test-results/
 
+
+# Gerado no build a partir de scripts/sw-modelo.js
+apps/pwa/public/sw.js

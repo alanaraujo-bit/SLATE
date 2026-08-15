@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 4400",
+    "dev": "node scripts/gerar-sw.mjs && next dev -p 4400",
+    "prebuild": "node scripts/gerar-sw.mjs",
     "build": "next build",
+    "sw": "node scripts/gerar-sw.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "icones": "node scripts/gerar-icones.mjs",

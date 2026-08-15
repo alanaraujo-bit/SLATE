@@ -150,3 +150,158 @@ button {
   font-size: var(--s-text-sm);
   max-width: 32ch;
 }
+
+/* ======================================================================= */
+/* Conta                                                                   */
+/* ======================================================================= */
+
+.app__acoes {
+  display: flex;
+  align-items: center;
+  gap: var(--s-space-3);
+}
+
+.app__rodape {
+  padding: var(--s-space-3) var(--s-space-4);
+  border-top: 1px solid var(--s-border);
+  text-align: center;
+}
+
+.conta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-space-4);
+}
+
+.conta__titulo {
+  font-size: var(--s-text-xl);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-tight);
+}
+
+.conta__erro {
+  color: var(--s-danger);
+  font-size: var(--s-text-sm);
+}
+
+.conta__problemas {
+  margin: 0;
+  padding-left: var(--s-space-5);
+  color: var(--s-danger);
+  font-size: var(--s-text-sm);
+}
+
+.conta__alternar {
+  background: none;
+  border: none;
+  color: var(--s-accent);
+  font-size: var(--s-text-sm);
+  cursor: pointer;
+  padding: var(--s-space-2);
+  min-height: var(--s-touch-min);
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-space-2);
+}
+
+.campo__rotulo {
+  font-size: var(--s-text-sm);
+  color: var(--s-text-muted);
+}
+
+.campo__entrada {
+  min-height: var(--s-touch-min);
+  padding: var(--s-space-3);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface-sunken);
+  color: var(--s-text);
+  font-family: var(--s-font-sans);
+  /*
+   * 16px exatos. Abaixo disso o iOS dá zoom ao focar o campo, o que desloca a
+   * tela inteira e assusta quem está digitando.
+   */
+  font-size: 1rem;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.campo__entrada:focus-visible {
+  outline: none;
+  border-color: var(--s-accent);
+  box-shadow: var(--s-ring-focus);
+}
+
+/* ======================================================================= */
+/* Pareamento                                                              */
+/* ======================================================================= */
+
+.pareamento {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-space-4);
+  text-align: center;
+  padding: var(--s-space-4) 0;
+}
+
+.pareamento__titulo {
+  font-size: var(--s-text-lg);
+  font-weight: var(--s-weight-semibold);
+}
+
+/*
+ * O código precisa ser lido de relance no celular e digitado no computador,
+ * então é o elemento mais proeminente da tela: grande, monoespaçado e com
+ * espaçamento entre caracteres.
+ */
+.pareamento__codigo {
+  font-family: var(--s-font-mono);
+  font-size: var(--s-text-3xl);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+  color: var(--s-accent);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.pareamento__prazo {
+  font-family: var(--s-font-mono);
+  font-size: var(--s-text-sm);
+  color: var(--s-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ======================================================================= */
+/* Dispositivos                                                            */
+/* ======================================================================= */
+
+.dispositivos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-space-2);
+}
+
+.dispositivo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-space-1);
+  padding: var(--s-space-3);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface-raised);
+  text-align: left;
+}
+
+.dispositivo__nome {
+  font-size: var(--s-text-sm);
+  font-weight: var(--s-weight-medium);
+}

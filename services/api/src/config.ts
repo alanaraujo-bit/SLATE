@@ -45,10 +45,19 @@ export function carregarConfig(env: NodeJS.ProcessEnv = process.env): Config {
     );
   }
 
-  // Em produção o cookie tem que exigir HTTPS. Deixar isso como variável
-  // ajustável seria abrir espaço para alguém desligar sem perceber o que
-  // estaria desligando.
-  const cookieSeguro = producao ? true : env.COOKIE_SEGURO !== "false";
+  /*
+   * Em produção o cookie sempre exige HTTPS, sem opção de desligar.
+   *
+   * Fora de produção o padrão é **não** exigir, e a razão é concreta: um
+   * cookie `Secure` servido sobre `http://localhost` é aceito pelo Chromium,
+   * que trata localhost como contexto seguro, e **recusado pelo WebKit**.
+   *
+   * A versão anterior tinha o padrão invertido, e o efeito foi exatamente esse:
+   * o login funcionava no Chromium e falhava no motor de todo navegador do
+   * iPhone e do iPad — cadastro respondia 201 e a requisição seguinte vinha
+   * 401. Passei um bom tempo atrás de um problema de SameSite que não existia.
+   */
+  const cookieSeguro = producao ? true : env.COOKIE_SEGURO === "true";
 
   return {
     producao,

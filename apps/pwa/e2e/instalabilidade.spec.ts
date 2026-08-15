@@ -96,16 +96,19 @@ test.describe("aplicação", () => {
     await expect(page.getByText("SLATE").first()).toBeVisible();
   });
 
-  test("diz honestamente que não há computador pareado", async ({ page }) => {
+  test("sem sessão, pede para entrar em vez de mostrar controles", async ({ page }) => {
     // O mandato §59 proíbe substituir escopo por promessa: nada de grade de
-    // botões que não faz nada.
+    // botões que não faz nada. Sem conta, o que é verdade é que a pessoa
+    // precisa entrar.
     await page.goto("/");
-    await expect(page.getByText(/nenhum computador pareado/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Entrar", exact: true })).toBeVisible({
+      timeout: 20_000,
+    });
   });
 
   test("mostra o estado da conexão", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator(".s-indicador")).toBeVisible();
+    await expect(page.locator(".s-indicador")).toBeVisible({ timeout: 20_000 });
   });
 
   test("não tem rolagem horizontal", async ({ page }) => {
@@ -158,9 +161,21 @@ test.describe("offline", () => {
      */
     await page.reload().catch(() => {});
 
-    // O que importa é ser a aplicação, e não a tela de erro do navegador.
+    /*
+     * O requisito aqui é um só: sem rede, a pessoa vê a aplicação e não a tela
+     * de erro do navegador. É isso que está sendo verificado.
+     *
+     * O que a aplicação *diz* sobre a conexão é verificado no teste "o
+     * indicador passa a dizer que não há internet", que derruba a rede sem
+     * recarregar a página. A separação é deliberada: depois de um reload
+     * offline, o que aparece depende de qual versão do JavaScript hidratou a
+     * página vinda do cache, e isso varia conforme o service worker acabou de
+     * trocar de versão — em ambos os motores. Juntar as duas coisas num teste
+     * só produziu uma falha que trocava de navegador a cada rodada, sem que
+     * houvesse defeito nenhum.
+     */
     await expect(page.getByText("SLATE").first()).toBeVisible();
-    await expect(page.getByText(/nenhum computador pareado/i)).toBeVisible();
+    await expect(page.locator(".app")).toBeVisible();
 
     await context.setOffline(false);
   });
