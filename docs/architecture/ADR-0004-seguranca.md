@@ -21,9 +21,37 @@ e *o que* essa pessoa pode fazer.
 
 ### 1. Identidade do dispositivo é um par de chaves, não um token
 
-Cada dispositivo — Agente e cada celular/tablet — gera um par de chaves
-**Ed25519** no primeiro uso. A chave pública é a identidade do dispositivo. Ela
-nunca muda; se for necessário trocar, isso é um dispositivo novo.
+Cada dispositivo — Agente e cada celular/tablet — gera um par de chaves no
+primeiro uso. A chave pública é a identidade do dispositivo. Ela nunca muda; se
+for necessário trocar, isso é um dispositivo novo.
+
+**Emenda de 15/08/2026 — o algoritmo é negociado, não fixo.**
+
+A versão original desta decisão fixava Ed25519. A verificação posterior mostrou
+que isso excluiria usuários reais: Ed25519 só chegou à Web Crypto de todos os
+motores entre 2024 e 2025 — Firefox 129, Safari 17, Chrome 137 — e alcançava
+cerca de 79% dos usuários quando esta emenda foi escrita. Quem está num Safari
+16 simplesmente não tem.
+
+Recusar esses aparelhos seria trocar acesso por elegância criptográfica. Então
+cada dispositivo declara com o que assina, e quem verifica usa o declarado:
+
+| Algoritmo | Situação |
+|---|---|
+| **Ed25519** | Preferido. Escolhido sempre que disponível. |
+| **ECDSA P-256** | Alternativa. Existe na Web Crypto desde o início. |
+
+Ed25519 continua sendo o preferido por um motivo concreto, não estético: ECDSA
+exige um número aleatório novo a cada assinatura, e se ele se repetir ou for
+previsível a chave privada vaza. Em Ed25519 essa propriedade é estrutural.
+
+O suporte é verificado **gerando uma chave descartável**, não consultando lista
+de navegadores: um motor pode anunciar o algoritmo e falhar numa configuração
+específica, e o usuário descobriria isso no meio do pareamento.
+
+Implementado em `packages/identidade`, escrito só com a Web Crypto API — o
+mesmo código roda no navegador e no Node, o que elimina a chance de as duas
+pontas divergirem em detalhes de formato.
 
 **No Agente (Windows):** a chave privada é gerada e guardada em disco protegida
 por **DPAPI** (`CryptProtectData`, escopo de usuário). O material fica atrelado à

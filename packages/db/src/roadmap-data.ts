@@ -288,13 +288,32 @@ export const ROADMAP: SeedItem[] = [
         weight: 2,
         dependsOn: ["P0-M1-T5"],
         children: [
-          { key: "P1-M2-T1", kind: "TASK", title: "Schemas de mensagem e validação" },
+          {
+            key: "P1-M2-T1",
+            kind: "TASK",
+            title: "Schemas de mensagem e validação",
+            gates: [
+              g("schemas", "Schemas como definição única, tipos derivados deles"),
+              g("validacao", "Conteúdo desconhecido é recusado, não processado"),
+            ],
+          },
           {
             key: "P1-M2-T2",
             kind: "TASK",
             title: "Negociação de capacidades e versões incompatíveis",
+            gates: [
+              g("negociacao", "Sessão opera na interseção das capacidades"),
+              g("mismatch", "Versão incompatível tratada nas duas direções"),
+            ],
           },
-          { key: "P1-M2-T3", kind: "TASK", title: "Testes de contrato" },
+          {
+            key: "P1-M2-T3",
+            kind: "TASK",
+            title: "Testes de contrato",
+            gates: [
+              g("cenarios", "Duplicidade, timeout, estado obsoleto e reconexão cobertos"),
+            ],
+          },
         ],
       },
       {
@@ -325,13 +344,45 @@ export const ROADMAP: SeedItem[] = [
             key: "P1-M4-T1",
             kind: "TASK",
             title: "Geração e guarda do par de chaves do dispositivo",
+            description:
+              "Identidade criptográfica isomórfica, com algoritmo negociado entre Ed25519 e ECDSA P-256.",
+            gates: [
+              g("geracao", "Par de chaves gerado e não extraível"),
+              g("negociacao", "Algoritmo verificado por teste real, não por lista"),
+              g("assinatura", "Assinatura e verificação cobertas por teste"),
+            ],
           },
-          { key: "P1-M4-T2", kind: "TASK", title: "Handshake de pareamento" },
-          { key: "P1-M4-T3", kind: "TASK", title: "Emissão, rotação e revogação de token" },
+          {
+            key: "P1-M4-T2",
+            kind: "TASK",
+            title: "Handshake de pareamento",
+            description:
+              "Código curto que prova posse física do PC, com expiração e limite de tentativas.",
+            gates: [
+              g("codigo", "Código gerado por CSPRNG, sem viés"),
+              g("tempo-constante", "Comparação resistente a ataque de tempo"),
+              g("limites", "Expiração e bloqueio por tentativas cobertos"),
+              g("fluxo", "Fluxo ponta a ponta entre PWA e Agente"),
+            ],
+          },
+          {
+            key: "P1-M4-T3",
+            kind: "TASK",
+            title: "Emissão, rotação e revogação de token",
+            gates: [
+              g("emissao", "Token curto por desafio-resposta"),
+              g("revogacao", "Revogação vale offline no Agente"),
+            ],
+          },
           {
             key: "P1-M4-T4",
             kind: "TASK",
             title: "Testes de segurança: replay, dispositivo revogado, autenticação inválida",
+            gates: [
+              g("replay", "Repetição de comando recusada"),
+              g("revogado", "Dispositivo revogado não conecta"),
+              g("invalido", "Assinatura inválida recusada sem lançar"),
+            ],
           },
         ],
       },

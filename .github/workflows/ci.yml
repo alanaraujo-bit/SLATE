@@ -48,6 +48,7 @@ jobs:
           pnpm --filter @slate/db
           --filter @slate/protocol
           --filter @slate/design-system
+          --filter @slate/identidade
           --filter @slate/control-center
           test
 
