@@ -20,7 +20,15 @@ const POLL_MS = 2500;
  */
 const LIFETIME_MS = process.env.VERCEL ? 240_000 : 12 * 60 * 60 * 1000;
 
-const HEARTBEAT_MS = 15_000;
+/**
+ * Sinal de vida.
+ *
+ * Precisa ser um evento de verdade, e não um comentário SSE: comentário não
+ * dispara nada no navegador, então o cliente não conseguia separar "quieto
+ * porque nada mudou" de "quieto porque a conexão morreu". Com um evento, o
+ * silêncio passa a significar exatamente uma coisa.
+ */
+const HEARTBEAT_MS = 5_000;
 
 export async function GET(request: Request) {
   const encoder = new TextEncoder();
@@ -84,7 +92,7 @@ export async function GET(request: Request) {
               send("snapshot", snapshot);
               lastHeartbeat = Date.now();
             } else if (Date.now() - lastHeartbeat > HEARTBEAT_MS) {
-              comment("keep-alive");
+              send("heartbeat", { at: Date.now() });
               lastHeartbeat = Date.now();
             }
           } catch (error) {

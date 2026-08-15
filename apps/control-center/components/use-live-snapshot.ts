@@ -6,81 +6,89 @@ import type { Snapshot } from "@/lib/snapshot";
 export type LinkState = "live" | "reconnecting" | "offline";
 
 /**
- * Grace period before a dropped stream is reported to the user.
+ * Tolerância antes de admitir que a conexão está com problema.
  *
- * EventSource reconnects on its own, and our stream deliberately rolls over
- * every few minutes. Surfacing every gap would make a healthy page look
- * unstable, so a brief interruption stays silent and only a genuinely stuck
- * connection is announced.
+ * O servidor manda um sinal de vida a cada 5s, então este valor precisa cobrir
+ * mais de um sinal perdido — senão um engasgo da rede vira alarme. Também não
+ * pode ser generoso demais: uma página que afirma estar ao vivo enquanto não
+ * recebe nada é pior que uma que admite o problema.
  */
-const GRACE_MS = 6000;
-const OFFLINE_MS = 30_000;
+const TOLERANCIA_MS = 12_000;
+
+/** A partir daqui não é mais engasgo: é queda. */
+const QUEDA_MS = 30_000;
+
+/** De quanto em quanto tempo o silêncio é reavaliado. */
+const INTERVALO_VERIFICACAO_MS = 2_000;
 
 export function useLiveSnapshot(initial: Snapshot) {
   const [snapshot, setSnapshot] = useState(initial);
   const [link, setLink] = useState<LinkState>("live");
-  const lastMessageAt = useRef(Date.now());
-  const openRef = useRef(false);
+  const ultimaMensagem = useRef(Date.now());
 
   useEffect(() => {
-    let source: EventSource | null = null;
-    let disposed = false;
+    let fonte: EventSource | null = null;
+    let descartado = false;
 
-    const connect = () => {
-      if (disposed) return;
-      source = new EventSource("/api/stream");
+    /**
+     * Estado derivado do silêncio, e só dele.
+     *
+     * Uma versão anterior também consultava se o socket parecia aberto, e
+     * ignorava o silêncio enquanto parecesse. Isso deixava uma faixa em que a
+     * página seguia dizendo "ao vivo" sem receber nada há dez segundos — um
+     * socket aberto que não entrega é indistinguível de um quebrado para quem
+     * está olhando a tela.
+     */
+    const avaliar = () => {
+      const silencio = Date.now() - ultimaMensagem.current;
+      if (silencio > QUEDA_MS) setLink("offline");
+      else if (silencio > TOLERANCIA_MS) setLink("reconnecting");
+      else setLink("live");
+    };
 
-      source.addEventListener("open", () => {
-        openRef.current = true;
-        lastMessageAt.current = Date.now();
-        setLink("live");
-      });
+    const registrarAtividade = () => {
+      ultimaMensagem.current = Date.now();
+      setLink("live");
+    };
 
-      source.addEventListener("snapshot", (event) => {
-        lastMessageAt.current = Date.now();
-        openRef.current = true;
-        setLink("live");
+    const conectar = () => {
+      if (descartado) return;
+      fonte = new EventSource("/api/stream");
+
+      fonte.addEventListener("open", registrarAtividade);
+      fonte.addEventListener("heartbeat", registrarAtividade);
+
+      fonte.addEventListener("snapshot", (evento) => {
+        registrarAtividade();
         try {
-          setSnapshot(JSON.parse((event as MessageEvent<string>).data) as Snapshot);
+          setSnapshot(JSON.parse((evento as MessageEvent<string>).data) as Snapshot);
         } catch {
-          /* a malformed frame is not worth tearing the page down over */
+          /* um quadro malformado não justifica derrubar a página */
         }
       });
 
-      // An expected end of stream. Reconnect immediately and stay "live" — the
-      // user has no reason to hear about our function time limits.
-      source.addEventListener("rollover", () => {
-        lastMessageAt.current = Date.now();
-        source?.close();
-        if (!disposed) connect();
+      // Fim de fluxo previsto. Reconecta na hora e continua ao vivo — os
+      // limites de tempo de função da plataforma não são assunto do operador.
+      fonte.addEventListener("rollover", () => {
+        ultimaMensagem.current = Date.now();
+        fonte?.close();
+        if (!descartado) conectar();
       });
 
-      source.addEventListener("degraded", () => {
-        setLink("reconnecting");
-      });
+      fonte.addEventListener("degraded", () => setLink("reconnecting"));
 
-      source.addEventListener("error", () => {
-        openRef.current = false;
-        // EventSource retries by itself; only report if the gap persists.
-        const silentFor = Date.now() - lastMessageAt.current;
-        if (silentFor > OFFLINE_MS) setLink("offline");
-        else if (silentFor > GRACE_MS) setLink("reconnecting");
-      });
+      // O EventSource tenta reconectar sozinho. Quem decide o que mostrar é a
+      // avaliação do silêncio, não o evento de erro em si.
+      fonte.addEventListener("error", avaliar);
     };
 
-    connect();
-
-    const monitor = setInterval(() => {
-      const silentFor = Date.now() - lastMessageAt.current;
-      if (openRef.current && silentFor < OFFLINE_MS) return;
-      if (silentFor > OFFLINE_MS) setLink("offline");
-      else if (silentFor > GRACE_MS) setLink("reconnecting");
-    }, 2000);
+    conectar();
+    const verificacao = setInterval(avaliar, INTERVALO_VERIFICACAO_MS);
 
     return () => {
-      disposed = true;
-      clearInterval(monitor);
-      source?.close();
+      descartado = true;
+      clearInterval(verificacao);
+      fonte?.close();
     };
   }, []);
 

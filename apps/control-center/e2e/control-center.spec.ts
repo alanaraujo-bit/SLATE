@@ -145,33 +145,58 @@ test.describe("painel", () => {
 });
 
 test.describe("tempo real", () => {
-  test("uma queda breve do fluxo não vira alarme falso", async ({ page }) => {
+  test("uma queda breve do fluxo não vira alarme falso", async ({ page, context }) => {
     await page.goto("/");
     await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live", {
       timeout: 20_000,
     });
 
-    // Derruba o fluxo. O EventSource reconecta sozinho, e o nosso fluxo se
-    // encerra de propósito de tempos em tempos — então uma interrupção curta
-    // precisa passar despercebida. Avisar a cada queda faria uma página
-    // saudável parecer instável.
-    await page.route("**/api/stream", (route) => route.abort());
+    // Queda de rede de verdade. Interceptar a rota não serve aqui: isso só
+    // afeta requisições novas, e a conexão SSE já aberta seguiria entregando —
+    // o teste passaria sem exercitar nada.
+    await context.setOffline(true);
 
-    await page.waitForTimeout(4000);
+    // O fluxo se encerra de propósito de tempos em tempos e a rede engasga.
+    // Uma interrupção curta precisa passar despercebida, senão uma página
+    // saudável parece instável.
+    await page.waitForTimeout(5000);
     await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live");
+
+    await context.setOffline(false);
   });
 
-  test("uma queda prolongada é informada ao operador", async ({ page }) => {
+  test("uma queda prolongada é informada ao operador", async ({ page, context }) => {
     await page.goto("/");
     await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live", {
       timeout: 20_000,
     });
 
-    await page.route("**/api/stream", (route) => route.abort());
+    await context.setOffline(true);
 
-    // Passado o período de tolerância, o silêncio precisa ser dito: uma página
-    // que parou de receber dados não pode continuar afirmando que está ao vivo.
+    // Passada a tolerância, o silêncio precisa ser dito: uma página que parou
+    // de receber dados não pode continuar afirmando que está ao vivo.
     await expect(page.locator(".link-state")).not.toHaveAttribute("data-state", "live", {
+      timeout: 25_000,
+    });
+
+    await context.setOffline(false);
+  });
+
+  test("volta ao ar sozinho quando a rede retorna", async ({ page, context }) => {
+    await page.goto("/");
+    await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live", {
+      timeout: 20_000,
+    });
+
+    await context.setOffline(true);
+    await expect(page.locator(".link-state")).not.toHaveAttribute("data-state", "live", {
+      timeout: 25_000,
+    });
+
+    // Recuperar sozinho é metade do requisito: avisar que caiu sem voltar a
+    // funcionar deixaria o operador recarregando a página à toa.
+    await context.setOffline(false);
+    await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live", {
       timeout: 25_000,
     });
   });
