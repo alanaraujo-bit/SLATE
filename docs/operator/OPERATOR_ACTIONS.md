@@ -136,36 +136,40 @@ A causa real aparece na tela de configuração da aplicação: há um aviso de
 a atualização pendente, a conexão aparece como feita do lado da Vercel e mesmo
 assim nenhum evento de push chega até lá.
 
-### O que já foi tentado — e não resolveu
+### Causa encontrada — e um diagnóstico meu que estava errado
 
-| Tentativa | Resultado |
-|---|---|
-| Aprovar a atualização de permissões da aplicação | aprovada, sem efeito |
-| Confirmar que a aplicação está instalada no repositório | está: aparece em *Installed GitHub Apps*, com *All repositories* |
-| Desconectar e reconectar o repositório na Vercel | reconectou, sem efeito |
-| Quatro pushes na `main` | nenhuma publicação nova |
-| Conferir webhooks do repositório | continua **nenhum** apontando para a Vercel |
+**O deploy automático sempre funcionou.** Cada push gerou uma publicação. Só que
+todas ficavam com estado `Blocked`, e o comando `vercel ls` **não lista
+publicações bloqueadas** — ele mostrava apenas a última publicação manual, e eu
+concluí que nada estava disparando.
 
-Nesse ponto parei de tentar por linha de comando. Todas as condições visíveis
-estão corretas e mesmo assim o webhook não é criado — o que a CLI expõe já se
-esgotou, e insistir custaria tempo sem trazer informação nova.
+Passei um bom tempo investigando webhook, permissões e reconexão por causa de
+uma lista incompleta que tratei como se fosse a realidade. O painel mostrava o
+contrário desde o começo. A lição é a mesma que já apareceu antes neste
+projeto: quando uma ferramenta responde "não há nada", vale confirmar se ela
+mostra tudo antes de acreditar.
 
-### O que fazer
+**A causa real:** os commits estavam assinados com um email que não pertence à
+conta do GitHub do operador. A Vercel identifica o autor de um commit pelo
+email e recusa publicar em nome de quem não é membro do time — é uma proteção
+contra alguém com acesso ao repositório publicar em produção.
 
-A informação que falta está no painel, que mostra mais do que a linha de
-comando:
+Publicação manual passava porque é autenticada como o usuário da linha de
+comando; publicação automática é atribuída ao autor do commit, que era um
+endereço desconhecido.
 
-1. Abra <https://vercel.com/aionixdev/slate-pwa/settings/git>
-2. Confira se o repositório aparece conectado e qual é a *Production Branch*
-   (precisa ser `main`)
-3. Procure por *Ignored Build Step* ou qualquer opção de publicação automática
-   desligada
-4. Se estiver tudo certo ali, desconectar e reconectar **pelo painel** costuma
-   recriar o webhook — a reconexão pela linha de comando não recriou
+O email do autor foi corrigido para o endereço `noreply` do GitHub, sempre
+reconhecido como pertencente à conta e sem expor endereço pessoal.
 
-Vale notar: o repositório tem três aplicações instaladas (Railway, Render e
-Vercel) e dois projetos da Vercel apontando para ele. Nada disso deveria
-conflitar, mas é a diferença mais visível em relação a uma configuração comum.
+### O que fazer, se ainda ficar bloqueado
+
+Se mesmo com o autor correto a publicação continuar `Blocked`, a conta do
+GitHub precisa estar vinculada ao perfil da Vercel:
+
+1. Abra <https://vercel.com/account/login-connections>
+2. Confirme que **GitHub** aparece conectado à conta `alanaraujo-bit`
+3. Publicações bloqueadas podem ser liberadas uma a uma pelo painel, em
+   <https://vercel.com/aionixdev/slate-pwa/deployments>
 
 ### Como validar
 
