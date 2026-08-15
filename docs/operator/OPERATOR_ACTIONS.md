@@ -56,6 +56,73 @@ automated results rather than locally-executed ones.
 
 ---
 
+## ACTION-003 — Vercel deployments never leave the queue
+
+**STATUS:** OPEN
+**PROJECT BLOCKED:** NO
+**BLOCKS:** Nothing today. The Control Center runs locally by operator decision
+([D-007](./DECISIONS.md)). This must be resolved before the SLATE PWA ships,
+since the PWA is genuinely cloud-hosted.
+
+### Why
+
+On the `aionixdev` Vercel scope, project `slate-control-center` deployed
+successfully exactly once (44s, `READY`). Every deployment afterwards was
+created but never began building:
+
+- status stays at a value the CLI renders as `UNKNOWN`, never `READY`
+- no build logs exist — `vercel inspect --logs` returns nothing
+- `vercel promote` refuses with `422 … is not ready`
+
+Eliminated as causes:
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| Build queue blocked by a stuck build | Removed the stalled deployments | Recurred immediately on an empty queue |
+| Stale CLI misreporting state | Upgraded 58.9.0 → 59.0.0 | Unchanged |
+| Broken build / bad monorepo config | `vercel build` locally | Succeeds |
+| Source or dependency fault | Same commit built in Docker | Builds and runs correctly |
+| Remote build environment | `vercel deploy --prebuilt` | Also never leaves the queue |
+
+The last row is decisive: a prebuilt deployment performs no remote build, and it
+stalls identically. The fault is in deployment acceptance, not compilation, and
+sits above the project — most likely an account-level limit, a hold on the
+account, or a platform incident.
+
+### What to do
+
+1. Open <https://vercel.com/aionixdev/slate-control-center> and read the status
+   of any deployment newer than `pa0vyded8`. The dashboard shows a reason the
+   CLI does not surface.
+2. Check the account for a billing hold, a spend cap, or an exhausted
+   concurrent-build allowance: <https://vercel.com/account/billing> and the
+   team's usage page.
+3. Check <https://www.vercel-status.com> for an incident overlapping
+   2026-08-15 01:00–02:00 UTC-3.
+4. If none of these explain it, contact Vercel support with deployment id
+   `dpl_96RDqKidmsE2fSK1ygzJmbbPSf2Q`, which was created and never built.
+
+### How to validate
+
+```
+vercel deploy --prod --yes --scope aionixdev
+```
+Expected: reaches `● Ready` and the alias serves the new build.
+
+### What has already been completed
+
+The project exists and is correctly configured: root directory
+`apps/control-center`, framework `nextjs`, GitHub connected, and `DATABASE_URL`
+set for both Production and Preview. A verified-good Dockerfile also exists, so
+the application can be hosted anywhere container-based if Vercel stays blocked.
+
+### What happens after
+
+Cloud hosting becomes available again for the PWA milestone. The Control Center
+does not need it and will continue running locally.
+
+---
+
 ## ACTION-002 — Windows code-signing certificate for the Desktop Agent installer
 
 **STATUS:** OPEN

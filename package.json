@@ -18,7 +18,8 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "roadmap": "pnpm --filter @slate/roadmap-cli exec slate-roadmap"
+    "roadmap": "pnpm --filter @slate/roadmap-cli exec tsx src/cli.ts",
+    "roadmap:ui": "pnpm --filter @slate/control-center exec next dev -p 4300"
   },
   "devDependencies": {
     "typescript": "^5.9.2"

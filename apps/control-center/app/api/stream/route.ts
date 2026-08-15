@@ -8,14 +8,17 @@ export const maxDuration = 300;
 const POLL_MS = 2500;
 
 /**
- * Close well before the platform's 300s function ceiling.
+ * How long a single stream lives before rolling over.
  *
- * Being cut off mid-stream by the platform surfaces to EventSource as an error,
- * which would make a perfectly healthy page blink "reconnecting" every five
- * minutes. Ending deliberately — and telling the client it was deliberate —
- * keeps the reconnect invisible.
+ * On a serverless platform this must stay well inside the 300s function
+ * ceiling: being cut off mid-stream surfaces to EventSource as an error, which
+ * would make a perfectly healthy page blink "reconnecting" every five minutes.
+ * Ending deliberately — and saying so first — keeps the reconnect invisible.
+ *
+ * Running locally there is no such ceiling, so the stream simply stays open and
+ * the page holds one connection for as long as it is left open.
  */
-const LIFETIME_MS = 240_000;
+const LIFETIME_MS = process.env.VERCEL ? 240_000 : 12 * 60 * 60 * 1000;
 
 const HEARTBEAT_MS = 15_000;
 
