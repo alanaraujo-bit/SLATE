@@ -113,6 +113,58 @@ desaparecem, e a atualização automática consegue verificar assinaturas.
 
 ---
 
+## AÇÃO-004 — Provedor de envio de e-mail
+
+**SITUAÇÃO:** ABERTA
+**TRAVA O PROJETO:** NÃO
+**IMPEDE:** recuperação de senha e verificação de e-mail. Cadastro e entrada
+funcionam normalmente.
+
+### Por que
+
+Recuperar uma conta exige mandar um e-mail, e mandar e-mail exige credencial de
+um provedor — que é uma contratação, ainda que em plano gratuito.
+
+Isso importa mais do que parece: **sem recuperação, esquecer a senha custa todos
+os dispositivos pareados e todos os painéis da pessoa.** Por isso a decisão foi
+tomada e declarada agora ([ADR-0005](../architecture/ADR-0005-contas-e-sessoes.md)),
+e não descoberta depois pelo primeiro usuário que esquecer a senha.
+
+### O que fazer
+
+1. Criar conta num provedor de e-mail transacional — Resend, Postmark ou Amazon
+   SES resolvem. Todos têm plano gratuito suficiente para começar.
+2. Verificar o domínio `aionixdev.com` no provedor, para que a mensagem não caia
+   em spam.
+3. Guardar a chave como variável no serviço da API no Railway:
+
+   ```
+   EMAIL_API_KEY=...
+   EMAIL_REMETENTE=slate@aionixdev.com
+   ```
+
+### Como validar
+
+Pedir recuperação de senha e receber o e-mail na caixa de entrada — não no spam.
+
+### O que já foi feito
+
+O fluxo inteiro está implementado: token de uso único, expiração curta e
+invalidação de todas as sessões ao trocar a senha. O envio está atrás de uma
+interface cuja implementação atual **registra em log em vez de enviar**, e que
+se recusa a rodar em produção — para que a ausência do provedor seja um erro
+visível e não um e-mail que some em silêncio.
+
+A tela de cadastro avisa, no momento do cadastro, que a recuperação por e-mail
+ainda não está ativa.
+
+### O que acontece depois
+
+Trocar a implementação de log pela do provedor, e remover o aviso da tela de
+cadastro.
+
+---
+
 ## AÇÃO-003 — Publicações na Vercel não saem da fila
 
 **SITUAÇÃO:** ABERTA

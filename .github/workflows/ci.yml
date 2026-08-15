@@ -49,7 +49,9 @@ jobs:
           --filter @slate/protocol
           --filter @slate/design-system
           --filter @slate/identidade
+          --filter @slate/api
           --filter @slate/control-center
+          --filter @slate/pwa
           test
 
       - name: Build do Centro de Controle

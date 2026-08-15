@@ -8,6 +8,13 @@
       "when": 1786765432975,
       "tag": "0000_init_roadmap",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786803617052,
+      "tag": "0001_contas_e_sessoes",
+      "breakpoints": true
     }
   ]
 }

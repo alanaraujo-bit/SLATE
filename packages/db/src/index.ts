@@ -3,6 +3,7 @@ import postgres from "postgres";
 import * as schema from "./schema";
 
 export * from "./schema";
+export * from "./schema-contas";
 export * from "./progress";
 
 export type Database = ReturnType<typeof createDb>;
