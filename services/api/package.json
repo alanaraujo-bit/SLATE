@@ -8,10 +8,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.1",
     "@slate/db": "workspace:*",
     "@slate/identidade": "workspace:*",
     "@slate/protocol": "workspace:*",
     "drizzle-orm": "^0.44.7",
+    "hono": "^4.13.2",
     "postgres": "^3.4.7"
   },
   "devDependencies": {

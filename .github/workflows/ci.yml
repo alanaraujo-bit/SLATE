@@ -92,11 +92,13 @@ jobs:
             echo "configurado=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Testes de integração da CLI
+      - name: Testes de integração
         if: steps.verificar.outputs.configurado == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
-        run: pnpm --filter @slate/roadmap-cli test
+        # A API e a CLI têm suítes que só rodam com banco; sem ele elas se
+        # pulam sozinhas em vez de falhar.
+        run: pnpm --filter @slate/roadmap-cli --filter @slate/api test
 
   pwa:
     name: PWA — instalabilidade e offline

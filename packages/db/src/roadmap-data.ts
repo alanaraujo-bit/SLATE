@@ -322,12 +322,39 @@ export const ROADMAP: SeedItem[] = [
         title: "Contas e autenticação",
         weight: 2,
         children: [
-          { key: "P1-M3-T1", kind: "TASK", title: "Integração com provedor de autenticação" },
-          { key: "P1-M3-T2", kind: "TASK", title: "Modelo de conta e gestão de sessão" },
+          {
+            key: "P1-M3-T1",
+            kind: "TASK",
+            title: "Serviço de contas e decisão de autenticação",
+            description:
+              "Sessões próprias em vez de biblioteca web, porque o Agente Desktop não é navegador e precisaria de um segundo sistema (ADR-0005).",
+            gates: [
+              g("adr", "Decisão registrada com alternativas e risco"),
+              g("servico", "Serviço no ar com verificação de saúde"),
+            ],
+          },
+          {
+            key: "P1-M3-T2",
+            kind: "TASK",
+            title: "Modelo de conta e gestão de sessão",
+            gates: [
+              g("senha", "Hash com parâmetros versionados e comparação em tempo constante"),
+              g("sessao", "Sessão opaca, rotacionada na entrada e encerrável"),
+              g("isolamento", "Uma conta não alcança dados de outra"),
+              g("https", "Cookie verificado contra HTTPS real"),
+            ],
+          },
           {
             key: "P1-M3-T3",
             kind: "TASK",
             title: "Fluxos de entrada, cadastro e recuperação",
+            description:
+              "Recuperação depende de provedor de e-mail (AÇÃO-004); as telas dependem da PWA.",
+            gates: [
+              g("endpoints", "Cadastro, entrada e saída implementados"),
+              g("telas", "Telas na PWA"),
+              g("recuperacao", "Recuperação de senha ativa"),
+            ],
           },
         ],
       },
