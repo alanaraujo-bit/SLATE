@@ -1,0 +1,5 @@
+# As fixtures de assinatura são conteúdo verificado byte a byte. Sem isto o
+# Git converte as quebras de linha ao clonar no Windows, o conteúdo deixa de
+# ser o que foi assinado e o teste de assinatura falha na esteira enquanto
+# passa em quem já tinha o arquivo em disco.
+apps/desktop/src-tauri/tests/fixtures/** -text
