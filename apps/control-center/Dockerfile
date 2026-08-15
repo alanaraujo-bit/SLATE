@@ -1,4 +1,7 @@
-# SLATE Development Control Center
+# Centro de Controle do SLATE
+#
+# Roda localmente por decisao do operador (D-007). Este Dockerfile fica para
+# o caso de a ferramenta precisar ser hospedada, e porque ja foi validado.
 #
 # An explicit Dockerfile rather than a buildpack: the pnpm workspace needs a
 # specific Node and pnpm pairing, and buildpack autodetection resolved an old
