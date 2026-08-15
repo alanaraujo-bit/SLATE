@@ -7,7 +7,7 @@ import {
   overallProgress,
   toPercent,
   type WorkItemInput,
-} from "./progress.js";
+} from "./progress";
 
 const leaf = (
   id: string,

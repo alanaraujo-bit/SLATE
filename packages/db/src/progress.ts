@@ -1,4 +1,4 @@
-import type { GateStatus, WorkStatus } from "./schema.js";
+import type { GateStatus, WorkStatus } from "./schema";
 
 /**
  * Progress computation for the SLATE roadmap.

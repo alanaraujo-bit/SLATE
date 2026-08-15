@@ -5,3 +5,5 @@ packages:
 allowBuilds:
   # Build tooling for tsx and vitest. Trusted, first-party toolchain.
   esbuild: true
+  # Next.js image optimisation. Ships prebuilt native binaries.
+  sharp: true
