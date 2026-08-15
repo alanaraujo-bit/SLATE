@@ -1,0 +1,234 @@
+@import "@slate/design-system/tokens.css";
+
+/*
+ * Interface do Agente.
+ *
+ * Usa os mesmos tokens do produto, mas com densidade de aplicativo de desktop:
+ * a janela é pequena e a pessoa está sentada na frente dela, então os alvos
+ * não precisam do tamanho de toque que a PWA exige.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--s-bg);
+  color: var(--s-text);
+  font-family: var(--s-font-sans);
+  font-size: var(--s-text-sm);
+  line-height: var(--s-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  /* Uma janela de aplicativo não se seleciona com o mouse por acidente. */
+  user-select: none;
+}
+
+input {
+  user-select: text;
+}
+
+h1 {
+  font-size: var(--s-text-lg);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-tight);
+  margin: 0;
+}
+
+h2 {
+  font-size: var(--s-text-md);
+  font-weight: var(--s-weight-medium);
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+.agente {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.cabecalho {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-space-2);
+  padding: var(--s-space-3) var(--s-space-4);
+  border-bottom: 1px solid var(--s-border);
+}
+
+.marca {
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-tight);
+}
+
+.conteudo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-space-4);
+  padding: var(--s-space-4);
+  flex: 1;
+}
+
+.centro {
+  flex: 1;
+  display: grid;
+  place-items: center;
+}
+
+.linha {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-space-3);
+}
+
+.bloco {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-space-3);
+  padding: var(--s-space-4);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-lg);
+  background: var(--s-surface);
+}
+
+.atenuado {
+  color: var(--s-text-muted);
+}
+
+.pequeno {
+  font-size: var(--s-text-xs);
+}
+
+.erro {
+  color: var(--s-danger);
+  font-size: var(--s-text-sm);
+}
+
+.sucesso {
+  color: var(--s-success);
+  font-size: var(--s-text-sm);
+}
+
+/* ---- Campos ----------------------------------------------------------- */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-space-2);
+}
+
+.campo span {
+  color: var(--s-text-muted);
+  font-size: var(--s-text-xs);
+}
+
+.campo input,
+.codigo {
+  padding: var(--s-space-3);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface-sunken);
+  color: var(--s-text);
+  font-family: var(--s-font-sans);
+  font-size: var(--s-text-sm);
+}
+
+.campo input:focus-visible,
+.codigo:focus-visible {
+  outline: none;
+  border-color: var(--s-accent);
+  box-shadow: var(--s-ring-focus);
+}
+
+/*
+ * O campo do código é o elemento central desta janela: grande, monoespaçado e
+ * espaçado, para conferir dígito a dígito contra a tela do celular sem errar.
+ */
+.codigo {
+  font-family: var(--s-font-mono);
+  font-size: var(--s-text-2xl);
+  text-align: center;
+  letter-spacing: 0.3em;
+  font-variant-numeric: tabular-nums;
+  padding-inline: var(--s-space-2);
+}
+
+.codigo::placeholder {
+  color: var(--s-text-subtle);
+  letter-spacing: 0.3em;
+}
+
+/* ---- Botões ----------------------------------------------------------- */
+
+.botao {
+  padding: var(--s-space-3) var(--s-space-4);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface-raised);
+  color: var(--s-text);
+  font-family: var(--s-font-sans);
+  font-size: var(--s-text-sm);
+  font-weight: var(--s-weight-medium);
+  cursor: pointer;
+  transition: background var(--s-duration-fast) var(--s-ease-out);
+}
+
+.botao:hover:not(:disabled) {
+  background: var(--s-surface-overlay);
+}
+
+.botao:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.botao.principal {
+  background: var(--s-accent);
+  border-color: var(--s-accent);
+  color: var(--s-on-accent);
+}
+
+.botao.principal:hover:not(:disabled) {
+  background: var(--s-accent-strong);
+}
+
+.botao.discreto {
+  padding: var(--s-space-2) var(--s-space-3);
+  background: transparent;
+  border-color: transparent;
+  color: var(--s-text-muted);
+  font-size: var(--s-text-xs);
+}
+
+.botao:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+}
+
+/* ---- Lista ------------------------------------------------------------ */
+
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-space-2);
+}
+
+.lista li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-space-3);
+  padding: var(--s-space-2) var(--s-space-3);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-sm);
+  background: var(--s-surface-raised);
+}
