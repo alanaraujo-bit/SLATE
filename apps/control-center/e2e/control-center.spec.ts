@@ -1,149 +1,201 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Cloud validation for the Development Control Center.
+ * Validação ponta a ponta do Centro de Controle.
  *
- * These assert the properties the mandate actually cares about — that progress
- * is real, that the page reflects live database state, and that the realtime
- * channel works — rather than that particular pixels exist.
+ * Verifica as propriedades que realmente importam — que o progresso é real,
+ * que a página reflete o estado vivo do banco, que o canal em tempo real
+ * funciona e que a interface está em português — em vez de verificar pixels.
  */
 
-test.describe("health", () => {
-  test("reports a reachable database", async ({ request }) => {
-    const response = await request.get("/api/health");
-    expect(response.status(), "health endpoint should be ok").toBe(200);
+test.describe("saúde", () => {
+  test("reporta um banco de dados acessível", async ({ request }) => {
+    const resposta = await request.get("/api/health");
+    expect(resposta.status()).toBe(200);
 
-    const body = await response.json();
-    expect(body.status).toBe("ok");
-    expect(body.config.present).toBe(true);
-    expect(body.config.parses).toBe(true);
-    expect(body.database.reachable).toBe(true);
+    const corpo = await resposta.json();
+    expect(corpo.status).toBe("ok");
+    expect(corpo.config.present).toBe(true);
+    expect(corpo.config.parses).toBe(true);
+    expect(corpo.database.reachable).toBe(true);
 
-    // The credential must never appear in a diagnostic response.
-    const text = JSON.stringify(body);
-    expect(text).not.toContain("postgresql://");
-    expect(text).not.toMatch(/:[^:@/]+@/);
+    // A credencial nunca pode aparecer numa resposta de diagnóstico.
+    const texto = JSON.stringify(corpo);
+    expect(texto).not.toContain("postgresql://");
+    expect(texto).not.toMatch(/:[^:@/]+@/);
   });
 });
 
-test.describe("snapshot API", () => {
-  test("serves a roadmap computed from real rows", async ({ request }) => {
-    const response = await request.get("/api/snapshot");
-    expect(response.status()).toBe(200);
+test.describe("API do plano", () => {
+  test("serve um plano calculado a partir de linhas reais", async ({ request }) => {
+    const resposta = await request.get("/api/snapshot");
+    expect(resposta.status()).toBe(200);
 
-    const snapshot = await response.json();
+    const snapshot = await resposta.json();
 
     expect(snapshot.project.name).toBe("SLATE");
     expect(snapshot.tree.length).toBeGreaterThan(0);
     expect(snapshot.totals.items).toBeGreaterThan(50);
 
-    // Progress must be a real fraction, and must not be complete while work
-    // remains — the specific dishonesty mandate §57 forbids.
+    // O progresso precisa ser uma fração real, e não pode estar completo
+    // enquanto há trabalho restante — a desonestia que o mandato §57 proíbe.
     expect(snapshot.overall).toBeGreaterThan(0);
     expect(snapshot.overall).toBeLessThan(1);
     expect(snapshot.totals.completedLeaves).toBeLessThan(snapshot.totals.leaves);
   });
 
-  test("parent progress never exceeds a fully complete subtree", async ({ request }) => {
+  test("um ramo incompleto nunca aparece como concluído", async ({ request }) => {
     const snapshot = await (await request.get("/api/snapshot")).json();
 
-    const check = (node: {
+    const verificar = (no: {
       progress: number;
       status: string;
       children: Array<{ progress: number; status: string; children: unknown[] }>;
     }) => {
-      if (node.children.length > 0) {
-        const allComplete = node.children.every(
-          (child) => child.status === "COMPLETED",
-        );
-        if (!allComplete) {
-          expect(node.progress, "incomplete subtree must not read as complete").toBeLessThan(1);
+      if (no.children.length > 0) {
+        const todosConcluidos = no.children.every((f) => f.status === "COMPLETED");
+        if (!todosConcluidos) {
+          expect(no.progress).toBeLessThan(1);
         }
       }
-      for (const child of node.children) check(child as never);
+      for (const filho of no.children) verificar(filho as never);
     };
 
-    for (const phase of snapshot.tree) check(phase);
+    for (const fase of snapshot.tree) verificar(fase);
   });
 });
 
-test.describe("dashboard", () => {
-  test("renders the roadmap with a computed headline figure", async ({ page }) => {
+test.describe("painel", () => {
+  test("renderiza o plano com o percentual calculado em destaque", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.getByText("Development Control Center")).toBeVisible();
+    // Especificamente o subtítulo da marca: o mesmo texto também é o nome do
+    // marco P0-M3, então um getByText solto casa duas vezes.
+    await expect(page.locator(".brand__sub")).toHaveText(
+      "Centro de Controle de Desenvolvimento",
+    );
 
-    const headline = page.locator(".headline__value");
-    await expect(headline).toBeVisible();
-    await expect(headline).toHaveText(/^\d+(\.\d+)?%$/);
+    const destaque = page.locator(".headline__value");
+    await expect(destaque).toBeVisible();
+    // Percentual em formato brasileiro, com vírgula decimal.
+    await expect(destaque).toHaveText(/^\d+,\d%$/);
 
-    // Phases from the seeded roadmap must be present.
-    await expect(page.getByText("Foundation & Project Intelligence")).toBeVisible();
-    await expect(page.getByText("Core Platform")).toBeVisible();
+    await expect(page.getByText("Fundação e Inteligência do Projeto")).toBeVisible();
+    await expect(page.getByText("Plataforma Central")).toBeVisible();
   });
 
-  test("drills down into a milestone", async ({ page }) => {
+  test("a interface está em português", async ({ page }) => {
     await page.goto("/");
 
-    const phase = page.getByRole("button", { name: /Foundation & Project Intelligence/ });
-    await expect(phase).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "pt-BR");
 
-    // Phases start expanded, so a milestone beneath it should already show.
+    for (const rotulo of [
+      "Progresso geral",
+      "Itens de trabalho",
+      "Tarefas concluídas",
+      "Critérios aprovados",
+      "Execução atual",
+      "Ações que dependem de você",
+      "Atividade",
+    ]) {
+      await expect(page.getByText(rotulo).first()).toBeVisible();
+    }
+  });
+
+  test("detalha um marco em profundidade", async ({ page }) => {
+    await page.goto("/");
+
     await expect(
-      page.getByRole("button", { name: /Development Control Center/ }).first(),
+      page.getByRole("button", { name: /Fundação e Inteligência do Projeto/ }),
+    ).toBeVisible();
+
+    await expect(
+      page.getByRole("button", { name: /Centro de Controle de Desenvolvimento/ }).first(),
     ).toBeVisible();
   });
 
-  test("shows operator actions with remediation detail", async ({ page }) => {
+  test("mostra as ações do operador com o passo a passo", async ({ page }) => {
     await page.goto("/");
 
-    const action = page.getByRole("button", { name: /ACTION-001/ });
-    await expect(action).toBeVisible();
+    const acao = page.getByRole("button", { name: /AÇÃO-001/ });
+    await expect(acao).toBeVisible();
 
-    await action.click();
+    await acao.click();
     await expect(page.getByText(/gh auth refresh/)).toBeVisible();
   });
 
-  test("reaches a live connection state", async ({ page }) => {
+  test("chega ao estado de conexão ao vivo", async ({ page }) => {
     await page.goto("/");
 
-    // The stream should establish and the indicator settle on Live.
     await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live", {
       timeout: 20_000,
     });
   });
 
-  test("has no horizontal overflow on mobile", async ({ page }) => {
+  test("não tem rolagem horizontal no celular", async ({ page }) => {
     await page.goto("/");
 
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    const transborda = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth + 1,
     );
-    expect(overflow, "page must not scroll horizontally").toBe(false);
+    expect(transborda).toBe(false);
   });
 });
 
-test.describe("realtime", () => {
-  test("stream emits a snapshot event", async ({ page }) => {
+test.describe("tempo real", () => {
+  test("uma queda breve do fluxo não vira alarme falso", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live", {
+      timeout: 20_000,
+    });
+
+    // Derruba o fluxo. O EventSource reconecta sozinho, e o nosso fluxo se
+    // encerra de propósito de tempos em tempos — então uma interrupção curta
+    // precisa passar despercebida. Avisar a cada queda faria uma página
+    // saudável parecer instável.
+    await page.route("**/api/stream", (route) => route.abort());
+
+    await page.waitForTimeout(4000);
+    await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live");
+  });
+
+  test("uma queda prolongada é informada ao operador", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live", {
+      timeout: 20_000,
+    });
+
+    await page.route("**/api/stream", (route) => route.abort());
+
+    // Passado o período de tolerância, o silêncio precisa ser dito: uma página
+    // que parou de receber dados não pode continuar afirmando que está ao vivo.
+    await expect(page.locator(".link-state")).not.toHaveAttribute("data-state", "live", {
+      timeout: 25_000,
+    });
+  });
+
+  test("o fluxo entrega um evento de atualização", async ({ page }) => {
     await page.goto("/");
 
-    const received = await page.evaluate(
+    const recebeu = await page.evaluate(
       () =>
         new Promise<boolean>((resolve) => {
-          const source = new EventSource("/api/stream");
-          const timer = setTimeout(() => {
-            source.close();
+          const fonte = new EventSource("/api/stream");
+          const limite = setTimeout(() => {
+            fonte.close();
             resolve(false);
           }, 20_000);
 
-          source.addEventListener("snapshot", () => {
-            clearTimeout(timer);
-            source.close();
+          fonte.addEventListener("snapshot", () => {
+            clearTimeout(limite);
+            fonte.close();
             resolve(true);
           });
         }),
     );
 
-    expect(received, "SSE stream should deliver a snapshot").toBe(true);
+    expect(recebeu).toBe(true);
   });
 });

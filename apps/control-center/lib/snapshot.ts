@@ -187,6 +187,31 @@ export async function loadSnapshot(): Promise<Snapshot> {
     else childrenOf.set(item.parentId, [item]);
   }
 
+  /**
+   * Status exibido para um nó que tem filhos.
+   *
+   * O progresso de um pai já vem inteiramente dos filhos, mas o *status*
+   * gravado é do próprio nó — e a CLI move tarefas, não marcos. O resultado é
+   * um marco marcado "Planejado" exibindo 46% de progresso, o que lê como erro.
+   * Aqui o status mostrado é derivado dos filhos pela mesma lógica do
+   * progresso, mantendo os dois números coerentes na tela. Nada é gravado no
+   * banco: isto é apresentação, não estado.
+   */
+  const statusDerivado = (filhos: NodeView[]): WorkStatus => {
+    if (filhos.length === 0) return "PLANNED";
+    if (filhos.every((f) => f.status === "COMPLETED")) return "COMPLETED";
+    if (filhos.some((f) => f.status === "REOPENED")) return "REOPENED";
+    if (filhos.some((f) => f.status === "BLOCKED_EXTERNAL")) return "BLOCKED_EXTERNAL";
+
+    const emMovimento = filhos.some(
+      (f) => f.status !== "PLANNED" && f.status !== "READY",
+    );
+    if (emMovimento) return "IN_PROGRESS";
+
+    if (filhos.some((f) => f.status === "OPERATOR_REQUIRED")) return "OPERATOR_REQUIRED";
+    return "PLANNED";
+  };
+
   const build = (item: (typeof items)[number]): NodeView => {
     const result = progressById.get(item.id);
     const children = (childrenOf.get(item.id) ?? [])
@@ -200,7 +225,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
       kind: item.kind,
       title: item.title,
       description: item.description,
-      status: item.status,
+      status: children.length > 0 ? statusDerivado(children) : item.status,
       weight: item.weight,
       progress: result?.progress ?? 0,
       leafCount: result?.leafCount ?? 0,

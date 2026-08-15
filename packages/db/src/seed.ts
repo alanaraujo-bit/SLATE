@@ -21,43 +21,78 @@ import { PROJECT, ROADMAP, type SeedItem } from "./roadmap-data";
 
 const OPERATOR_ACTIONS = [
   {
-    code: "ACTION-001",
-    title: "Grant `workflow` scope to the GitHub CLI token",
+    code: "AÇÃO-001",
+    title: "Liberar o escopo `workflow` no token do GitHub",
     projectBlocked: false,
-    impact: "GitHub Actions CI cannot be committed to the repository.",
-    blocks: "CI/CD automation only. All development, deployment and cloud validation continue.",
+    impact: "A integração contínua não pode ser enviada para o repositório.",
+    blocks:
+      "Somente a automação de CI/CD. Todo o desenvolvimento, publicação e validação seguem normalmente.",
     why:
-      "The authenticated gh token carries scopes gist, read:org and repo, but not workflow. " +
-      "GitHub rejects any push whose diff touches .github/workflows/**.",
+      "O token autenticado do gh tem os escopos gist, read:org e repo, mas não tem workflow. " +
+      "O GitHub recusa qualquer push que altere arquivos em .github/workflows/.",
     whatToDo:
-      "Run `gh auth refresh -h github.com -s workflow` and approve the browser prompt.",
-    howToValidate: "`gh auth status` lists `workflow` among the token scopes.",
+      "Rode `gh auth refresh -h github.com -s workflow` e aprove a autorização que abrir no navegador.",
+    howToValidate: "`gh auth status` deve listar `workflow` entre os escopos do token.",
     alreadyCompleted:
-      "CI workflow definitions are authored and version-controlled under docs/deployment/ci/, " +
-      "ready to relocate into .github/workflows/ in a single commit.",
+      "As definições da esteira já estão escritas e versionadas em docs/deployment/ci/, " +
+      "prontas para serem movidas para .github/workflows/ num único commit.",
     whatHappensAfter:
-      "Typecheck, lint, unit and E2E pipelines run on every push, and roadmap quality gates " +
-      "begin reporting automated results.",
+      "Checagem de tipos, lint e testes passam a rodar a cada push, e os critérios de " +
+      "qualidade do plano começam a reportar resultados automáticos.",
   },
   {
-    code: "ACTION-002",
-    title: "Windows code-signing certificate for the Desktop Agent installer",
+    code: "AÇÃO-002",
+    title: "Certificado de assinatura de código para o instalador Windows",
     projectBlocked: false,
-    impact: "Installers are unsigned; Windows SmartScreen warns on first run.",
-    blocks: "Trusted installer distribution only. The Agent builds, installs and runs.",
+    impact:
+      "Os instaladores ficam sem assinatura e o Windows SmartScreen alerta na primeira execução.",
+    blocks:
+      "Somente a distribuição confiável do instalador. O Agente compila, instala e roda normalmente.",
     why:
-      "Authenticode signing requires an OV or EV certificate purchased from a certificate " +
-      "authority under the Aionixdev legal entity, with organisation validation. This is a " +
-      "commercial purchase that cannot be performed autonomously.",
+      "A assinatura Authenticode exige um certificado OV ou EV comprado de uma autoridade " +
+      "certificadora em nome da Aionixdev, com validação da empresa. É uma compra comercial " +
+      "que não pode ser feita de forma autônoma.",
     whatToDo:
-      "Purchase an OV or EV code-signing certificate, complete validation, then store it as " +
-      "the GitHub secrets WINDOWS_CERT_BASE64 and WINDOWS_CERT_PASSWORD.",
-    howToValidate: "`signtool verify /pa slate-setup.exe` succeeds and the publisher reads Aionixdev.",
+      "Comprar um certificado de assinatura OV ou EV, concluir a validação da empresa e " +
+      "guardar como os secrets WINDOWS_CERT_BASE64 e WINDOWS_CERT_PASSWORD no GitHub.",
+    howToValidate:
+      "`signtool verify /pa slate-setup.exe` passa e o editor aparece como Aionixdev.",
     alreadyCompleted:
-      "The build and packaging pipeline is authored so signing is a single configuration step.",
+      "A esteira de build e empacotamento já está escrita de forma que assinar seja apenas " +
+      "um passo de configuração.",
     whatHappensAfter:
-      "Released installers are trusted, SmartScreen warnings disappear, and auto-update can " +
-      "verify signatures.",
+      "Os instaladores publicados passam a ser confiáveis, os alertas do SmartScreen somem " +
+      "e a atualização automática consegue verificar assinaturas.",
+  },
+  {
+    code: "AÇÃO-003",
+    title: "Publicações na Vercel não saem da fila",
+    projectBlocked: false,
+    impact: "Nenhum hoje. O Centro de Controle roda localmente por decisão sua (D-007).",
+    blocks:
+      "Nada no momento. Precisa ser resolvido antes da PWA, que é de fato hospedada na nuvem.",
+    why:
+      "No escopo aionixdev, o projeto slate-control-center publicou com sucesso exatamente " +
+      "uma vez. Toda publicação posterior foi criada mas nunca começou a compilar: sem logs " +
+      "de build e com o promote recusando por 'não está pronta'. Foram descartados: fila " +
+      "travada (limpei e voltou na hora), CLI desatualizada (atualizei 58 para 59, igual), " +
+      "build quebrado (compila local e em Docker) e o ambiente remoto de build — uma " +
+      "publicação pré-compilada, que não compila nada remotamente, trava do mesmo jeito. " +
+      "Ou seja, a falha é da conta ou da plataforma, acima do projeto.",
+    whatToDo:
+      "Abrir vercel.com/aionixdev/slate-control-center e ver o motivo que o painel mostra e " +
+      "a CLI não; conferir cobrança, limite de gasto e limite de builds simultâneos da conta; " +
+      "conferir vercel-status.com. Persistindo, acionar o suporte com o id " +
+      "dpl_96RDqKidmsE2fSK1ygzJmbbPSf2Q, que foi criado e nunca compilou.",
+    howToValidate:
+      "`vercel deploy --prod --yes --scope aionixdev` chega em Ready e o domínio serve a nova versão.",
+    alreadyCompleted:
+      "O projeto está criado e configurado corretamente (diretório raiz, framework, GitHub " +
+      "conectado e DATABASE_URL nos dois ambientes). Existe também um Dockerfile validado, " +
+      "então a aplicação pode ser hospedada em qualquer lugar com container.",
+    whatHappensAfter:
+      "A hospedagem na nuvem volta a ficar disponível para a etapa da PWA. O Centro de " +
+      "Controle não precisa dela e continua rodando local.",
   },
 ];
 
@@ -91,6 +126,7 @@ async function main() {
   const pendingDeps: Array<{ from: string; to: string }> = [];
   let inserted = 0;
   let updated = 0;
+  let orphanedGatesRemoved = 0;
 
   const walk = async (items: SeedItem[], parentId: string | null) => {
     for (const [index, item] of items.entries()) {
@@ -139,6 +175,27 @@ async function main() {
       }
 
       idByKey.set(item.key, id);
+
+      /*
+       * Remove critérios que saíram da definição do item.
+       *
+       * Sem isto, renomear ou trocar um critério deixa o antigo órfão no banco,
+       * permanentemente pendente — e como um critério pendente impede a
+       * conclusão, o item ficaria impossível de concluir para sempre, sem
+       * nenhuma pista do motivo. Um critério só existe enquanto o plano o
+       * declara.
+       */
+      const chavesDefinidas = (item.gates ?? []).map((gate) => gate.key);
+      const gatesNoBanco = await db
+        .select({ id: qualityGates.id, key: qualityGates.key })
+        .from(qualityGates)
+        .where(eq(qualityGates.workItemId, id));
+
+      for (const gate of gatesNoBanco) {
+        if (chavesDefinidas.includes(gate.key)) continue;
+        await db.delete(qualityGates).where(eq(qualityGates.id, gate.id));
+        orphanedGatesRemoved += 1;
+      }
 
       for (const gate of item.gates ?? []) {
         const existingGate = await db
@@ -216,8 +273,9 @@ async function main() {
     .onConflictDoNothing();
 
   console.log(
-    `Roadmap seeded: ${inserted} inserted, ${updated} refreshed, ` +
-      `${pendingDeps.length} dependencies, ${OPERATOR_ACTIONS.length} operator actions.`,
+    `Plano carregado: ${inserted} inseridos, ${updated} atualizados, ` +
+      `${orphanedGatesRemoved} critério(s) órfão(s) removido(s), ` +
+      `${pendingDeps.length} dependências, ${OPERATOR_ACTIONS.length} ações do operador.`,
   );
   process.exit(0);
 }

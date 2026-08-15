@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { and, desc, eq } from "drizzle-orm";
 import { createDb } from "@slate/db";
 import {
@@ -31,26 +34,74 @@ import {
  * is to make the dishonest state unreachable through the only available tool.
  */
 
+/**
+ * Load DATABASE_URL from the nearest env file so the CLI works from any
+ * directory without the caller exporting anything. An already-set environment
+ * variable always wins, so CI and one-off overrides behave as expected.
+ */
+function loadEnv() {
+  if (process.env.DATABASE_URL) return;
+
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolve(here, "..", ".env"),
+    resolve(here, "..", "..", "..", "apps", "control-center", ".env.local"),
+    resolve(here, "..", "..", "..", ".env"),
+  ];
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    try {
+      process.loadEnvFile(candidate);
+      if (process.env.DATABASE_URL) return;
+    } catch {
+      /* try the next candidate */
+    }
+  }
+}
+
+loadEnv();
+
 const USAGE = `
-slate-roadmap — SLATE roadmap control
+slate-roadmap — controle do plano de trabalho do SLATE
 
-  start <key>                     Mark IN_PROGRESS and set current execution
-  status <key> <STATUS>           Set an explicit status
-  testing <key>                   Mark TESTING
-  validating <key>                Mark VALIDATING
-  complete <key>                  Mark COMPLETED (refused if gates or children are unmet)
-  reopen <key> [--reason <text>]  Regression: COMPLETED -> REOPENED
-  block <key> [--operator]        Mark BLOCKED_EXTERNAL or OPERATOR_REQUIRED
+  start <chave>                   Marca EM ANDAMENTO e define a execução atual
+  status <chave> <STATUS>         Define um status explícito
+  testing <chave>                 Marca EM TESTE
+  validating <chave>              Marca VALIDANDO
+  complete <chave>                Marca CONCLUÍDO (recusado se houver critério ou filho pendente)
+  reopen <chave> [--reason <t>]   Regressão: CONCLUÍDO -> REABERTO
+  block <chave> [--operator]      Marca BLOQUEADO ou PRECISA DE VOCÊ
 
-  gate <key> <gateKey> --pass|--fail|--na [--evidence <text>]
-  exec [--operation <t>] [--branch <b>] [--commit <sha>] [--env <e>] [--item <key>]
-  event --type <t> --title <t> [--detail <d>] [--severity INFO|SUCCESS|WARNING|ERROR] [--item <key>]
+  gate <chave> <critério> --pass|--fail|--na [--evidence <texto>]
+  exec [--operation <t>] [--branch <b>] [--commit <sha>] [--env <e>] [--item <chave>]
+  event --type <t> --title <t> [--detail <d>] [--severity INFO|SUCCESS|WARNING|ERROR]
   deploy --env <e> --target <t> [--url <u>] [--commit <sha>] [--status <s>]
-  report                          Print computed progress
+  report                          Mostra o progresso calculado
 
-Options: --project <slug> (default: slate)
-Requires DATABASE_URL.
+Opções: --project <slug> (padrão: slate)
+Requer DATABASE_URL.
 `;
+
+/** Status em português, para o log de atividade que aparece na tela. */
+const STATUS_PT: Record<WorkStatus, string> = {
+  PLANNED: "Planejado",
+  READY: "Pronto",
+  IN_PROGRESS: "Em andamento",
+  TESTING: "Em teste",
+  VALIDATING: "Validando",
+  BLOCKED_EXTERNAL: "Bloqueado",
+  OPERATOR_REQUIRED: "Precisa de você",
+  COMPLETED: "Concluído",
+  REOPENED: "Reaberto",
+};
+
+const CRITERIO_PT: Record<string, string> = {
+  PASSED: "Aprovado",
+  FAILED: "Reprovado",
+  PENDING: "Pendente",
+  NOT_APPLICABLE: "Não se aplica",
+};
 
 const STATUSES: WorkStatus[] = [
   "PLANNED",
@@ -162,7 +213,7 @@ async function main() {
 
     await logEvent(
       `status.${status.toLowerCase()}`,
-      `${item.key} — ${item.title}: ${item.status} → ${status}`,
+      `${item.key} — ${item.title}: ${STATUS_PT[item.status]} → ${STATUS_PT[status]}`,
       {
         detail,
         severity:
@@ -269,11 +320,11 @@ async function main() {
       );
 
       if (reasons.length > 0) {
-        console.error(`Refusing to complete ${item.key} — ${item.title}:`);
+        console.error(`Recusando concluir ${item.key} — ${item.title}:`);
         for (const reason of reasons) console.error(`  · ${reason}`);
         console.error(
-          "\nResolve these first. Marking it complete anyway would make the published " +
-            "progress figure a lie (mandate §57).",
+          "\nResolva isso primeiro. Marcar como concluído assim mesmo tornaria o " +
+            "percentual publicado uma mentira (mandato §57).",
         );
         process.exit(1);
       }
@@ -322,7 +373,7 @@ async function main() {
 
       await logEvent(
         `gate.${status.toLowerCase()}`,
-        `${item.key} gate '${gate.title}' → ${status}`,
+        `${item.key} — critério '${gate.title}': ${CRITERIO_PT[status] ?? status}`,
         {
           detail: values.evidence,
           severity: status === "FAILED" ? "ERROR" : status === "PASSED" ? "SUCCESS" : "INFO",
@@ -402,8 +453,10 @@ async function main() {
         gates: gatesByItem.get(item.id),
       }));
 
-      console.log(`\nSLATE — overall progress: ${toPercent(overallProgress(inputs))}%`);
-      console.log(`${items.length} work items, ${gates.length} quality gates.\n`);
+      console.log(
+        `\nSLATE — progresso geral: ${String(toPercent(overallProgress(inputs))).replace(".", ",")}%`,
+      );
+      console.log(`${items.length} itens de trabalho, ${gates.length} critérios de qualidade.\n`);
 
       const recent = await db
         .select()

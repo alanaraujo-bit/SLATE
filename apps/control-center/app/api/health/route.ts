@@ -19,7 +19,9 @@ export async function GET() {
   const config = {
     present: typeof raw === "string" && raw.length > 0,
     length: raw?.length ?? 0,
-    scheme: raw?.slice(0, raw.indexOf("://") + 3) || null,
+    // Só o nome do esquema, sem "://" — a parte útil para diagnóstico, e nada
+    // que se pareça com o começo de uma URL de conexão.
+    scheme: raw && raw.includes("://") ? raw.slice(0, raw.indexOf("://")) : null,
     parses: false as boolean,
     host: null as string | null,
     hasTrailingWhitespace: raw ? raw !== raw.trim() : false,

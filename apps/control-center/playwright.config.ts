@@ -1,14 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * E2E runs against a deployed URL, never a local server.
+ * Os testes rodam contra o Centro de Controle em execução.
  *
- * Mandate §15 forbids requiring local infrastructure to validate the product;
- * the test runner executing locally against a real cloud deployment is exactly
- * the cloud validation it asks for.
+ * Por decisão do operador (D-007) essa aplicação roda localmente contra o banco
+ * na nuvem, então este é o endereço padrão. Apontar para outro ambiente é
+ * apenas definir E2E_BASE_URL.
  */
-const baseURL =
-  process.env.E2E_BASE_URL ?? "https://slate-control-center.vercel.app";
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:4300";
 
 export default defineConfig({
   testDir: "./e2e",

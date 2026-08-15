@@ -182,7 +182,7 @@ describe("blockersToCompletion", () => {
 
   it("refuses completion while a gate is pending", () => {
     const item = leaf("a", "VALIDATING", { gates: [{ status: "PENDING", weight: 1 }] });
-    expect(blockersToCompletion(item)).toContain("has a pending quality gate");
+    expect(blockersToCompletion(item)).toContain("tem critério de qualidade pendente");
   });
 
   it("refuses completion while a child is unfinished", () => {

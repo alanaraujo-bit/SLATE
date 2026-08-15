@@ -223,13 +223,13 @@ export function blockersToCompletion(
   const reasons: string[] = [];
 
   for (const gate of item.gates ?? []) {
-    if (gate.status === "PENDING") reasons.push("has a pending quality gate");
-    if (gate.status === "FAILED") reasons.push("has a failed quality gate");
+    if (gate.status === "PENDING") reasons.push("tem critério de qualidade pendente");
+    if (gate.status === "FAILED") reasons.push("tem critério de qualidade reprovado");
   }
 
   for (const child of children) {
     if (child.status !== "COMPLETED") {
-      reasons.push(`child ${child.id} is ${child.status}`);
+      reasons.push(`o item filho ${child.id} não está concluído (${child.status})`);
     }
   }
 

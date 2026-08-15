@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SLATE — Development Control Center",
+  title: "SLATE — Centro de Controle de Desenvolvimento",
   description:
-    "Live engineering state for SLATE by Aionix: phases, milestones, quality gates, current execution and operator actions.",
+    "Estado de engenharia do SLATE by Aionix em tempo real: fases, marcos, critérios de qualidade, execução atual e ações do operador.",
   robots: { index: false, follow: false },
 };
 
@@ -16,7 +16,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <body>{children}</body>
     </html>
   );

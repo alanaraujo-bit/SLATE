@@ -2,25 +2,26 @@
 
 import { useState } from "react";
 import type { Snapshot } from "@/lib/snapshot";
+import { T, formatarPercentual, tempoRelativo } from "@/lib/rotulos";
 import { useLiveSnapshot, type LinkState } from "./use-live-snapshot";
 import { Tree } from "./tree";
-import { Panel, ProgressRail, formatPercent, relativeTime } from "./primitives";
+import { Panel, ProgressRail } from "./primitives";
 
 export function Dashboard({ initial }: { initial: Snapshot }) {
   const { snapshot, link } = useLiveSnapshot(initial);
 
   return (
     <main className="shell">
-      <Masthead snapshot={snapshot} link={link} />
+      <Cabecalho snapshot={snapshot} link={link} />
 
       <div className="columns">
         <div className="rail">
           <Panel
-            title="Roadmap"
+            title={T.roadmap}
             flush
             action={
               <span className="mono" style={{ color: "var(--text-tertiary)" }}>
-                {snapshot.totals.completedLeaves}/{snapshot.totals.leaves} tasks
+                {snapshot.totals.completedLeaves}/{snapshot.totals.leaves} {T.tarefas}
               </span>
             }
           >
@@ -29,17 +30,17 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
         </div>
 
         <aside className="rail">
-          <CurrentExecution snapshot={snapshot} />
-          <OperatorActions actions={snapshot.operatorActions} />
-          <Activity events={snapshot.activity} />
-          <Deployments deployments={snapshot.deployments} />
+          <ExecucaoAtual snapshot={snapshot} />
+          <AcoesDoOperador acoes={snapshot.operatorActions} />
+          <Atividade eventos={snapshot.activity} />
+          <Publicacoes publicacoes={snapshot.deployments} />
         </aside>
       </div>
     </main>
   );
 }
 
-function Masthead({ snapshot, link }: { snapshot: Snapshot; link: LinkState }) {
+function Cabecalho({ snapshot, link }: { snapshot: Snapshot; link: LinkState }) {
   const { totals, counts } = snapshot;
 
   return (
@@ -52,46 +53,46 @@ function Masthead({ snapshot, link }: { snapshot: Snapshot; link: LinkState }) {
             </span>
             <div>
               <div className="brand__name">{snapshot.project.name}</div>
-              <div className="brand__sub">Development Control Center</div>
+              <div className="brand__sub">{T.subtitulo}</div>
             </div>
           </div>
         </div>
 
         <div className="headline">
-          <span className="headline__value">{formatPercent(snapshot.overall)}</span>
-          <span className="headline__label">Overall progress</span>
+          <span className="headline__value">{formatarPercentual(snapshot.overall)}</span>
+          <span className="headline__label">{T.progressoGeral}</span>
         </div>
       </div>
 
       <div style={{ marginBottom: "var(--space-5)" }}>
-        <ProgressRail value={snapshot.overall} tall label="Overall project progress" />
+        <ProgressRail value={snapshot.overall} tall label={T.progressoGeral} />
       </div>
 
       <div className="panel" style={{ marginBottom: "var(--space-5)" }}>
         <div className="stats">
-          <Stat value={String(totals.items)} label="Work items" />
-          <Stat
-            value={`${totals.completedLeaves}/${totals.leaves}`}
-            label="Tasks complete"
+          <Indicador valor={String(totals.items)} rotulo={T.itensDeTrabalho} />
+          <Indicador
+            valor={`${totals.completedLeaves}/${totals.leaves}`}
+            rotulo={T.tarefasConcluidas}
           />
-          <Stat
-            value={`${totals.gatesPassed}/${totals.gates}`}
-            label="Gates passed"
+          <Indicador
+            valor={`${totals.gatesPassed}/${totals.gates}`}
+            rotulo={T.criteriosAprovados}
           />
-          <Stat value={String(counts.IN_PROGRESS)} label="In progress" />
-          <Stat
-            value={String(counts.OPERATOR_REQUIRED + counts.BLOCKED_EXTERNAL)}
-            label="Blocked"
+          <Indicador valor={String(counts.IN_PROGRESS)} rotulo={T.emAndamento} />
+          <Indicador
+            valor={String(counts.OPERATOR_REQUIRED + counts.BLOCKED_EXTERNAL)}
+            rotulo={T.bloqueados}
           />
-          <Stat value={String(counts.REOPENED)} label="Reopened" />
+          <Indicador valor={String(counts.REOPENED)} rotulo={T.reabertos} />
         </div>
         <div
           className="panel__head"
           style={{ borderBottom: "none", borderTop: "1px solid var(--border)" }}
         >
-          <ConnectionIndicator link={link} />
+          <IndicadorConexao link={link} />
           <span className="mono" style={{ color: "var(--text-tertiary)" }}>
-            updated {relativeTime(snapshot.generatedAt)}
+            atualizado {tempoRelativo(snapshot.generatedAt)}
           </span>
         </div>
       </div>
@@ -99,46 +100,46 @@ function Masthead({ snapshot, link }: { snapshot: Snapshot; link: LinkState }) {
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function Indicador({ valor, rotulo }: { valor: string; rotulo: string }) {
   return (
     <div className="stat">
-      <div className="stat__value">{value}</div>
-      <div className="stat__label">{label}</div>
+      <div className="stat__value">{valor}</div>
+      <div className="stat__label">{rotulo}</div>
     </div>
   );
 }
 
-function ConnectionIndicator({ link }: { link: LinkState }) {
-  const text =
-    link === "live" ? "Live" : link === "reconnecting" ? "Reconnecting" : "Offline";
+function IndicadorConexao({ link }: { link: LinkState }) {
+  const texto =
+    link === "live" ? T.aoVivo : link === "reconnecting" ? T.reconectando : T.semConexao;
   return (
     <span className="link-state" data-state={link}>
       <span className="link-state__dot" aria-hidden="true" />
-      {text}
+      {texto}
       <span className="visually-hidden" role="status">
-        Connection {text}
+        {T.conexao}: {texto}
       </span>
     </span>
   );
 }
 
-function CurrentExecution({ snapshot }: { snapshot: Snapshot }) {
+function ExecucaoAtual({ snapshot }: { snapshot: Snapshot }) {
   const exec = snapshot.execution;
 
   if (!exec || (!exec.operation && !exec.itemKey)) {
     return (
-      <Panel title="Current execution">
-        <p className="notice">Idle — no task is currently executing.</p>
+      <Panel title={T.execucaoAtual}>
+        <p className="notice">{T.ocioso}</p>
       </Panel>
     );
   }
 
   return (
-    <Panel title="Current execution">
+    <Panel title={T.execucaoAtual}>
       <dl className="kv">
         {exec.itemKey && (
           <>
-            <dt>Task</dt>
+            <dt>{T.tarefa}</dt>
             <dd>
               <span className="mono" style={{ color: "var(--text-tertiary)" }}>
                 {exec.itemKey}
@@ -150,105 +151,111 @@ function CurrentExecution({ snapshot }: { snapshot: Snapshot }) {
         )}
         {exec.operation && (
           <>
-            <dt>Operation</dt>
+            <dt>{T.operacao}</dt>
             <dd>{exec.operation}</dd>
           </>
         )}
         {exec.branch && (
           <>
-            <dt>Branch</dt>
+            <dt>{T.branch}</dt>
             <dd className="mono">{exec.branch}</dd>
           </>
         )}
         {exec.commitSha && (
           <>
-            <dt>Commit</dt>
+            <dt>{T.commit}</dt>
             <dd className="mono">{exec.commitSha.slice(0, 10)}</dd>
           </>
         )}
         {exec.environment && (
           <>
-            <dt>Environment</dt>
+            <dt>{T.ambiente}</dt>
             <dd className="mono">{exec.environment}</dd>
           </>
         )}
-        <dt>Updated</dt>
-        <dd>{relativeTime(exec.updatedAt)}</dd>
+        <dt>{T.atualizado}</dt>
+        <dd>{tempoRelativo(exec.updatedAt)}</dd>
       </dl>
     </Panel>
   );
 }
 
-function OperatorActions({ actions }: { actions: Snapshot["operatorActions"] }) {
-  const open = actions.filter((action) => action.status !== "RESOLVED");
+function AcoesDoOperador({ acoes }: { acoes: Snapshot["operatorActions"] }) {
+  const abertas = acoes.filter((a) => a.status !== "RESOLVED");
 
   return (
     <Panel
-      title="Operator actions"
+      title={T.acoesDoOperador}
       flush
       action={
-        <span className="mono" style={{ color: open.length ? "var(--warning)" : "var(--text-tertiary)" }}>
-          {open.length} open
+        <span
+          className="mono"
+          style={{ color: abertas.length ? "var(--warning)" : "var(--text-tertiary)" }}
+        >
+          {abertas.length} {T.abertas}
         </span>
       }
     >
-      {open.length === 0 ? (
-        <p className="notice">Nothing is waiting on you.</p>
+      {abertas.length === 0 ? (
+        <p className="notice">{T.nadaAguardando}</p>
       ) : (
-        open.map((action) => <ActionRow key={action.code} action={action} />)
+        abertas.map((acao) => <LinhaAcao key={acao.code} acao={acao} />)
       )}
     </Panel>
   );
 }
 
-function ActionRow({ action }: { action: Snapshot["operatorActions"][number] }) {
-  const [open, setOpen] = useState(false);
+function LinhaAcao({ acao }: { acao: Snapshot["operatorActions"][number] }) {
+  const [aberto, setAberto] = useState(false);
 
   return (
     <div className="action">
       <button
         type="button"
         className="action__head"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
       >
         <span>
-          <span className="action__code">{action.code}</span>
+          <span className="action__code">{acao.code}</span>
           <span className="action__title" style={{ display: "block" }}>
-            {action.title}
+            {acao.title}
           </span>
         </span>
-        <span className="chip" data-status={action.projectBlocked ? "BLOCKED_EXTERNAL" : "OPERATOR_REQUIRED"}>
-          {action.projectBlocked ? "Blocking" : "Non-blocking"}
+        <span
+          className="chip"
+          data-status={acao.projectBlocked ? "BLOCKED_EXTERNAL" : "OPERATOR_REQUIRED"}
+        >
+          {acao.projectBlocked ? T.bloqueiaProjeto : T.naoBloqueia}
         </span>
       </button>
 
-      {open && (
+      {aberto && (
         <div className="action__body">
-          {action.why && (
-            <Field label="Why">
-              <p>{action.why}</p>
-            </Field>
+          {acao.why && (
+            <Campo rotulo={T.porQue}>
+              <p>{acao.why}</p>
+            </Campo>
           )}
-          {action.whatToDo && (
-            <Field label="What to do">
-              <p>{action.whatToDo}</p>
-            </Field>
+          {acao.whatToDo && (
+            <Campo rotulo={T.oQueFazer}>
+              <p>{acao.whatToDo}</p>
+            </Campo>
           )}
-          {action.howToValidate && (
-            <Field label="How to validate">
-              <p className="code-line">{action.howToValidate}</p>
-            </Field>
+          {acao.howToValidate && (
+            <Campo rotulo={T.comoValidar}>
+              <p className="code-line">{acao.howToValidate}</p>
+            </Campo>
           )}
-          {action.blocks && (
-            <Field label="Blocks">
-              <p>{action.blocks}</p>
-            </Field>
+          {acao.blocks && (
+            <Campo rotulo={T.oQueBloqueia}>
+              <p>{acao.blocks}</p>
+            </Campo>
           )}
-          {action.alreadyCompleted && (
-            <Field label="Already done">
-              <p>{action.alreadyCompleted}</p>
-            </Field>
+          {acao.alreadyCompleted && (
+            <Campo rotulo={T.jaFeito}>
+              <p>{acao.alreadyCompleted}</p>
+            </Campo>
           )}
         </div>
       )}
@@ -256,34 +263,34 @@ function ActionRow({ action }: { action: Snapshot["operatorActions"][number] }) 
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return (
     <div className="action__field">
-      <h4>{label}</h4>
+      <h4>{rotulo}</h4>
       {children}
     </div>
   );
 }
 
-function Activity({ events }: { events: Snapshot["activity"] }) {
+function Atividade({ eventos }: { eventos: Snapshot["activity"] }) {
   return (
-    <Panel title="Activity" flush>
-      {events.length === 0 ? (
-        <p className="notice">No activity recorded yet.</p>
+    <Panel title={T.atividade} flush>
+      {eventos.length === 0 ? (
+        <p className="notice">{T.semAtividade}</p>
       ) : (
         <ul className="feed">
-          {events.map((event) => (
-            <li className="feed__item" data-severity={event.severity} key={event.id}>
+          {eventos.map((evento) => (
+            <li className="feed__item" data-severity={evento.severity} key={evento.id}>
               <span className="feed__dot" aria-hidden="true" />
               <div>
-                <div className="feed__title">{event.title}</div>
-                {event.detail && (
+                <div className="feed__title">{evento.title}</div>
+                {evento.detail && (
                   <div className="feed__time" style={{ color: "var(--text-secondary)" }}>
-                    {event.detail}
+                    {evento.detail}
                   </div>
                 )}
-                <time className="feed__time" dateTime={event.createdAt}>
-                  {relativeTime(event.createdAt)}
+                <time className="feed__time" dateTime={evento.createdAt}>
+                  {tempoRelativo(evento.createdAt)}
                 </time>
               </div>
             </li>
@@ -294,31 +301,35 @@ function Activity({ events }: { events: Snapshot["activity"] }) {
   );
 }
 
-function Deployments({ deployments }: { deployments: Snapshot["deployments"] }) {
+function Publicacoes({ publicacoes }: { publicacoes: Snapshot["deployments"] }) {
   return (
-    <Panel title="Deployments" flush>
-      {deployments.length === 0 ? (
-        <p className="notice">No deployments recorded yet.</p>
+    <Panel title={T.implantacoes} flush>
+      {publicacoes.length === 0 ? (
+        <p className="notice">{T.semImplantacoes}</p>
       ) : (
         <ul className="feed">
-          {deployments.map((deploy, index) => (
+          {publicacoes.map((pub, i) => (
             <li
               className="feed__item"
-              data-severity={deploy.status === "READY" ? "SUCCESS" : "WARNING"}
-              key={`${deploy.createdAt}-${index}`}
+              data-severity={pub.status === "READY" ? "SUCCESS" : "WARNING"}
+              key={`${pub.createdAt}-${i}`}
             >
               <span className="feed__dot" aria-hidden="true" />
               <div>
                 <div className="feed__title">
-                  {deploy.target} → <span className="mono">{deploy.environment}</span>
+                  {pub.target} → <span className="mono">{pub.environment}</span>
                 </div>
-                {deploy.url && (
-                  <a className="feed__time" href={deploy.url} target="_blank" rel="noreferrer">
-                    {deploy.url.replace(/^https?:\/\//, "")}
+                {pub.url && (
+                  <a className="feed__time" href={pub.url} target="_blank" rel="noreferrer">
+                    {pub.url.replace(/^https?:\/\//, "")}
                   </a>
                 )}
-                <time className="feed__time" dateTime={deploy.createdAt} style={{ display: "block" }}>
-                  {relativeTime(deploy.createdAt)}
+                <time
+                  className="feed__time"
+                  dateTime={pub.createdAt}
+                  style={{ display: "block" }}
+                >
+                  {tempoRelativo(pub.createdAt)}
                 </time>
               </div>
             </li>

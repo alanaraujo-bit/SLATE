@@ -28,7 +28,13 @@
   /* ---- Text ------------------------------------------------------------- */
   --text-primary: #e9ecf0;
   --text-secondary: #98a1ac;
-  --text-tertiary: #5f6873;
+  /*
+   * Terciário carrega rótulos de 11px, então precisa passar em AA como texto
+   * normal, não como texto grande. Este valor dá 5,37:1 sobre --surface-1 e
+   * 4,77:1 sobre --surface-3, que é a superfície mais clara onde ele aparece.
+   * O valor anterior (#5f6873) reprovava na auditoria do axe.
+   */
+  --text-tertiary: #7f8996;
 
   /* ---- Signal ----------------------------------------------------------- */
   --accent: #4da3ff;
