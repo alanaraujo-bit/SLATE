@@ -113,12 +113,71 @@ desaparecem, e a atualização automática consegue verificar assinaturas.
 
 ---
 
-## AÇÃO-005 — Subdomínios para a PWA e para a API
+## AÇÃO-006 — Dar acesso ao repositório para a aplicação da Vercel no GitHub
 
 **SITUAÇÃO:** ABERTA
 **TRAVA O PROJETO:** NÃO
-**IMPEDE:** apenas a implantação em produção. Desenvolvimento e testes rodam
-normalmente.
+**IMPEDE:** apenas o deploy automático. Publicar pela linha de comando funciona
+normalmente, e é assim que as versões estão indo ao ar.
+
+### Por que
+
+Três pushes na `main` não geraram versão nova. A Vercel informa que o
+repositório está conectado, mas o GitHub não tem nenhum webhook apontando para
+ela.
+
+Minha primeira hipótese foi falta de acesso ao repositório, por ele ser
+privado. **Estava errada** — a instalação já está com *All repositories*.
+
+A causa real aparece na tela de configuração da aplicação: há um aviso de
+*"Vercel is requesting an update to its permissions"*, com um botão de revisão,
+**aguardando aprovação**. Entre as permissões pedidas está escrita e leitura em
+*repository hooks* — exatamente a que falta para criar o webhook de deploy. Com
+a atualização pendente, a conexão aparece como feita do lado da Vercel e mesmo
+assim nenhum evento de push chega até lá.
+
+### O que fazer
+
+1. Abra <https://github.com/settings/installations> e escolha **Vercel**
+2. No aviso *"Vercel is requesting an update to its permissions"*, clique em
+   **Review request**
+3. Aprove a atualização
+
+### Como validar
+
+Qualquer push na `main` passa a aparecer como versão nova em
+<https://vercel.com/aionixdev/slate-pwa>.
+
+### O que já foi feito
+
+O projeto está criado e configurado — diretório raiz `apps/pwa`, framework
+Next.js, variável `API_URL` apontando para a API, e domínio
+`slate.aionixdev.com` respondendo. A publicação manual funciona, então nenhuma
+entrega depende disto.
+
+---
+
+## AÇÃO-005 — Subdomínios para a PWA e para a API
+
+**SITUAÇÃO:** ✅ NÃO É MAIS NECESSÁRIA — a arquitetura mudou
+**TRAVA O PROJETO:** NÃO
+
+> **Por que deixou de valer.** Esta ação existia para que PWA e API ficassem no
+> mesmo domínio registrável, já que um cookie `SameSite=Lax` não atravessa
+> entre sites diferentes.
+>
+> O proxy resolveu isso de forma mais completa: o navegador fala **só** com a
+> PWA, que repassa `/api` para a API. Origem única é ainda melhor que mesmo
+> site — o cookie é de primeira parte, e nenhum navegador tem restrição a isso.
+> A PWA está na Vercel e a API no Railway, domínios completamente diferentes, e
+> a sessão funciona.
+>
+> O que sobrou como consequência prática é outra coisa, e está registrada no
+> guia de teste: **trocar o domínio da PWA exige atualizar `ORIGENS_PERMITIDAS`
+> na API**, porque a verificação de origem é por comparação exata.
+>
+> O texto original fica abaixo, porque a análise que levou até aqui continua
+> correta — e é ela que explica por que o proxy não é só conveniência.
 
 ### Por que
 
