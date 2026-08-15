@@ -35,6 +35,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # pela rede privada. Um build fora dali passa outro valor com --build-arg.
 ARG API_URL=http://slate-api.railway.internal:4500
 ENV API_URL=$API_URL
+ARG URL_SINALIZACAO_PUBLICA=wss://slate-api-staging.up.railway.app/sinalizacao
+ENV URL_SINALIZACAO_PUBLICA=$URL_SINALIZACAO_PUBLICA
 
 # Gera os ícones e o service worker versionado antes de compilar.
 RUN pnpm --filter @slate/pwa run build

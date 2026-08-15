@@ -9,6 +9,49 @@ das decisões pequenas demais para virar um documento.
 
 ## 2026-08-15
 
+### D-012 — Atualização Tauri assinada, mediada pela API
+
+O Agente usa o atualizador oficial do Tauri e artefatos assinados por Minisign.
+A checagem acontece sem interromper o uso, mas download e instalação exigem uma
+escolha explícita da pessoa. No Windows a instalação usa modo passivo: preserva
+o fluxo do instalador sem esconder que o aplicativo será fechado e reaberto.
+
+O repositório é privado, portanto o Agente não pode consumir `latest.json` e o
+instalador diretamente do GitHub sem receber uma credencial duradoura. A API é
+o mediador: consulta a release servidor-servidor, valida estrutura, versão e
+vínculo dos assets, e só então cria um redirecionamento temporário para o pacote.
+O token do GitHub nunca chega ao computador do usuário.
+
+A assinatura de atualização e o Authenticode resolvem problemas diferentes.
+Minisign impede o Agente de instalar um pacote alterado; Authenticode estabelece
+reputação perante Windows e SmartScreen. O primeiro já está implementado e foi
+provado alterando um byte do fixture; o segundo continua na AÇÃO-002.
+
+Consequência operacional: a chave privada do atualizador vira raiz de confiança
+dos Agentes instalados. Ela fica fora do repositório e precisa de backup cifrado.
+A publicação automatizada e o endpoint em produção permanecem pendentes até as
+AÇÕES-008 e 009 serem executadas.
+
+### D-011 — Cloudflare Realtime TURN como relay gerenciado
+
+O fallback do WebRTC usa o Realtime TURN da Cloudflare. A API solicita uma
+credencial individual e temporária para cada conexão; somente essa credencial
+curta chega à PWA e ao Agente. O identificador da chave e o token capaz de emitir
+novas credenciais ficam exclusivamente no Railway.
+
+A escolha evita operar um segundo serviço de rede. O Railway expõe WebSocket e
+TCP publicamente, mas não UDP público; um `coturn` hospedado ali deixaria de fora
+justamente o caminho mais eficiente e comum do TURN. A Cloudflare oferece UDP,
+TCP e TLS em portas alternativas, presença global e cobrança por tráfego, com
+franquia suficiente para validar o produto antes de haver custo relevante.
+
+O código continua isolado atrás do contrato `servidoresIce`: trocar de provedor
+não altera PWA, Agente nem protocolo de aplicação. A dependência específica vive
+somente em `services/api/src/credenciais-turn.ts`.
+
+Consequência operacional: o gate de relay permanece pendente até a AÇÃO-007 ser
+executada e um teste com política `relay` provar tráfego real.
+
 ### D-010 — PWA na Vercel, API no Railway — **decisão do operador**
 
 A PWA é publicada na Vercel, ligada ao repositório, com versão nova a cada push

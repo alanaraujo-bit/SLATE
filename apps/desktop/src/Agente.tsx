@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Atualizador } from "./atualizador";
+import { InicioAutomatico } from "./inicio-automatico";
 
 interface Usuario {
   id: string;
@@ -68,6 +70,8 @@ export function Agente() {
       ) : (
         <Entrada aoEntrar={carregar} erroExterno={erro} />
       )}
+      <InicioAutomatico />
+      <Atualizador />
     </div>
   );
 }

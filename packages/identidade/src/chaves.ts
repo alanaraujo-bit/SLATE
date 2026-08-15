@@ -60,13 +60,29 @@ export async function importarChavePublica(
   exportada: string,
   algoritmo: Algoritmo,
 ): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "spki",
-    deBase64Url(exportada) as BufferSource,
-    PARAMETROS[algoritmo].importacao as EcKeyImportParams,
-    true,
-    ["verify"],
-  );
+  const bytes = deBase64Url(exportada);
+
+  try {
+    return await crypto.subtle.importKey(
+      "spki",
+      bytes as BufferSource,
+      PARAMETROS[algoritmo].importacao as EcKeyImportParams,
+      true,
+      ["verify"],
+    );
+  } catch (erro) {
+    /*
+     * Os primeiros Agentes Rust exportavam Ed25519 como os 32 bytes crus,
+     * enquanto a PWA sempre usou SPKI. Aceitar esse formato aqui preserva a
+     * identidade já pareada sem transformar uma correção de serialização em
+     * um dispositivo novo. Novos formatos continuam sendo recusados.
+     */
+    if (algoritmo !== "Ed25519" || bytes.length !== 32) throw erro;
+
+    return crypto.subtle.importKey("raw", bytes as BufferSource, "Ed25519", true, [
+      "verify",
+    ]);
+  }
 }
 
 export async function assinar(

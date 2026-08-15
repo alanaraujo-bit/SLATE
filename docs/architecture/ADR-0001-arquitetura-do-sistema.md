@@ -20,7 +20,7 @@ apps/
   control-center    Centro de Controle de Desenvolvimento (Next.js, local)
   desktop           Agente Desktop para Windows (Tauri + React + núcleo em Rust)
 services/
-  signaling         Sinalização e retransmissão WebRTC (Node, Railway)
+  api               HTTP, sinalização WebRTC e coordenação TURN (Node, Railway)
 packages/
   protocol          Contratos de mensagem, schemas, versão do protocolo
   design-system     Tokens e primitivas compartilhadas entre PWA e desktop
@@ -44,11 +44,16 @@ fronteira de distribuição.
 | Integração com Windows | Agente Desktop | Único lugar com acesso ao sistema operacional |
 | Centro de Controle | Máquina do operador | Decisão do operador (D-007): ferramenta temporária que não deve exigir publicação para refletir uma mudança |
 
+> **Emenda de 15/08/2026 — um único serviço de servidor.** A decisão posterior
+> do [ADR-0005](./ADR-0005-contas-e-sessoes.md) consolidou contas, APIs HTTP e
+> sinalização em `services/api`. A fronteira lógica da sinalização continua
+> existindo como módulo, mas não como um segundo serviço implantado.
+
 **A sinalização ainda não foi criada de propósito.** O mandato §19 proíbe
-provisionar serviço antes da necessidade. Ela é criada quando a etapa de
-pareamento começar, e nesse momento o suporte a WebSocket nas Funções da Vercel
-será reavaliado contra o Railway — o critério será tempo de vida da conexão e
-custo, não capacidade.
+provisionar infraestrutura antes da necessidade. Ela é adicionada ao processo
+da API quando a etapa de transporte começar. O Railway continua sendo o destino
+porque a conexão WebSocket é persistente; não será criado um microsserviço só
+para separar uma preocupação que cabe no processo já existente.
 
 ### Agente Desktop: Tauri com Rust
 

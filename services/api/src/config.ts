@@ -16,6 +16,20 @@ export interface Config {
   dominioCookie?: string;
   /** Falso só faz sentido em desenvolvimento local sobre http. */
   cookieSeguro: boolean;
+  /** Endereço público que navegador e Agente usam para o WSS. */
+  urlSinalizacao: string;
+  /** Credencial de servidor usada apenas para emitir acessos TURN temporários. */
+  turnCloudflare?: {
+    chaveId: string;
+    tokenApi: string;
+    ttlSegundos: number;
+  };
+  /** Acesso servidor-servidor às releases privadas; nunca é enviado ao Agente. */
+  releasesGitHub?: {
+    token: string;
+    repositorio: string;
+    urlPublicaApi: string;
+  };
 }
 
 export class ConfiguracaoInvalida extends Error {
@@ -59,6 +73,65 @@ export function carregarConfig(env: NodeJS.ProcessEnv = process.env): Config {
    */
   const cookieSeguro = producao ? true : env.COOKIE_SEGURO === "true";
 
+  const urlSinalizacaoBruta =
+    env.URL_SINALIZACAO?.trim() ||
+    (env.RAILWAY_PUBLIC_DOMAIN
+      ? `wss://${env.RAILWAY_PUBLIC_DOMAIN.trim()}/sinalizacao`
+      : producao
+        ? ""
+        : "ws://localhost:4500/sinalizacao");
+
+  if (!urlSinalizacaoBruta) {
+    throw new ConfiguracaoInvalida(
+      "URL_SINALIZACAO precisa ser definida em produção quando RAILWAY_PUBLIC_DOMAIN não existe.",
+    );
+  }
+
+  let urlSinalizacao: URL;
+  try {
+    urlSinalizacao = new URL(urlSinalizacaoBruta);
+  } catch {
+    throw new ConfiguracaoInvalida("URL_SINALIZACAO não é uma URL válida.");
+  }
+  if (!["ws:", "wss:"].includes(urlSinalizacao.protocol)) {
+    throw new ConfiguracaoInvalida("URL_SINALIZACAO precisa usar ws:// ou wss://.");
+  }
+  if (producao && urlSinalizacao.protocol !== "wss:") {
+    throw new ConfiguracaoInvalida("URL_SINALIZACAO precisa usar wss:// em produção.");
+  }
+
+  const chaveTurn = env.CLOUDFLARE_TURN_KEY_ID?.trim();
+  const tokenTurn = env.CLOUDFLARE_TURN_API_TOKEN?.trim();
+  if (Boolean(chaveTurn) !== Boolean(tokenTurn)) {
+    throw new ConfiguracaoInvalida(
+      "CLOUDFLARE_TURN_KEY_ID e CLOUDFLARE_TURN_API_TOKEN precisam ser definidos juntos.",
+    );
+  }
+  const ttlTurn = Number.parseInt(env.TURN_TTL_SEGUNDOS ?? "21600", 10);
+  if (chaveTurn && (!Number.isInteger(ttlTurn) || ttlTurn < 300 || ttlTurn > 172_800)) {
+    throw new ConfiguracaoInvalida(
+      "TURN_TTL_SEGUNDOS precisa estar entre 300 e 172800 segundos.",
+    );
+  }
+
+  const tokenReleases = env.GITHUB_RELEASE_TOKEN?.trim();
+  const repositorioReleases = (env.GITHUB_RELEASE_REPOSITORY ?? "alanaraujo-bit/SLATE").trim();
+  const urlPublicaApiBruta = (
+    env.URL_PUBLICA_API ?? (producao ? "https://slate.aionixdev.com/api" : "http://localhost:4500")
+  ).trim();
+  if (tokenReleases && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repositorioReleases)) {
+    throw new ConfiguracaoInvalida("GITHUB_RELEASE_REPOSITORY precisa usar o formato dono/repositorio.");
+  }
+  let urlPublicaApi: URL;
+  try {
+    urlPublicaApi = new URL(urlPublicaApiBruta);
+  } catch {
+    throw new ConfiguracaoInvalida("URL_PUBLICA_API não é uma URL válida.");
+  }
+  if (tokenReleases && producao && urlPublicaApi.protocol !== "https:") {
+    throw new ConfiguracaoInvalida("URL_PUBLICA_API precisa usar HTTPS em produção.");
+  }
+
   return {
     producao,
     porta: Number.parseInt(env.PORT ?? "4500", 10),
@@ -66,6 +139,25 @@ export function carregarConfig(env: NodeJS.ProcessEnv = process.env): Config {
     origensPermitidas: origens.length > 0 ? origens : ["http://localhost:4400"],
     dominioCookie: env.DOMINIO_COOKIE?.trim() || undefined,
     cookieSeguro,
+    urlSinalizacao: urlSinalizacao.toString(),
+    ...(chaveTurn && tokenTurn
+      ? {
+          turnCloudflare: {
+            chaveId: chaveTurn,
+            tokenApi: tokenTurn,
+            ttlSegundos: ttlTurn,
+          },
+        }
+      : {}),
+    ...(tokenReleases
+      ? {
+          releasesGitHub: {
+            token: tokenReleases,
+            repositorio: repositorioReleases,
+            urlPublicaApi: urlPublicaApi.toString().replace(/\/$/, ""),
+          },
+        }
+      : {}),
   };
 }
 

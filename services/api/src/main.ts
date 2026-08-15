@@ -1,8 +1,10 @@
 import { serve } from "@hono/node-server";
+import type { Server } from "node:http";
 import { createDb } from "@slate/db";
 import { ConfiguracaoInvalida, carregarConfig } from "./config";
 import { criarServidor } from "./servidor";
 import { limparSessoesExpiradas } from "./repositorio";
+import { criarSinalizacao } from "./sinalizacao";
 
 /**
  * Ponto de entrada do serviço.
@@ -68,6 +70,11 @@ const servidor = serve(
   );
 });
 
+const sinalizacao = criarSinalizacao({ db, config });
+// `serve` tipa o retorno como união HTTP/1 + HTTP/2; sem `createServer`
+// customizado ele cria HTTP/1, que é o protocolo que oferece upgrade WebSocket.
+sinalizacao.anexar(servidor as Server);
+
 /**
  * Encerramento ordenado.
  *
@@ -75,11 +82,17 @@ const servidor = serve(
  * em andamento morrem no meio e o usuário vê erro numa troca de versão que
  * deveria ser invisível.
  */
+let encerrando = false;
+
 for (const sinal of ["SIGTERM", "SIGINT"] as const) {
   process.on(sinal, () => {
+    if (encerrando) return;
+    encerrando = true;
     console.log(`${sinal} recebido, encerrando.`);
     clearInterval(limpeza);
-    servidor.close(() => process.exit(0));
+    void sinalizacao.encerrar().finally(() => {
+      servidor.close(() => process.exit(0));
+    });
 
     // Rede de segurança: se alguma conexão não fechar, não ficamos presos.
     setTimeout(() => process.exit(0), 10_000).unref?.();

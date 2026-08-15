@@ -18,8 +18,11 @@ import {
 
 const BANCO = "slate-identidade";
 const DEPOSITO = "chaves";
+const DEPOSITO_PARES = "pares-confiaveis";
+const DEPOSITO_ESTADO = "estado";
 const CHAVE_UNICA = "dispositivo";
-const VERSAO = 1;
+const CHAVE_PEDIDO = "pedido-pareamento";
+const VERSAO = 2;
 
 export interface IdentidadeGuardada {
   algoritmo: Algoritmo;
@@ -36,6 +39,22 @@ interface RegistroGuardado {
   nome: string;
 }
 
+export interface ParConfiavel {
+  id: string;
+  nome: string;
+  papel: "agent";
+  chavePublica: string;
+  algoritmo: string;
+  escopos: string[];
+}
+
+export interface PedidoPareamentoGuardado {
+  pedidoId: string;
+  codigo: string;
+  codigoFormatado: string;
+  expiraEm: number;
+}
+
 function abrir(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const pedido = indexedDB.open(BANCO, VERSAO);
@@ -43,6 +62,12 @@ function abrir(): Promise<IDBDatabase> {
     pedido.onupgradeneeded = () => {
       const bd = pedido.result;
       if (!bd.objectStoreNames.contains(DEPOSITO)) bd.createObjectStore(DEPOSITO);
+      if (!bd.objectStoreNames.contains(DEPOSITO_PARES)) {
+        bd.createObjectStore(DEPOSITO_PARES, { keyPath: "id" });
+      }
+      if (!bd.objectStoreNames.contains(DEPOSITO_ESTADO)) {
+        bd.createObjectStore(DEPOSITO_ESTADO);
+      }
     };
 
     pedido.onsuccess = () => resolve(pedido.result);
@@ -51,14 +76,15 @@ function abrir(): Promise<IDBDatabase> {
 }
 
 function transacionar<T>(
+  deposito: string,
   modo: IDBTransactionMode,
-  operacao: (deposito: IDBObjectStore) => IDBRequest<T>,
+  operacao: (armazenamento: IDBObjectStore) => IDBRequest<T>,
 ): Promise<T> {
   return abrir().then(
     (bd) =>
       new Promise<T>((resolve, reject) => {
-        const transacao = bd.transaction(DEPOSITO, modo);
-        const pedido = operacao(transacao.objectStore(DEPOSITO));
+        const transacao = bd.transaction(deposito, modo);
+        const pedido = operacao(transacao.objectStore(deposito));
 
         pedido.onsuccess = () => resolve(pedido.result);
         pedido.onerror = () => reject(pedido.error);
@@ -71,8 +97,10 @@ export async function lerIdentidade(): Promise<IdentidadeGuardada | null> {
   if (typeof indexedDB === "undefined") return null;
 
   try {
-    const registro = await transacionar<RegistroGuardado | undefined>("readonly", (d) =>
-      d.get(CHAVE_UNICA),
+    const registro = await transacionar<RegistroGuardado | undefined>(
+      DEPOSITO,
+      "readonly",
+      (d) => d.get(CHAVE_UNICA),
     );
 
     if (!registro?.chavePrivada) return null;
@@ -104,7 +132,7 @@ export async function obterOuCriarIdentidade(
   const identidade = await gerarIdentidade();
   const nome = nomeSugerido ?? nomeDoAparelho();
 
-  await transacionar("readwrite", (d) =>
+  await transacionar(DEPOSITO, "readwrite", (d) =>
     d.put(
       {
         algoritmo: identidade.algoritmo,
@@ -127,9 +155,80 @@ export async function obterOuCriarIdentidade(
 
 export async function esquecerIdentidade(): Promise<void> {
   try {
-    await transacionar("readwrite", (d) => d.delete(CHAVE_UNICA));
+    await transacionar(DEPOSITO, "readwrite", (d) => d.delete(CHAVE_UNICA));
   } catch {
     /* sem armazenamento, não há o que apagar */
+  }
+}
+
+/** Guarda a chave do computador recebida ao concluir a cerimônia física. */
+export async function guardarParConfiavel(par: ParConfiavel): Promise<void> {
+  if (
+    par.papel !== "agent" ||
+    par.chavePublica.length < 20 ||
+    !["Ed25519", "ECDSA-P256"].includes(par.algoritmo)
+  ) {
+    throw new Error("computador confiável inválido");
+  }
+  await transacionar(DEPOSITO_PARES, "readwrite", (d) => d.put(par));
+}
+
+export async function listarParesConfiaveis(): Promise<ParConfiavel[]> {
+  if (typeof indexedDB === "undefined") return [];
+  try {
+    return await transacionar<ParConfiavel[]>(DEPOSITO_PARES, "readonly", (d) =>
+      d.getAll(),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** A sincronização da nuvem só pode retirar confiança, nunca criar ou trocar. */
+export async function removerParesRevogados(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const bd = await abrir();
+  await new Promise<void>((resolve, reject) => {
+    const transacao = bd.transaction(DEPOSITO_PARES, "readwrite");
+    const deposito = transacao.objectStore(DEPOSITO_PARES);
+    for (const id of new Set(ids)) deposito.delete(id);
+    transacao.oncomplete = () => {
+      bd.close();
+      resolve();
+    };
+    transacao.onerror = () => reject(transacao.error);
+  });
+}
+
+export async function guardarPedidoPareamento(
+  pedido: PedidoPareamentoGuardado,
+): Promise<void> {
+  await transacionar(DEPOSITO_ESTADO, "readwrite", (d) =>
+    d.put(pedido, CHAVE_PEDIDO),
+  );
+}
+
+export async function lerPedidoPareamento(): Promise<PedidoPareamentoGuardado | null> {
+  try {
+    const pedido = await transacionar<PedidoPareamentoGuardado | undefined>(
+      DEPOSITO_ESTADO,
+      "readonly",
+      (d) => d.get(CHAVE_PEDIDO),
+    );
+    if (!pedido || pedido.expiraEm <= Date.now()) return null;
+    return pedido;
+  } catch {
+    return null;
+  }
+}
+
+export async function esquecerPedidoPareamento(): Promise<void> {
+  try {
+    await transacionar(DEPOSITO_ESTADO, "readwrite", (d) =>
+      d.delete(CHAVE_PEDIDO),
+    );
+  } catch {
+    /* nada persistido */
   }
 }
 

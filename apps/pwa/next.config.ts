@@ -11,6 +11,21 @@ const raizWorkspace = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
  * processo repassa. Ver a explicação do proxy mais abaixo.
  */
 const API_INTERNA = (process.env.API_URL ?? "http://localhost:4500").replace(/\/$/, "");
+const URL_SINALIZACAO_PUBLICA =
+  process.env.URL_SINALIZACAO_PUBLICA ??
+  (process.env.NODE_ENV === "production"
+    ? "wss://slate-api-staging.up.railway.app/sinalizacao"
+    : "ws://localhost:4500/sinalizacao");
+const origemSinalizacao = (() => {
+  const url = new URL(URL_SINALIZACAO_PUBLICA);
+  if (!["ws:", "wss:"].includes(url.protocol)) {
+    throw new Error("URL_SINALIZACAO_PUBLICA precisa usar ws:// ou wss://.");
+  }
+  if (process.env.NODE_ENV === "production" && url.protocol !== "wss:") {
+    throw new Error("URL_SINALIZACAO_PUBLICA precisa usar wss:// em produção.");
+  }
+  return url.origin;
+})();
 
 const config: NextConfig = {
   reactStrictMode: true,
@@ -60,10 +75,10 @@ const config: NextConfig = {
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob:",
             "font-src 'self'",
-            // Basta `self`: a API é servida na mesma origem, pelo proxy. O
-            // canal de dados do WebRTC não passa por aqui — ele não é uma
-            // conexão de documento.
-            "connect-src 'self'",
+            // O HTTP continua na própria origem pelo proxy. O upgrade WSS vai
+            // direto ao processo persistente no Railway; liberar a origem
+            // exata preserva a CSP contra exfiltração para qualquer outro WSS.
+            `connect-src 'self' ${origemSinalizacao}`,
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",

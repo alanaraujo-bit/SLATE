@@ -102,6 +102,52 @@ export const dispositivos = pgTable(
   ],
 );
 
+/**
+ * Desafios de prova de posse usados antes de emitir acesso à sinalização.
+ *
+ * O nonce é guardado apenas como hash. Mesmo não sendo uma credencial de longa
+ * duração, tratá-lo como segredo evita que uma leitura acidental do banco
+ * permita responder a um desafio ainda aberto.
+ */
+export const desafiosSinalizacao = pgTable(
+  "desafios_sinalizacao",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dispositivoId: uuid("dispositivo_id")
+      .notNull()
+      .references(() => dispositivos.id, { onDelete: "cascade" }),
+    nonceHash: text("nonce_hash").notNull(),
+    expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
+    usadoEm: timestamp("usado_em", { withTimezone: true }),
+    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("desafios_sinalizacao_nonce_idx").on(t.nonceHash),
+    index("desafios_sinalizacao_dispositivo_idx").on(t.dispositivoId),
+    index("desafios_sinalizacao_expiracao_idx").on(t.expiraEm),
+  ],
+);
+
+/** Tokens opacos, curtos e de uso único para autenticar o upgrade WSS. */
+export const tokensSinalizacao = pgTable(
+  "tokens_sinalizacao",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dispositivoId: uuid("dispositivo_id")
+      .notNull()
+      .references(() => dispositivos.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
+    usadoEm: timestamp("usado_em", { withTimezone: true }),
+    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("tokens_sinalizacao_token_idx").on(t.tokenHash),
+    index("tokens_sinalizacao_dispositivo_idx").on(t.dispositivoId),
+    index("tokens_sinalizacao_expiracao_idx").on(t.expiraEm),
+  ],
+);
+
 export const pedidosPareamento = pgTable(
   "pedidos_pareamento",
   {
@@ -117,6 +163,10 @@ export const pedidosPareamento = pgTable(
     tentativas: integer("tentativas").notNull().default(0),
     expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
     confirmadoEm: timestamp("confirmado_em", { withTimezone: true }),
+    confirmadoPorDispositivoId: uuid("confirmado_por_dispositivo_id").references(
+      () => dispositivos.id,
+      { onDelete: "set null" },
+    ),
     bloqueadoEm: timestamp("bloqueado_em", { withTimezone: true }),
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
   },

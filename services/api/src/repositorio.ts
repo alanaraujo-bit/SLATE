@@ -308,9 +308,47 @@ export async function bloquearPedido(db: Database, pedidoId: string) {
     .where(eq(pedidosPareamento.id, pedidoId));
 }
 
-export async function confirmarPedido(db: Database, pedidoId: string) {
+export async function confirmarPedido(
+  db: Database,
+  pedidoId: string,
+  agenteId: string,
+) {
   await db
     .update(pedidosPareamento)
-    .set({ confirmadoEm: new Date() })
+    .set({ confirmadoEm: new Date(), confirmadoPorDispositivoId: agenteId })
     .where(eq(pedidosPareamento.id, pedidoId));
+}
+
+export async function buscarResultadoPedidoPareamento(
+  db: Database,
+  usuarioId: string,
+  pedidoId: string,
+) {
+  const [resultado] = await db
+    .select({
+      id: pedidosPareamento.id,
+      expiraEm: pedidosPareamento.expiraEm,
+      confirmadoEm: pedidosPareamento.confirmadoEm,
+      bloqueadoEm: pedidosPareamento.bloqueadoEm,
+      agenteId: dispositivos.id,
+      agenteNome: dispositivos.nome,
+      agentePapel: dispositivos.papel,
+      agenteChavePublica: dispositivos.chavePublica,
+      agenteAlgoritmo: dispositivos.algoritmo,
+      agenteEscopos: dispositivos.escopos,
+      agenteSituacao: dispositivos.situacao,
+    })
+    .from(pedidosPareamento)
+    .leftJoin(
+      dispositivos,
+      eq(dispositivos.id, pedidosPareamento.confirmadoPorDispositivoId),
+    )
+    .where(
+      and(
+        eq(pedidosPareamento.id, pedidoId),
+        eq(pedidosPareamento.usuarioId, usuarioId),
+      ),
+    )
+    .limit(1);
+  return resultado ?? null;
 }

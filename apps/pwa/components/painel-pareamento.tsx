@@ -2,10 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Botao, Rotulo, Superficie } from "@slate/design-system";
-import { api, mensagemDoErro, type DispositivoResumo } from "@/lib/api";
-import { obterOuCriarIdentidade } from "@/lib/identidade-local";
+import { api, mensagemDoErro } from "@/lib/api";
+import {
+  esquecerPedidoPareamento,
+  guardarParConfiavel,
+  guardarPedidoPareamento,
+  lerPedidoPareamento,
+  obterOuCriarIdentidade,
+} from "@/lib/identidade-local";
 
 interface CodigoAtivo {
+  pedidoId: string;
   codigo: string;
   codigoFormatado: string;
   expiraEm: number;
@@ -20,10 +27,8 @@ interface CodigoAtivo {
  * (ADR-0004 §2).
  */
 export function PainelPareamento({
-  dispositivos,
   aoParear,
 }: {
-  dispositivos: DispositivoResumo[];
   aoParear: () => void;
 }) {
   const [codigo, setCodigo] = useState<CodigoAtivo | null>(null);
@@ -32,6 +37,12 @@ export function PainelPareamento({
   const [pedindo, setPedindo] = useState(false);
   const consultando = useRef(false);
 
+  useEffect(() => {
+    void lerPedidoPareamento().then((pedido) => {
+      if (pedido) setCodigo(pedido);
+    });
+  }, []);
+
   // Contagem regressiva do código.
   useEffect(() => {
     if (!codigo) return;
@@ -39,7 +50,10 @@ export function PainelPareamento({
     const atualizar = () => {
       const segundos = Math.max(0, Math.ceil((codigo.expiraEm - Date.now()) / 1000));
       setRestante(segundos);
-      if (segundos === 0) setCodigo(null);
+      if (segundos === 0) {
+        setCodigo(null);
+        void esquecerPedidoPareamento();
+      }
     };
 
     atualizar();
@@ -50,10 +64,9 @@ export function PainelPareamento({
   /*
    * Enquanto há código na tela, verifica se o computador já confirmou.
    *
-   * É consulta periódica de propósito: o canal em tempo real depende do
-   * transporte, que ainda não existe. Só roda enquanto o código está visível,
-   * então não há tráfego de fundo quando a tela está parada — e a substituição
-   * por um aviso do servidor depois não muda nada nesta tela.
+   * É consulta periódica de propósito: o canal WebRTC só nasce depois que a
+   * cerimônia confirma qual chave do Agente é confiável. Só roda enquanto o
+   * código está visível, então não há tráfego de fundo quando a tela está parada.
    */
   useEffect(() => {
     if (!codigo) return;
@@ -63,10 +76,18 @@ export function PainelPareamento({
       consultando.current = true;
 
       try {
-        const resultado = await api.dispositivos();
-        if (resultado.ok && resultado.dados.dispositivos.length > dispositivos.length) {
+        const resultado = await api.consultarPedidoPareamento(codigo.pedidoId);
+        if (resultado.ok && resultado.dados.situacao === "confirmado") {
+          await guardarParConfiavel(resultado.dados.agente);
+          await esquecerPedidoPareamento();
           setCodigo(null);
           aoParear();
+        } else if (
+          resultado.ok &&
+          ["expirado", "bloqueado"].includes(resultado.dados.situacao)
+        ) {
+          await esquecerPedidoPareamento();
+          setCodigo(null);
         }
       } finally {
         consultando.current = false;
@@ -75,7 +96,7 @@ export function PainelPareamento({
 
     const timer = setInterval(verificar, 3000);
     return () => clearInterval(timer);
-  }, [codigo, dispositivos.length, aoParear]);
+  }, [codigo, aoParear]);
 
   const pedir = async () => {
     if (pedindo) return;
@@ -96,11 +117,14 @@ export function PainelPareamento({
         return;
       }
 
-      setCodigo({
+      const pedido = {
+        pedidoId: resultado.dados.pedidoId,
         codigo: resultado.dados.codigo,
         codigoFormatado: resultado.dados.codigoFormatado,
         expiraEm: new Date(resultado.dados.expiraEm).getTime(),
-      });
+      };
+      await guardarPedidoPareamento(pedido);
+      setCodigo(pedido);
     } catch {
       setErro("Não foi possível preparar este aparelho para o pareamento.");
     } finally {
@@ -129,7 +153,14 @@ export function PainelPareamento({
             só.
           </Rotulo>
 
-          <Botao onClick={() => setCodigo(null)}>Cancelar</Botao>
+          <Botao
+            onClick={() => {
+              setCodigo(null);
+              void esquecerPedidoPareamento();
+            }}
+          >
+            Cancelar
+          </Botao>
         </div>
       </Superficie>
     );

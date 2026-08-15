@@ -146,7 +146,10 @@ test.describe("pareamento", () => {
     const guardada = await page.evaluate(
       () =>
         new Promise<{ existe: boolean; extraivel: boolean | null }>((resolve) => {
-          const pedido = indexedDB.open("slate-identidade", 1);
+          // Abrir sem fixar versão lê o schema atual. O produto já migrou da
+          // versão 1 para a 2 ao adicionar pares confiáveis; pedir a versão
+          // antiga causa VersionError e faria o teste reprovar sem ler nada.
+          const pedido = indexedDB.open("slate-identidade");
 
           pedido.onsuccess = () => {
             const bd = pedido.result;

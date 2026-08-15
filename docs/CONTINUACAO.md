@@ -1,7 +1,8 @@
 # SLATE — ponto de partida para quem continua
 
 Escrito em 15/08/2026, no fim da primeira fase de construção, para quem for
-assumir o projeto a partir daqui.
+assumir o projeto a partir daqui. Atualizado no mesmo dia após a implementação
+do transporte e da base de distribuição do Agente.
 
 Não é um resumo do que foi feito — o histórico do Git já conta isso. É o que
 não está óbvio no código e que custaria tempo redescobrir.
@@ -12,28 +13,35 @@ não está óbvio no código e que custaria tempo redescobrir.
 
 | Peça | Onde | Situação |
 |---|---|---|
-| **PWA** | <https://slate.aionixdev.com> (Vercel) | Instalável, offline, conta e pareamento |
-| **API** | Railway, serviço `slate-api` | Contas, sessões, dispositivos, pareamento |
+| **PWA** | <https://slate.aionixdev.com> (Vercel) | Instalável, offline, conta, pareamento e primeiro controle real |
+| **API** | Railway, serviço `slate-api` | Contas, sessões, pareamento, sinalização WSS e relay privado de releases |
 | **Postgres** | Railway, dois ambientes | `production` e `staging` |
-| **Agente Desktop** | `apps/desktop` | Compila, gera instalador, pareia |
+| **Agente Desktop** | `apps/desktop` | Pareia, abre WebRTC, executa mídia, inicia com o Windows e busca atualizações assinadas |
 | **Painel do projeto** | `pnpm roadmap:ui` → localhost:4300 | Progresso calculado, em tempo real |
 
 **O ciclo de pareamento fecha de ponta a ponta.** Celular pede → mostra código →
 Agente confirma → dispositivo aparece nos dois lados.
 
-**541 testes**, todos passando: 298 unitários, 8 em Rust, 50 ponta a ponta na
-PWA, 56 de integração contra Postgres real (pulados sem `DATABASE_URL`), 30 no
-Painel.
+Na última verificação local completa passaram **342 testes JavaScript/TypeScript**
+e **16 testes Rust**. A execução separada da API contra o Postgres real de
+staging passou **137 de 137 testes**. As suítes que dependem do banco continuam
+se pulando quando `DATABASE_URL` não existe; não confunda uma execução local sem
+banco com a validação de integração e ponta a ponta.
 
 ## 2. O que **não** existe
 
-- **Transporte em tempo real.** Não há WebRTC, não há canal de dados. É o
-  próximo trabalho e está descrito na seção 6.
-- **Execução de ações.** O Agente pareia e para por aí. Não há Motor de Ações,
-  não há Motor de Contexto, não há leitura de estado do PC.
-- **Controles na tela.** A PWA não tem grade de botões, de propósito: sem
-  transporte, seriam botões que não fazem nada. O mandato §59 proíbe substituir
-  escopo por promessa, e essa regra foi respeitada em todas as telas.
+- **Motor de Ações completo.** O primeiro corte vertical existe: a PWA envia
+  `midia.reproduzir-pausar`, o Agente valida registro, timestamp, sequência,
+  repetição e escopos, executa `VK_MEDIA_PLAY_PAUSE` no Windows e devolve o
+  resultado. Sequências, condições, atrasos, variáveis e as demais ações ainda
+  não existem.
+- **Grade configurável de controles.** A PWA mostra apenas o controle de mídia
+  comprovadamente funcional. Editor de decks e demais controles continuam
+  ausentes em vez de aparecerem como botões sem efeito.
+- **Publicação automática do Agente.** O código, o instalador e o workflow
+  existem, mas a primeira release ainda depende das AÇÕES-008 e 009. Até isso
+  acontecer, a interface informa a indisponibilidade real em vez de prometer uma
+  atualização que não pode baixar.
 
 ## 3. Decisões que parecem erradas até você saber por quê
 
@@ -149,10 +157,12 @@ E2E_BASE_URL=https://slate.aionixdev.com pnpm test:e2e   # contra produção
 > Rode contra produção de vez em quando. Cookie `Secure` e política de
 > segurança só se comportam de verdade sob HTTPS.
 
-## 6. O próximo trabalho: transporte em tempo real
+## 6. Transporte em tempo real — implementação em validação
 
-É o que destrava tudo o mais. Está especificado, e a especificação foi validada
-com pesquisa — não presuma que dá para simplificar.
+É o que destrava tudo o mais. A sinalização WSS na API, os pares WebRTC na PWA e
+no Agente e a ligação à máquina de estados já estão implementados no worktree.
+Os gates de relay TURN real, reconexão prolongada e validação ponta a ponta
+continuam pendentes; não conclua P1-M5 antes dessas provas.
 
 ### A decisão já tomada, e por quê
 
@@ -167,7 +177,7 @@ retransmissão. O desenho intuitivo — Agente abre um WebSocket na rede local �
 Detalhes em [ADR-0002](./architecture/ADR-0002-transporte.md). **Leia antes de
 começar.**
 
-### O que já está pronto para isso
+### O que sustenta a implementação
 
 - `packages/protocol` — envelope, versionamento, negociação de capacidades,
   28 testes cobrindo duplicidade, timestamp, reconexão e versão incompatível.
@@ -181,16 +191,39 @@ começar.**
 Em `services/api`, o serviço que já existe. O [ADR-0001](./architecture/ADR-0001-arquitetura-do-sistema.md)
 prevê isso explicitamente — não crie um serviço novo.
 
-### Ordem sugerida
+### Ordem usada
 
 1. Sinalização (WSS) em `services/api`, autenticada por chave de dispositivo.
 2. Par WebRTC no navegador, dentro da PWA.
-3. Par WebRTC no Agente, em Rust (`webrtc-rs` ou `str0m`).
+3. Par WebRTC no Agente, em Rust com `webrtc-rs`.
 4. Máquina de estados de conexão, ligada aos estados que a PWA já sabe exibir
    (`apps/pwa/lib/estados-conexao.ts` — todos os oito já têm mensagem e teste).
-5. Só então: Motor de Ações, e os controles na tela.
+5. Primeiro corte do Motor de Ações e controle de reproduzir/pausar, concluído
+   no Agente `0.1.1`.
 
-## 7. Pendências do operador
+## 7. Distribuição e atualização do Agente
+
+O NSIS usa imagens próprias do SLATE, textos completos em português e instalação
+por usuário. `pnpm --filter @slate/desktop instalador` lê a chave Minisign fora
+do repositório, gera o `.exe` e sua assinatura `.exe.sig` e se recusa a produzir
+uma release sem chave.
+
+O Agente busca atualização oito segundos após abrir e a cada seis horas. A busca
+automática é silenciosa quando a rede falha; a busca manual sempre responde. A
+pessoa vê versão, notas, bytes baixados e pode adiar. A instalação é passiva e só
+começa depois da confirmação explícita.
+
+O instalador local mais recente é
+`apps/desktop/src-tauri/target/release/bundle/nsis/SLATE_0.1.1_x64-setup.exe`.
+Sua assinatura `.sig` foi verificada contra a chave pública do próprio Agente.
+
+Como o repositório é privado, o Agente não acessa o GitHub diretamente. A API
+consulta a release com um token servidor-servidor, valida o manifesto e entrega
+um redirecionamento temporário apenas para o artefato daquela release. Perder a
+chave privada de atualização impede publicar versões aceitas pelos Agentes já
+instalados: mantenha um backup cifrado antes da primeira release.
+
+## 8. Pendências do operador
 
 Nenhuma bloqueia o desenvolvimento. Detalhes em
 [OPERATOR_ACTIONS.md](./operator/OPERATOR_ACTIONS.md).
@@ -199,8 +232,11 @@ Nenhuma bloqueia o desenvolvimento. Detalhes em
 |---|---|
 | **AÇÃO-002** Certificado de assinatura | SmartScreen avisa ao instalar o Agente |
 | **AÇÃO-004** Provedor de e-mail | Recuperação de senha; a tela de cadastro avisa |
+| **AÇÃO-007** Credenciais TURN | Prova real do caminho relay do WebRTC |
+| **AÇÃO-008** Token de leitura de releases no Railway | Consulta e download de atualização em produção |
+| **AÇÃO-009** Secrets da chave de atualização no GitHub | Publicação automática de releases assinadas |
 
-## 8. Como manter o plano honesto
+## 9. Como manter o plano honesto
 
 O progresso é **calculado**, nunca escrito. A CLI se recusa a concluir um item
 com critério pendente ou filho inacabado — e essa recusa é o mecanismo, não um
@@ -227,8 +263,9 @@ verdadeiro; um número inflado custa mais do que um número baixo.
 
 | | |
 |---|---|
-| Progresso calculado | **18,7%** |
-| Tarefas concluídas | 31 de 90 |
-| Testes | 541 |
+| Progresso calculado | **20,1%** |
+| Tarefas concluídas | 31 de 120 |
+| Verificação local mais recente | 342 testes JS/TS + 16 Rust |
+| Integração da API em staging | 137 de 137 testes |
 | Fase 0 | 100% |
 | Fase 1 (Plataforma) | Design System e Protocolo concluídos |

@@ -1,9 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Botao, Rotulo, Superficie } from "@slate/design-system";
-import { api, type DispositivoResumo, type Usuario } from "@/lib/api";
+import {
+  api,
+  EVENTO_SEM_CONEXAO,
+  type DispositivoResumo,
+  type Usuario,
+} from "@/lib/api";
+import {
+  listarParesConfiaveis,
+  obterOuCriarIdentidade,
+} from "@/lib/identidade-local";
+import { TransporteWebRtc } from "@/lib/transporte-webrtc";
+import type { EstadoConexao } from "@/lib/estados-conexao";
 import { EstadoDaConexao } from "./estado-da-conexao";
+import { ControlesBasicos } from "./controles-basicos";
 import { FormularioConta } from "./formulario-conta";
 import { PainelPareamento } from "./painel-pareamento";
 
@@ -20,6 +32,10 @@ export function Aplicacao() {
   const [situacao, setSituacao] = useState<Situacao>("carregando");
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [dispositivos, setDispositivos] = useState<DispositivoResumo[]>([]);
+  const [estadoConexao, setEstadoConexao] = useState<EstadoConexao>("PAIRING_REQUIRED");
+  const [temParConfiavel, setTemParConfiavel] = useState<boolean | null>(null);
+  const [agenteControlaMidia, setAgenteControlaMidia] = useState(false);
+  const transporteAtual = useRef<TransporteWebRtc | null>(null);
 
   const carregar = useCallback(async () => {
     // Sem rede, nem adianta perguntar. Mostrar o formulário de entrada aqui
@@ -35,6 +51,7 @@ export function Aplicacao() {
     if (eu.ok) {
       setUsuario(eu.dados.usuario);
       setSituacao("logado");
+      setTemParConfiavel(null);
 
       const lista = await api.dispositivos();
       if (lista.ok) setDispositivos(lista.dados.dispositivos);
@@ -52,14 +69,84 @@ export function Aplicacao() {
     // A rede volta sozinha com frequência; quando voltar, a tela se recupera
     // sem exigir que a pessoa recarregue.
     const aoVoltar = () => void carregar();
+    const aoPerder = () => {
+      setSituacao("servidor-fora");
+      setEstadoConexao("OFFLINE");
+    };
     window.addEventListener("online", aoVoltar);
-    return () => window.removeEventListener("online", aoVoltar);
+    window.addEventListener("offline", aoPerder);
+    window.addEventListener(EVENTO_SEM_CONEXAO, aoPerder);
+    return () => {
+      window.removeEventListener("online", aoVoltar);
+      window.removeEventListener("offline", aoPerder);
+      window.removeEventListener(EVENTO_SEM_CONEXAO, aoPerder);
+    };
   }, [carregar]);
+
+  useEffect(() => {
+    if (situacao !== "logado") {
+      setEstadoConexao(
+        situacao === "servidor-fora" && typeof navigator !== "undefined" && !navigator.onLine
+          ? "OFFLINE"
+          : situacao === "deslogado"
+            ? "AUTH_REQUIRED"
+            : "PAIRING_REQUIRED",
+      );
+      return;
+    }
+
+    let transporte: TransporteWebRtc | undefined;
+    let cancelado = false;
+
+    void Promise.all([obterOuCriarIdentidade(), listarParesConfiaveis()]).then(
+      ([identidade, pares]) => {
+      if (cancelado) return;
+      const superficie = dispositivos.find(
+        (d) =>
+          d.papel === "surface" &&
+          d.situacao === "ativo" &&
+          d.chavePublica === identidade.chavePublicaExportada,
+      );
+      const agenteConfiavel = pares.find((d) => d.papel === "agent");
+      const agenteAtivo = dispositivos.find(
+        (d) =>
+          d.id === agenteConfiavel?.id &&
+          d.papel === "agent" &&
+          d.situacao === "ativo" &&
+          d.chavePublica === agenteConfiavel.chavePublica,
+      );
+
+      if (!superficie || !agenteConfiavel || !agenteAtivo) {
+        setTemParConfiavel(false);
+        setEstadoConexao("PAIRING_REQUIRED");
+        return;
+      }
+
+      setTemParConfiavel(true);
+      transporte = new TransporteWebRtc({
+        identidade,
+        agente: agenteConfiavel,
+        aoMudarEstado: setEstadoConexao,
+        aoNegociarCapacidades: (capacidades) =>
+          setAgenteControlaMidia(capacidades.includes("action.media")),
+      });
+      transporteAtual.current = transporte;
+      transporte.iniciar();
+    });
+
+    return () => {
+      cancelado = true;
+      transporte?.parar();
+      setAgenteControlaMidia(false);
+      if (transporteAtual.current === transporte) transporteAtual.current = null;
+    };
+  }, [situacao, dispositivos]);
 
   const sair = async () => {
     await api.sair();
     setUsuario(null);
     setDispositivos([]);
+    setTemParConfiavel(null);
     setSituacao("deslogado");
   };
 
@@ -73,7 +160,7 @@ export function Aplicacao() {
         </div>
 
         <div className="app__acoes">
-          <EstadoDaConexao />
+          <EstadoDaConexao estado={estadoConexao} />
           {situacao === "logado" && (
             <Botao tamanho="sm" onClick={sair}>
               Sair
@@ -110,11 +197,17 @@ export function Aplicacao() {
           </Superficie>
         )}
 
-        {situacao === "logado" && dispositivos.length === 0 && (
-          <PainelPareamento dispositivos={dispositivos} aoParear={() => void carregar()} />
+        {situacao === "logado" && temParConfiavel === null && (
+          <div className="aviso" aria-busy="true">
+            <Rotulo tom="atenuado">Verificando o pareamento…</Rotulo>
+          </div>
         )}
 
-        {situacao === "logado" && dispositivos.length > 0 && (
+        {situacao === "logado" && temParConfiavel === false && (
+          <PainelPareamento aoParear={() => void carregar()} />
+        )}
+
+        {situacao === "logado" && temParConfiavel === true && (
           <Superficie nivel="elevada" preenchida>
             <div className="aviso">
               <h1 className="aviso__titulo">Dispositivos da sua conta</h1>
@@ -131,15 +224,24 @@ export function Aplicacao() {
                 ))}
               </ul>
 
-              {/*
-                Não há grade de controles aqui porque não há transporte ainda.
-                Uma tela de botões que não comandam nada seria promessa
-                disfarçada de produto (§59).
-              */}
               <p className="aviso__texto">
-                O canal de comunicação com o computador ainda está sendo construído.
-                Assim que ficar pronto, os controles aparecem aqui.
+                {estadoConexao === "CONNECTED"
+                  ? agenteControlaMidia
+                    ? "Canal seguro ativo. Seus comandos vão direto para o computador."
+                    : "Canal seguro ativo. Atualize o Agente no computador para liberar os controles."
+                  : "Os controles permanecem indisponíveis enquanto o computador não estiver conectado."}
               </p>
+              {estadoConexao === "CONNECTED" && agenteControlaMidia && (
+                <ControlesBasicos
+                  executar={(actionId) =>
+                    transporteAtual.current?.executarAcao(actionId) ??
+                    Promise.resolve({
+                      ok: false,
+                      mensagem: "O computador não está conectado.",
+                    })
+                  }
+                />
+              )}
             </div>
           </Superficie>
         )}

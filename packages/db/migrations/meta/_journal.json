@@ -15,6 +15,20 @@
       "when": 1786803617052,
       "tag": "0001_contas_e_sessoes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786812140274,
+      "tag": "0002_fluffy_layla_miller",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786815844012,
+      "tag": "0003_lying_ricochet",
+      "breakpoints": true
     }
   ]
 }

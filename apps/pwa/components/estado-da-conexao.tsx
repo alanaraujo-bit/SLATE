@@ -1,6 +1,3 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import { Indicador } from "@slate/design-system";
 import { descrever, type EstadoConexao, type TomEstado } from "@/lib/estados-conexao";
 
@@ -14,32 +11,11 @@ const SITUACAO_POR_TOM: Record<TomEstado, "ok" | "atencao" | "erro" | "neutro"> 
 /**
  * Mostra o estado da ligação com o computador.
  *
- * Por ora o único estado que a aplicação sabe determinar de verdade é se este
- * aparelho tem rede — o transporte e o pareamento ainda não existem. O
- * componente já trabalha com o vocabulário completo de estados do protocolo,
- * então ligar o resto depois é passar um valor diferente, não reescrever a
- * tela.
+ * O estado vem do ciclo de vida real do transporte. Este componente não tenta
+ * inferir conectividade por conta própria; assim, "Conectado" só aparece após
+ * autenticação, DTLS, DataChannel e negociação de protocolo.
  */
-export function EstadoDaConexao() {
-  const [estado, setEstado] = useState<EstadoConexao>("PAIRING_REQUIRED");
-
-  useEffect(() => {
-    const atualizar = () => {
-      // Sem rede vence qualquer outra consideração: não adianta falar em
-      // pareamento com o aparelho desconectado.
-      setEstado(navigator.onLine ? "PAIRING_REQUIRED" : "OFFLINE");
-    };
-
-    atualizar();
-    window.addEventListener("online", atualizar);
-    window.addEventListener("offline", atualizar);
-
-    return () => {
-      window.removeEventListener("online", atualizar);
-      window.removeEventListener("offline", atualizar);
-    };
-  }, []);
-
+export function EstadoDaConexao({ estado }: { estado: EstadoConexao }) {
   const descricao = descrever(estado);
 
   return (

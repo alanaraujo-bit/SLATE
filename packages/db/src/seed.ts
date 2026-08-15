@@ -98,6 +98,63 @@ const OPERATOR_ACTIONS = [
       "A hospedagem na nuvem volta a ficar disponível para a etapa da PWA. O Centro de " +
       "Controle não precisa dela e continua rodando local.",
   },
+  {
+    code: "AÇÃO-007",
+    title: "Criar a chave do relay TURN",
+    projectBlocked: false,
+    impact:
+      "O fallback entre redes restritivas não pode ser provado; o caminho direto na mesma rede continua funcionando.",
+    blocks: "Conclusão de P1-M5-T4 e o teste forçado com política relay.",
+    why:
+      "O Railway não expõe UDP público. O Cloudflare Realtime TURN fornece UDP, TCP e TLS, " +
+      "mas criar a chave de emissão exige acesso à conta externa do operador.",
+    whatToDo:
+      "Criar uma chave slate-production em Cloudflare Realtime > TURN e guardar " +
+      "CLOUDFLARE_TURN_KEY_ID, CLOUDFLARE_TURN_API_TOKEN e TURN_TTL_SEGUNDOS=21600 " +
+      "no serviço slate-api do Railway.",
+    howToValidate:
+      "Executar a interoperabilidade com iceTransportPolicy=relay e confirmar por getStats() que o par selecionado usa candidato relay.",
+    alreadyCompleted:
+      "A API emite e renova credenciais temporárias sem expor o segredo; PWA e Agente já consomem a mesma configuração ICE.",
+    whatHappensAfter:
+      "O DataChannel funciona também sob NAT simétrico e redes isoladas, sem configuração pelo usuário.",
+  },
+  {
+    code: "AÇÃO-008",
+    title: "Criar token somente leitura para as releases privadas do Agente",
+    projectBlocked: false,
+    impact:
+      "A busca automática não alcança uma release real enquanto o repositório continuar privado; o Agente atual continua funcionando.",
+    blocks: "Critério publicação de P3-M1-T4.",
+    why:
+      "O token do GitHub não pode ser embutido no Agente. A API precisa de uma credencial servidor-servidor restrita para gerar o redirecionamento temporário do pacote.",
+    whatToDo:
+      "Criar um fine-grained PAT com Contents: read apenas para alanaraujo-bit/SLATE e definir GITHUB_RELEASE_TOKEN no serviço da API no Railway.",
+    howToValidate:
+      "Publicar uma versão maior e verificar que /api/atualizacoes/windows/x86_64/0.1.0 responde 200 com versão, URL e assinatura, sem expor o token.",
+    alreadyCompleted:
+      "Endpoint seguro, validação do manifesto, restrição ao asset da release, assinatura do Tauri e workflow de publicação já estão implementados.",
+    whatHappensAfter:
+      "O Agente encontra, baixa, verifica e instala releases reais sem exigir reinstalação manual.",
+  },
+  {
+    code: "AÇÃO-009",
+    title: "Guardar a chave de atualização no GitHub Actions",
+    projectBlocked: false,
+    impact:
+      "O workflow não consegue publicar o primeiro pacote assinado; builds e testes locais continuam funcionando.",
+    blocks: "Critério publicação de P3-M1-T4.",
+    why:
+      "A chave privada e a senha precisam virar secrets remotos, e o envio de credenciais exige autorização explícita do operador.",
+    whatToDo:
+      "Autorizar a gravação de TAURI_SIGNING_PRIVATE_KEY e TAURI_SIGNING_PRIVATE_KEY_PASSWORD nos secrets do repositório e manter backup cifrado.",
+    howToValidate:
+      "gh secret list exibe os dois nomes e o workflow Publicar Agente Desktop gera .exe, .sig e latest.json.",
+    alreadyCompleted:
+      "Chave forte gerada fora do repositório, ACL restrita, pública embutida e teste de adulteração passando.",
+    whatHappensAfter:
+      "Tags slate-vX.Y.Z passam a publicar atualizações verificáveis de ponta a ponta.",
+  },
 ];
 
 async function main() {

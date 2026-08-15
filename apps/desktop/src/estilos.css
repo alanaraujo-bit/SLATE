@@ -232,3 +232,121 @@ p {
   border-radius: var(--s-radius-sm);
   background: var(--s-surface-raised);
 }
+
+/* ---- Preferências ----------------------------------------------------- */
+
+.inicio-automatico {
+  padding: 0 var(--s-space-4) var(--s-space-3);
+}
+
+.preferencia {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-space-4);
+  padding: var(--s-space-3) var(--s-space-4);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-lg);
+  background: var(--s-surface);
+  cursor: pointer;
+}
+
+.preferencia__texto {
+  display: grid;
+  gap: var(--s-space-1);
+}
+
+.preferencia__texto small {
+  color: var(--s-text-muted);
+  font-size: var(--s-text-xs);
+}
+
+.preferencia input[role="switch"] {
+  width: 2.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
+  accent-color: var(--s-accent);
+  cursor: pointer;
+}
+
+.preferencia input[role="switch"]:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.inicio-automatico .erro {
+  margin-top: var(--s-space-2);
+}
+
+/* ---- Atualizações ----------------------------------------------------- */
+
+.atualizador {
+  margin-top: auto;
+  padding: var(--s-space-3) var(--s-space-4);
+  border-top: 1px solid var(--s-border);
+  background: color-mix(in srgb, var(--s-surface) 88%, transparent);
+}
+
+.atualizador--disponivel {
+  border-top-color: color-mix(in srgb, var(--s-accent) 55%, var(--s-border));
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--s-accent) 18%, transparent), transparent 55%),
+    var(--s-surface);
+}
+
+.atualizador__linha,
+.atualizador__oferta,
+.atualizador__acoes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-space-3);
+}
+
+.atualizador__oferta {
+  align-items: flex-start;
+}
+
+.atualizador__oferta > div:first-child {
+  display: grid;
+  gap: var(--s-space-1);
+  min-width: 0;
+}
+
+.atualizador__oferta p,
+.atualizador__progresso small {
+  color: var(--s-text-muted);
+  font-size: var(--s-text-xs);
+  white-space: pre-line;
+}
+
+.atualizador__acoes {
+  flex-shrink: 0;
+}
+
+.atualizador__progresso {
+  display: grid;
+  gap: var(--s-space-2);
+}
+
+.atualizador progress {
+  width: 100%;
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  accent-color: var(--s-accent);
+}
+
+.atualizador .botao {
+  padding: var(--s-space-2) var(--s-space-3);
+  font-size: var(--s-text-xs);
+}
+
+@media (max-width: 420px) {
+  .atualizador__oferta,
+  .atualizador__acoes {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

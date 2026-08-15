@@ -12,6 +12,7 @@ import { ConfiguracaoInvalida, carregarConfig, origemPermitida } from "./config"
  */
 
 const base = { DATABASE_URL: "postgresql://u:p@h:5432/d" };
+const railway = { RAILWAY_PUBLIC_DOMAIN: "slate-api.exemplo.up.railway.app" };
 
 describe("cookie seguro", () => {
   it("não exige HTTPS em desenvolvimento, por padrão", () => {
@@ -28,6 +29,7 @@ describe("cookie seguro", () => {
     expect(
       carregarConfig({
         ...base,
+        ...railway,
         NODE_ENV: "production",
         ORIGENS_PERMITIDAS: "https://slate.aionixdev.com",
       }).cookieSeguro,
@@ -40,6 +42,7 @@ describe("cookie seguro", () => {
     expect(
       carregarConfig({
         ...base,
+        ...railway,
         NODE_ENV: "production",
         COOKIE_SEGURO: "false",
         ORIGENS_PERMITIDAS: "https://slate.aionixdev.com",
@@ -51,7 +54,7 @@ describe("cookie seguro", () => {
 describe("origens", () => {
   it("exige a lista em produção", () => {
     // Sem ela, ou a API recusa a própria PWA, ou aceita qualquer site.
-    expect(() => carregarConfig({ ...base, NODE_ENV: "production" })).toThrow(
+    expect(() => carregarConfig({ ...base, ...railway, NODE_ENV: "production" })).toThrow(
       ConfiguracaoInvalida,
     );
   });
@@ -95,10 +98,70 @@ describe("origens", () => {
   });
 });
 
+describe("endereço da sinalização", () => {
+  it("usa o Agente local em desenvolvimento", () => {
+    expect(carregarConfig({ ...base }).urlSinalizacao).toBe(
+      "ws://localhost:4500/sinalizacao",
+    );
+  });
+
+  it("deriva WSS do domínio público entregue pelo Railway", () => {
+    const config = carregarConfig({
+      ...base,
+      NODE_ENV: "production",
+      ORIGENS_PERMITIDAS: "https://slate.aionixdev.com",
+      RAILWAY_PUBLIC_DOMAIN: "slate-api.exemplo.up.railway.app",
+    });
+    expect(config.urlSinalizacao).toBe(
+      "wss://slate-api.exemplo.up.railway.app/sinalizacao",
+    );
+  });
+
+  it("recusa transporte sem TLS em produção", () => {
+    expect(() =>
+      carregarConfig({
+        ...base,
+        NODE_ENV: "production",
+        ORIGENS_PERMITIDAS: "https://slate.aionixdev.com",
+        URL_SINALIZACAO: "ws://api.exemplo.test/sinalizacao",
+      }),
+    ).toThrow(ConfiguracaoInvalida);
+  });
+});
+
 describe("banco", () => {
   it("recusa subir sem DATABASE_URL", () => {
     // Falhar ao subir é melhor do que falhar na primeira requisição, com o
     // sintoma longe da causa.
     expect(() => carregarConfig({})).toThrow(ConfiguracaoInvalida);
+  });
+});
+
+describe("releases privadas", () => {
+  it("mantém o token apenas na configuração do servidor", () => {
+    const config = carregarConfig({
+      ...base,
+      GITHUB_RELEASE_TOKEN: "token",
+      GITHUB_RELEASE_REPOSITORY: "alanaraujo-bit/SLATE",
+      URL_PUBLICA_API: "https://slate.aionixdev.com/api",
+    });
+    expect(config.releasesGitHub).toEqual({
+      token: "token",
+      repositorio: "alanaraujo-bit/SLATE",
+      urlPublicaApi: "https://slate.aionixdev.com/api",
+    });
+  });
+
+  it("recusa endpoint sem HTTPS em produção", () => {
+    expect(() =>
+      carregarConfig({
+        ...base,
+        ...railway,
+        NODE_ENV: "production",
+        ORIGENS_PERMITIDAS: "https://slate.aionixdev.com",
+        GITHUB_RELEASE_TOKEN: "token",
+        URL_PUBLICA_API: "http://api.exemplo.test",
+      }),
+    ).toThrow(ConfiguracaoInvalida);
   });
 });

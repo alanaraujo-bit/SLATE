@@ -1,0 +1,86 @@
+name: Publicar Agente Desktop
+
+on:
+  push:
+    tags:
+      - "slate-v*"
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "24"
+  PNPM_VERSION: "11.20.0"
+
+jobs:
+  publicar:
+    name: Instalador e atualização assinada
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar dependências reproduzíveis
+        run: pnpm install --frozen-lockfile
+
+      - name: Conferir se a tag corresponde à versão do aplicativo
+        shell: pwsh
+        run: |
+          $esperada = (Get-Content apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $versaoPackage = (Get-Content apps/desktop/package.json | ConvertFrom-Json).version
+          $cargo = Get-Content apps/desktop/src-tauri/Cargo.toml -Raw
+          if ($cargo -notmatch '(?m)^version = "([0-9]+\.[0-9]+\.[0-9]+)"$') {
+            throw "Não foi possível ler a versão do Cargo.toml."
+          }
+          $versaoCargo = $Matches[1]
+          $recebida = "${{ github.ref_name }}" -replace '^slate-v', ''
+          if ($versaoPackage -ne $esperada -or $versaoCargo -ne $esperada) {
+            throw "Versões divergentes: Tauri=$esperada, package.json=$versaoPackage, Cargo.toml=$versaoCargo."
+          }
+          if ($recebida -ne $esperada) {
+            throw "A tag ${{ github.ref_name }} não corresponde à versão $esperada do Agente."
+          }
+
+      - name: Testar antes de publicar
+        run: |
+          pnpm --filter @slate/desktop typecheck
+          pnpm --filter @slate/desktop test
+          cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+
+      - name: Gerar release, instalador e latest.json
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tagName: slate-v__VERSION__
+          releaseName: SLATE __VERSION__
+          releaseBody: |
+            Nova versão do Agente Desktop do SLATE.
+
+            O próprio Agente verifica a assinatura antes de instalar. Para uma
+            instalação nova, baixe o arquivo `-setup.exe` desta release.
+          releaseDraft: false
+          prerelease: false
+          generateReleaseNotes: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true

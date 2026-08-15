@@ -1,0 +1,2 @@
+ALTER TABLE "pedidos_pareamento" ADD COLUMN "confirmado_por_dispositivo_id" uuid;--> statement-breakpoint
+ALTER TABLE "pedidos_pareamento" ADD CONSTRAINT "pedidos_pareamento_confirmado_por_dispositivo_id_dispositivos_id_fk" FOREIGN KEY ("confirmado_por_dispositivo_id") REFERENCES "public"."dispositivos"("id") ON DELETE set null ON UPDATE no action;

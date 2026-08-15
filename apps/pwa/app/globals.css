@@ -305,3 +305,36 @@ button {
   font-size: var(--s-text-sm);
   font-weight: var(--s-weight-medium);
 }
+
+/* ======================================================================= */
+/* Controles reais                                                         */
+/* ======================================================================= */
+
+.controles-basicos {
+  width: 100%;
+  display: grid;
+  gap: var(--s-space-3);
+  padding: var(--s-space-4);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-lg);
+  background: var(--s-surface-raised);
+  text-align: left;
+}
+
+.controles-basicos h2 {
+  margin: 0 0 var(--s-space-1);
+  font-size: var(--s-text-lg);
+}
+
+.controle-resultado {
+  margin: 0;
+  font-size: var(--s-text-sm);
+}
+
+.controle-resultado--ok {
+  color: var(--s-success);
+}
+
+.controle-resultado--erro {
+  color: var(--s-danger);
+}

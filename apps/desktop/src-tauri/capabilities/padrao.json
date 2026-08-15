@@ -4,6 +4,11 @@
   "description": "Permissões da janela principal do Agente.",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

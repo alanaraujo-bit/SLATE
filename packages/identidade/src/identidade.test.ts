@@ -111,6 +111,25 @@ describe.each(ALGORITMOS)("identidade com %s", (algoritmo: Algoritmo) => {
   });
 });
 
+describe("compatibilidade com o Agente Rust legado", () => {
+  it("verifica chave Ed25519 exportada como 32 bytes crus", async () => {
+    const par = (await crypto.subtle.generateKey("Ed25519", true, [
+      "sign",
+      "verify",
+    ])) as CryptoKeyPair;
+    const publicaCrua = paraBase64Url(
+      new Uint8Array(await crypto.subtle.exportKey("raw", par.publicKey)),
+    );
+    const assinatura = paraBase64Url(
+      new Uint8Array(
+        await crypto.subtle.sign("Ed25519", par.privateKey, new TextEncoder().encode("prova")),
+      ),
+    );
+
+    expect(await verificar(publicaCrua, "Ed25519", "prova", assinatura)).toBe(true);
+  });
+});
+
 describe("verificação — entradas hostis", () => {
   it("recusa em vez de lançar diante de assinatura sem sentido", async () => {
     // Caminho de erro separado em código de verificação é onde a falha que

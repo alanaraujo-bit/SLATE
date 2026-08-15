@@ -5,6 +5,12 @@ import { usuarios } from "@slate/db/schema-contas";
 import { criarServidor } from "./servidor";
 import { NOME_COOKIE } from "./sessao";
 import type { Config } from "./config";
+import {
+  assinar,
+  gerarIdentidade,
+  mensagemConfirmacaoPareamento,
+  type IdentidadeDispositivo,
+} from "@slate/identidade";
 
 /**
  * Testes dos endpoints, contra Postgres real.
@@ -31,6 +37,7 @@ suite("API de contas", () => {
     databaseUrl: URL_BANCO ?? "",
     origensPermitidas: [ORIGEM],
     cookieSeguro: false,
+    urlSinalizacao: "ws://localhost:4500/sinalizacao",
   };
 
   const emailUnico = (rotulo: string) =>
@@ -427,6 +434,36 @@ suite("API de contas", () => {
       return { resposta, corpo: await resposta.json() };
     };
 
+    const registrarAgente = async (cookie: string) => {
+      const identidade = await gerarIdentidade();
+      const resposta = await app.request("/dispositivos/agente", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
+        body: JSON.stringify({
+          chavePublica: identidade.chavePublicaExportada,
+          algoritmo: identidade.algoritmo,
+          nome: "PC de teste",
+        }),
+      });
+      expect(resposta.status).toBe(201);
+      return identidade;
+    };
+
+    const provaDoAgente = async (
+      codigo: string,
+      identidade: IdentidadeDispositivo,
+    ) => ({
+      codigo,
+      chavePublicaAgente: identidade.chavePublicaExportada,
+      assinatura: await assinar(
+        identidade,
+        mensagemConfirmacaoPareamento({
+          codigo,
+          chavePublicaAgente: identidade.chavePublicaExportada,
+        }),
+      ),
+    });
+
     it("o pedido devolve um código de seis dígitos", async () => {
       const { cookie } = await cadastrar(emailUnico("pede"));
       const { resposta, corpo } = await pedirPareamento(cookie);
@@ -438,12 +475,13 @@ suite("API de contas", () => {
 
     it("o código certo conclui o pareamento", async () => {
       const { cookie } = await cadastrar(emailUnico("confirma"));
+      const agente = await registrarAgente(cookie);
       const { corpo } = await pedirPareamento(cookie);
 
       const resposta = await app.request("/pareamento/confirmar", {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
-        body: JSON.stringify({ codigo: corpo.codigo }),
+        body: JSON.stringify(await provaDoAgente(corpo.codigo, agente)),
       });
 
       expect(resposta.status).toBe(200);
@@ -452,31 +490,35 @@ suite("API de contas", () => {
 
     it("o dispositivo pareado aparece na lista", async () => {
       const { cookie } = await cadastrar(emailUnico("aparece"));
+      const agente = await registrarAgente(cookie);
       const { corpo } = await pedirPareamento(cookie);
 
       await app.request("/pareamento/confirmar", {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
-        body: JSON.stringify({ codigo: corpo.codigo }),
+        body: JSON.stringify(await provaDoAgente(corpo.codigo, agente)),
       });
 
       const lista = await (
         await app.request("/dispositivos", { headers: { Cookie: cookie } })
       ).json();
 
-      expect(lista.dispositivos).toHaveLength(1);
-      expect(lista.dispositivos[0].nome).toBe("Celular do Alan");
-      expect(lista.dispositivos[0].papel).toBe("surface");
+      expect(lista.dispositivos).toHaveLength(2);
+      const superficie = lista.dispositivos.find(
+        (dispositivo: { papel: string }) => dispositivo.papel === "surface",
+      );
+      expect(superficie.nome).toBe("Celular do Alan");
     });
 
     it("o código errado é recusado e desconta tentativa", async () => {
       const { cookie } = await cadastrar(emailUnico("errado"));
+      const agente = await registrarAgente(cookie);
       await pedirPareamento(cookie);
 
       const resposta = await app.request("/pareamento/confirmar", {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
-        body: JSON.stringify({ codigo: "000000" }),
+        body: JSON.stringify(await provaDoAgente("000000", agente)),
       });
 
       expect(resposta.status).toBe(401);
@@ -487,13 +529,14 @@ suite("API de contas", () => {
       // Recomeçar passa a exigir código novo, o que devolve o espaço de busca
       // ao tamanho original.
       const { cookie } = await cadastrar(emailUnico("bloqueia"));
+      const agente = await registrarAgente(cookie);
       const { corpo } = await pedirPareamento(cookie);
 
       for (let i = 0; i < 3; i++) {
         await app.request("/pareamento/confirmar", {
           method: "POST",
           headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
-          body: JSON.stringify({ codigo: "000000" }),
+          body: JSON.stringify(await provaDoAgente("000000", agente)),
         });
       }
 
@@ -501,19 +544,20 @@ suite("API de contas", () => {
       const resposta = await app.request("/pareamento/confirmar", {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
-        body: JSON.stringify({ codigo: corpo.codigo }),
+        body: JSON.stringify(await provaDoAgente(corpo.codigo, agente)),
       });
 
       expect(resposta.status).toBe(404);
-    });
+    }, 15_000);
 
     it("não é possível confirmar sem um pedido em aberto", async () => {
       const { cookie } = await cadastrar(emailUnico("sem-pedido"));
+      const agente = await registrarAgente(cookie);
 
       const resposta = await app.request("/pareamento/confirmar", {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
-        body: JSON.stringify({ codigo: "123456" }),
+        body: JSON.stringify(await provaDoAgente("123456", agente)),
       });
 
       expect(resposta.status).toBe(404);
@@ -524,6 +568,7 @@ suite("API de contas", () => {
       // simplesmente não encontra pedido.
       const alvo = await cadastrar(emailUnico("alvo"));
       const atacante = await cadastrar(emailUnico("atacante"));
+      const agenteAtacante = await registrarAgente(atacante.cookie);
 
       const { corpo } = await pedirPareamento(alvo.cookie);
 
@@ -534,7 +579,7 @@ suite("API de contas", () => {
           Cookie: atacante.cookie,
           Origin: ORIGEM,
         },
-        body: JSON.stringify({ codigo: corpo.codigo }),
+        body: JSON.stringify(await provaDoAgente(corpo.codigo, agenteAtacante)),
       });
 
       expect(resposta.status).toBe(404);

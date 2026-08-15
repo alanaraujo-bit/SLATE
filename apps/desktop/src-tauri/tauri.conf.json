@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "SLATE",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.aionixdev.slate",
   "build": {
     "frontendDist": "../dist",
@@ -29,15 +29,42 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "icon": ["icons/icon.ico"],
     "publisher": "Aionixdev",
     "copyright": "© Aionixdev",
     "shortDescription": "Superfície de controle para o seu computador",
     "longDescription": "O SLATE transforma seu celular ou tablet numa superfície de controle inteligente e contextual para este computador.",
     "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "minimumWebview2Version": "110.0.1531.0",
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["PortugueseBR"]
+        "languages": ["PortugueseBR"],
+        "customLanguageFiles": {
+          "PortugueseBR": "./windows/PortugueseBR.nsh"
+        },
+        "headerImage": "./windows/instalador-cabecalho.bmp",
+        "sidebarImage": "./windows/instalador-lateral.bmp",
+        "installerIcon": "./icons/icon.ico",
+        "uninstallerIcon": "./icons/icon.ico",
+        "uninstallerHeaderImage": "./windows/instalador-cabecalho.bmp",
+        "installerHooks": "./windows/hooks.nsh",
+        "startMenuFolder": "Aionixdev",
+        "compression": "lzma"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhFMEVFM0E4ODc4QUZCQzIKUldUQys0cUhxT01PanFhU3NjY3hVb2xMUjYvWTV0aEIwMS9uVUxIUTRrWllqR0JYdWUvc0YvNTIK",
+      "endpoints": [
+        "https://slate.aionixdev.com/api/atualizacoes/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

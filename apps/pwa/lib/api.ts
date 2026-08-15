@@ -18,6 +18,7 @@
  * um cookie do próprio site.
  */
 export const URL_API = "/api";
+export const EVENTO_SEM_CONEXAO = "slate:sem-conexao";
 
 export interface Usuario {
   id: string;
@@ -31,6 +32,8 @@ export interface DispositivoResumo {
   papel: "agent" | "surface";
   situacao: "pendente" | "ativo" | "revogado";
   escopos: string[];
+  chavePublica: string;
+  algoritmo: string;
 }
 
 export type ResultadoApi<T> =
@@ -84,6 +87,7 @@ async function chamar<T>(
   } catch {
     // Falha de rede não tem status; virar um código próprio evita que a tela
     // precise distinguir `undefined` de erro de verdade.
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENTO_SEM_CONEXAO));
     return { ok: false, erro: "sem_conexao", status: 0 };
   }
 
@@ -129,6 +133,44 @@ export const api = {
       codigoFormatado: string;
       expiraEm: string;
     }>("/pareamento/pedidos", {
+      method: "POST",
+      body: JSON.stringify(dados),
+    }),
+
+  consultarPedidoPareamento: (pedidoId: string) =>
+    chamar<
+      | { situacao: "pendente" | "expirado" | "bloqueado" }
+      | {
+          situacao: "confirmado";
+          agente: {
+            id: string;
+            nome: string;
+            papel: "agent";
+            chavePublica: string;
+            algoritmo: string;
+            escopos: string[];
+          };
+        }
+    >(`/pareamento/pedidos/${encodeURIComponent(pedidoId)}`),
+
+  pedirDesafioSinalizacao: (chavePublica: string) =>
+    chamar<{
+      desafioId: string;
+      dispositivoId: string;
+      nonce: string;
+      expiraEm: number;
+      urlSinalizacao: string;
+    }>("/sinalizacao/desafios", {
+      method: "POST",
+      body: JSON.stringify({ chavePublica }),
+    }),
+
+  trocarDesafioSinalizacao: (dados: {
+    desafioId: string;
+    nonce: string;
+    assinatura: string;
+  }) =>
+    chamar<{ token: string; expiraEm: number }>("/sinalizacao/tokens", {
       method: "POST",
       body: JSON.stringify(dados),
     }),

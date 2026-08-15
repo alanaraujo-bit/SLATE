@@ -53,11 +53,32 @@ pub struct Dispositivo {
     pub nome: String,
     pub papel: String,
     pub situacao: String,
+    #[serde(rename = "chavePublica")]
+    pub chave_publica: String,
+    pub algoritmo: String,
+    pub escopos: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct RespostaDispositivos {
     dispositivos: Vec<Dispositivo>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesafioSinalizacao {
+    pub desafio_id: String,
+    pub dispositivo_id: String,
+    pub nonce: String,
+    pub expira_em: i64,
+    pub url_sinalizacao: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenSinalizacao {
+    pub token: String,
+    pub expira_em: i64,
 }
 
 pub struct ClienteApi {
@@ -91,10 +112,10 @@ impl ClienteApi {
     /// Traduz a resposta de erro da API para um erro com significado local.
     async fn erro_de(&self, resposta: reqwest::Response) -> ErroApi {
         let status = resposta.status().as_u16();
-        let corpo: RespostaErro = resposta
-            .json()
-            .await
-            .unwrap_or(RespostaErro { erro: None, tentativas_restantes: None });
+        let corpo: RespostaErro = resposta.json().await.unwrap_or(RespostaErro {
+            erro: None,
+            tentativas_restantes: None,
+        });
 
         match corpo.erro.as_deref() {
             Some("credenciais_invalidas") => ErroApi::CredenciaisInvalidas,
@@ -188,11 +209,20 @@ impl ClienteApi {
     }
 
     /// Confirma o pareamento com o código exibido no celular.
-    pub async fn confirmar_pareamento(&self, codigo: &str) -> Result<Dispositivo, ErroApi> {
+    pub async fn confirmar_pareamento_com_prova(
+        &self,
+        codigo: &str,
+        chave_publica_agente: &str,
+        assinatura: &str,
+    ) -> Result<Dispositivo, ErroApi> {
         let resposta = self
             .http
             .post(self.url("/pareamento/confirmar"))
-            .json(&serde_json::json!({ "codigo": codigo.trim() }))
+            .json(&serde_json::json!({
+                "codigo": codigo.trim(),
+                "chavePublicaAgente": chave_publica_agente,
+                "assinatura": assinatura,
+            }))
             .send()
             .await
             .map_err(|_| ErroApi::SemConexao)?;
@@ -226,6 +256,48 @@ impl ClienteApi {
         let corpo: RespostaDispositivos =
             resposta.json().await.map_err(|_| ErroApi::Inesperado(0))?;
         Ok(corpo.dispositivos)
+    }
+
+    pub async fn pedir_desafio_sinalizacao(
+        &self,
+        chave_publica: &str,
+    ) -> Result<DesafioSinalizacao, ErroApi> {
+        let resposta = self
+            .http
+            .post(self.url("/sinalizacao/desafios"))
+            .json(&serde_json::json!({ "chavePublica": chave_publica }))
+            .send()
+            .await
+            .map_err(|_| ErroApi::SemConexao)?;
+
+        if !resposta.status().is_success() {
+            return Err(self.erro_de(resposta).await);
+        }
+        resposta.json().await.map_err(|_| ErroApi::Inesperado(0))
+    }
+
+    pub async fn trocar_desafio_sinalizacao(
+        &self,
+        desafio_id: &str,
+        nonce: &str,
+        assinatura: &str,
+    ) -> Result<TokenSinalizacao, ErroApi> {
+        let resposta = self
+            .http
+            .post(self.url("/sinalizacao/tokens"))
+            .json(&serde_json::json!({
+                "desafioId": desafio_id,
+                "nonce": nonce,
+                "assinatura": assinatura,
+            }))
+            .send()
+            .await
+            .map_err(|_| ErroApi::SemConexao)?;
+
+        if !resposta.status().is_success() {
+            return Err(self.erro_de(resposta).await);
+        }
+        resposta.json().await.map_err(|_| ErroApi::Inesperado(0))
     }
 }
 

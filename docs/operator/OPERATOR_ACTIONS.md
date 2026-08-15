@@ -1,5 +1,54 @@
 # SLATE — Ações do Operador
 
+## AÇÃO-007 — Criar a chave do relay TURN
+
+**SITUAÇÃO:** ABERTA
+**TRAVA O PROJETO:** SIM, apenas o fallback entre redes restritivas
+**IMPEDE:** concluir `P1-M5-T4` e provar o caminho forçado por relay. O caminho
+direto na mesma rede continua funcionando.
+
+### Por que
+
+O TURN precisa de infraestrutura pública com UDP, TCP e TLS. O Railway não
+expõe UDP ao público, portanto hospedar `coturn` no projeto entregaria um
+fallback parcial. A decisão D-011 adotou o Cloudflare Realtime TURN: a API já
+gera credenciais temporárias e nunca expõe o token de emissão aos clientes.
+
+### O que fazer
+
+1. No painel Cloudflare, abrir **Realtime → TURN** e criar uma chave chamada
+   `slate-production`.
+2. Guardar no serviço `slate-api` do Railway:
+
+   ```text
+   CLOUDFLARE_TURN_KEY_ID=<identificador da chave>
+   CLOUDFLARE_TURN_API_TOKEN=<token mostrado uma única vez>
+   TURN_TTL_SEGUNDOS=21600
+   ```
+
+3. Se o domínio público da API mudar, definir no projeto `slate-pwa` da Vercel
+   `URL_SINALIZACAO_PUBLICA=wss://<domínio>/sinalizacao` antes do build. A CSP
+   autoriza somente essa origem exata.
+
+### Como validar
+
+Executar o teste de interoperabilidade com `iceTransportPolicy: "relay"` e
+confirmar em `getStats()` que o par selecionado contém candidato `relay`. Não
+basta o DataChannel abrir: o teste precisa registrar o tipo do candidato usado.
+
+### O que já foi feito
+
+A API valida a resposta do provedor, remove as rotas na porta 53 que navegadores
+bloqueiam, renova antes da expiração e cai para STUN/caminho direto se o provedor
+falhar. PWA e Agente aplicam a mesma lista ICE sem conhecer o segredo de emissão.
+
+### O que acontece depois
+
+O mesmo DataChannel passa a funcionar entre redes diferentes e sob NAT
+simétrico, sem mudança de interface ou configuração pelo usuário.
+
+---
+
 Ações que dependem exclusivamente do operador (Alan / Aionixdev) e que não
 podem ser feitas de forma autônoma. Conforme o mandato §28, nenhuma delas para
 o projeto; cada uma registra exatamente o que impede.
@@ -108,8 +157,98 @@ instalador sem assinatura.
 
 ### O que acontece depois
 
-Os instaladores publicados passam a ser confiáveis, os alertas do SmartScreen
-desaparecem, e a atualização automática consegue verificar assinaturas.
+Os instaladores publicados passam a ser confiáveis e os alertas do SmartScreen
+desaparecem. A assinatura criptográfica do atualizador é independente e já é
+obrigatória; Authenticode identifica a Aionixdev para o Windows e para a pessoa.
+
+---
+
+## AÇÃO-008 — Token somente leitura para releases privadas do Agente
+
+**SITUAÇÃO:** ABERTA
+**TRAVA O PROJETO:** NÃO
+**IMPEDE:** a busca automática alcançar uma release real enquanto o repositório
+do SLATE continuar privado. O código, a verificação de assinatura e os testes
+funcionam sem o token.
+
+### Por que
+
+Assets de release de um repositório privado não são baixáveis anonimamente. O
+Agente não pode carregar um token do GitHub, porque qualquer pessoa conseguiria
+extraí-lo do executável. A API do SLATE consulta a release no servidor e devolve
+ao Agente apenas uma URL temporária do pacote específico.
+
+### O que fazer
+
+1. Criar um fine-grained personal access token no GitHub restrito apenas ao
+   repositório `alanaraujo-bit/SLATE`, com acesso de leitura a **Contents**.
+2. Adicionar no serviço da API no Railway:
+   `GITHUB_RELEASE_TOKEN=<token>`.
+3. Manter `GITHUB_RELEASE_REPOSITORY=alanaraujo-bit/SLATE` e
+   `URL_PUBLICA_API=https://slate.aionixdev.com/api` (os padrões atuais já são
+   esses; explicitar é recomendado).
+4. Fazer redeploy da API.
+
+### Como validar
+
+Após publicar uma release maior que a instalada:
+
+```text
+GET https://slate.aionixdev.com/api/atualizacoes/windows/x86_64/0.1.0
+```
+
+responde `200` com `version`, `url` e `signature`; abrir `url` responde com um
+redirecionamento temporário para o pacote `-setup.exe`. Um ID de asset que não
+pertence à release responde `404`, e nenhum token aparece em nenhuma resposta.
+
+### O que acontece depois
+
+A busca automática e o botão **Buscar atualização** passam a consumir as
+releases reais sem expor a credencial do repositório.
+
+---
+
+## AÇÃO-009 — Guardar a chave de atualização no GitHub Actions
+
+**SITUAÇÃO:** ABERTA
+**TRAVA O PROJETO:** NÃO
+**IMPEDE:** o workflow publicar o primeiro pacote assinado. O instalador local e
+os testes de adulteração já usam a chave definitiva.
+
+### Por que
+
+O workflow precisa receber a chave privada e sua senha para assinar cada release.
+Enviar esses segredos ao GitHub é uma operação sensível e exige autorização
+explícita do operador. A chave privada nunca entra no repositório.
+
+### O que fazer
+
+Autorizar a gravação de `TAURI_SIGNING_PRIVATE_KEY` e
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` nos secrets do repositório. As fontes locais
+estão protegidas para o usuário atual em:
+
+```text
+%LOCALAPPDATA%\Aionixdev\SLATE\release
+```
+
+Fazer também uma cópia de segurança cifrada. Depois que a primeira release sair,
+perder a chave impede atualizar automaticamente instalações antigas.
+
+### Como validar
+
+`gh secret list --repo alanaraujo-bit/SLATE` mostra os dois nomes (nunca os
+valores), e o workflow **Publicar Agente Desktop** produz o `.exe`, o `.sig` e o
+`latest.json` sem erro de chave ausente.
+
+### O que já foi feito
+
+A chave forte foi gerada, a pública está embutida no Agente, os arquivos locais
+têm ACL restrita e um teste prova que um único bit alterado invalida o pacote.
+
+### O que acontece depois
+
+Criar a tag `slate-vX.Y.Z` passa a publicar uma atualização verificável de ponta
+a ponta.
 
 ---
 

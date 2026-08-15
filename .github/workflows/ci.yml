@@ -52,10 +52,41 @@ jobs:
           --filter @slate/api
           --filter @slate/control-center
           --filter @slate/pwa
+          --filter @slate/desktop
           test
 
       - name: Build do Centro de Controle
         run: pnpm --filter @slate/control-center exec next build
+
+  agente:
+    name: Agente Windows — Rust e atualizador
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Interface do Agente
+        run: |
+          pnpm --filter @slate/desktop typecheck
+          pnpm --filter @slate/desktop test
+
+      - name: Agente nativo e assinatura de atualização
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
 
   integracao:
     name: Testes de integração

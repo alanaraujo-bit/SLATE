@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/target
+**/dist
+**/coverage
+**/playwright-report
+**/test-results
+.git
+.vercel
+.railway
+apps/desktop/src-tauri/gen
+apps/desktop/src-tauri/target

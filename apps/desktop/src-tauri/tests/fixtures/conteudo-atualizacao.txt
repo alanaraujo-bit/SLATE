@@ -1,0 +1,3 @@
+SLATE — fixture de atualização assinada.
+
+Qualquer alteração neste conteúdo precisa invalidar a assinatura do teste.

@@ -18,6 +18,7 @@ import { VERSAO_PROTOCOLO } from "./envelope";
  */
 export const CAPACIDADES = [
   "action.execute",
+  "action.media",
   "action.define",
   "state.system",
   "state.media",

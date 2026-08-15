@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+const SENHA_E2E = "cavalo-bateria-grampo";
+const emailE2e = () =>
+  `offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@exemplo.test`;
+
 /**
  * Instalabilidade e comportamento offline.
  *
@@ -184,12 +188,18 @@ test.describe("offline", () => {
     // Abrir offline não basta: a aplicação precisa dizer por que os controles
     // não respondem, senão parece defeito dela.
     await page.goto("/");
+    await page.getByRole("button", { name: /não tenho conta/i }).click();
+    await page.getByLabel("E-mail").fill(emailE2e());
+    await page.getByLabel("Senha").fill(SENHA_E2E);
+    await page.getByRole("button", { name: /criar conta/i }).click();
     await expect(page.locator(".s-indicador")).toContainText("Parear");
 
     await context.setOffline(true);
     await expect(page.locator(".s-indicador")).toContainText("Sem internet");
 
     await context.setOffline(false);
+    // A volta também é automática: ninguém precisa descobrir que existe um
+    // botão de tentar de novo para recuperar o controle.
     await expect(page.locator(".s-indicador")).toContainText("Parear");
   });
 

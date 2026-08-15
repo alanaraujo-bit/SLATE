@@ -1,8 +1,12 @@
+mod acoes;
 mod api;
 mod identidade;
+mod pares;
+mod transporte;
 
 use api::{ClienteApi, Dispositivo, Usuario};
-use identidade::Identidade;
+use identidade::{mensagem_confirmacao_pareamento, Identidade};
+use pares::ParesConfiaveis;
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::Manager;
@@ -19,6 +23,11 @@ struct Estado {
     nome_computador: String,
     /// Guarda o último erro de inicialização para a interface poder explicá-lo.
     falha_inicial: Mutex<Option<String>>,
+    pares: Arc<ParesConfiaveis>,
+    /// Mantém a tarefa residente viva durante todo o processo. Sair da conta
+    /// não revoga este computador; a identidade do dispositivo continua sendo
+    /// suficiente para ele voltar à sinalização após reiniciar o Windows.
+    _transporte: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
 
 #[derive(Serialize)]
@@ -65,14 +74,15 @@ async fn entrar(
 
     // Registra este computador logo após entrar. Falhar aqui não desfaz a
     // entrada: a sessão é válida, e o registro pode ser tentado de novo.
-    let _ = estado
+    estado
         .api
         .registrar_agente(
             &estado.identidade.chave_publica(),
             estado.identidade.algoritmo(),
             &estado.nome_computador,
         )
-        .await;
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(usuario)
 }
@@ -92,11 +102,27 @@ async fn confirmar_pareamento(
     estado: tauri::State<'_, Estado>,
     codigo: String,
 ) -> Result<Dispositivo, String> {
-    estado
+    let codigo = codigo.trim();
+    let chave_publica = estado.identidade.chave_publica();
+    let prova = mensagem_confirmacao_pareamento(codigo, &chave_publica);
+    let dispositivo = estado
         .api
-        .confirmar_pareamento(&codigo)
+        .confirmar_pareamento_com_prova(
+            codigo,
+            &chave_publica,
+            &estado.identidade.assinar(prova.as_bytes()),
+        )
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // A resposta desta cerimônia física é a única fonte que pode criar uma
+    // entrada na raiz de confiança local. Listas posteriores da nuvem servem
+    // apenas para remover revogados, nunca para substituir esta chave.
+    estado
+        .pares
+        .guardar_confirmado(&dispositivo)
+        .map_err(|e| e.to_string())?;
+    Ok(dispositivo)
 }
 
 #[tauri::command]
@@ -113,14 +139,19 @@ fn nome_do_computador() -> String {
 fn endereco_api() -> String {
     // Configurável para desenvolvimento; o padrão aponta para produção, que é
     // o que um instalador distribuído precisa usar.
-    std::env::var("SLATE_API_URL")
-        .unwrap_or_else(|_| "https://slate.aionixdev.com/api".to_string())
+    std::env::var("SLATE_API_URL").unwrap_or_else(|_| "https://slate.aionixdev.com/api".to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let pasta = app
                 .path()
@@ -137,11 +168,20 @@ pub fn run() {
             };
 
             if let Some(identidade) = identidade {
+                let pares = Arc::new(ParesConfiaveis::carregar(&pasta).map_err(|e| e.to_string())?);
+                let api = ClienteApi::novo(endereco_api());
+                let tarefa = tauri::async_runtime::spawn(transporte::executar(
+                    api.clone(),
+                    identidade.clone(),
+                    pares.clone(),
+                ));
                 app.manage(Estado {
                     identidade,
-                    api: ClienteApi::novo(endereco_api()),
+                    api,
                     nome_computador: nome_do_computador(),
                     falha_inicial: Mutex::new(falha),
+                    pares,
+                    _transporte: Mutex::new(Some(tarefa)),
                 });
             } else {
                 return Err(falha.unwrap_or_default().into());

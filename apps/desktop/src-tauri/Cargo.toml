@@ -1,10 +1,10 @@
 [package]
 name = "slate-agente"
-version = "0.1.0"
+version = "0.1.1"
 description = "Agente do SLATE para Windows"
 authors = ["Aionixdev"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.88"
 
 [lib]
 name = "slate_agente_lib"
@@ -16,6 +16,9 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -30,14 +33,28 @@ reqwest = { version = "0.12", default-features = false, features = [
     "cookies",
     "rustls-tls",
 ] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+
+# Transporte em tempo real. `webrtc` fornece a pilha completa (ICE, TURN,
+# DTLS, SCTP e DataChannel); usar `str0m` exigiria implementar descoberta de
+# interfaces e TURN fora da biblioteca, justamente as partes críticas do P1-M5.
+webrtc = "0.20.2"
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+async-trait = "0.1"
+local-ip-address = "0.6.13"
+uuid = { version = "1", features = ["v4", "serde"] }
 
 # Identidade do dispositivo.
 ed25519-dalek = { version = "2", features = ["rand_core", "pkcs8"] }
+p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
 rand = "0.8"
 base64 = "0.22"
 
 thiserror = "2"
+
+[dev-dependencies]
+minisign-verify = "0.2.5"
 
 [target.'cfg(windows)'.dependencies]
 # DPAPI, para proteger a chave privada em repouso.
@@ -47,6 +64,7 @@ thiserror = "2"
 windows = { version = "0.58", features = [
     "Win32_Security_Cryptography",
     "Win32_Foundation",
+    "Win32_UI_Input_KeyboardAndMouse",
 ] }
 
 [features]

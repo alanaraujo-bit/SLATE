@@ -12,7 +12,7 @@
  * é pior que um controle que admite não saber.
  */
 
-const VERSAO = "slate-3b07bc0b-msuiji6z";
+const VERSAO = "slate-3b07bc0b-msusocga";
 const CACHE_CASCA = `${VERSAO}-casca`;
 const CACHE_ATIVOS = `${VERSAO}-ativos`;
 

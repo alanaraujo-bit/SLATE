@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hello } from "./handshake";
 
 /**
  * Schemas de conteúdo por tipo de mensagem (ADR-0003).
@@ -122,6 +123,7 @@ export const contextoAlterado = z.object({
  * ter sido conferido.
  */
 export const SCHEMAS = {
+  "session.hello": hello,
   "action.execute": acaoExecutarPedido,
   "action.execute.result": acaoExecutarResposta,
   "action.progress": acaoProgresso,
@@ -158,6 +160,7 @@ export function validarConteudo(
 
 /** Se um escopo autoriza um tipo de mensagem. Verificado no Agente. */
 export const ESCOPO_EXIGIDO: Record<TipoConhecido, Escopo | null> = {
+  "session.hello": null,
   "action.execute": "action.execute",
   "action.execute.result": null,
   "action.progress": null,

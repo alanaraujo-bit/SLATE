@@ -1,6 +1,14 @@
 import { Hono, type Context, type Next } from "hono";
 import type { Database } from "@slate/db";
-import { ESCOPOS_PADRAO } from "@slate/protocol";
+import {
+  ESCOPOS_PADRAO,
+  pedidoDesafioSinalizacao,
+  provaDesafioSinalizacao,
+} from "@slate/protocol";
+import {
+  mensagemConfirmacaoPareamento,
+  verificar,
+} from "@slate/identidade";
 import {
   MAX_TENTATIVAS,
   VALIDADE_MS as VALIDADE_PAREAMENTO_MS,
@@ -31,6 +39,8 @@ import {
   atualizarHashSenha,
   bloquearPedido,
   buscarPedidoAtivo,
+  buscarDispositivoPorChave,
+  buscarResultadoPedidoPareamento,
   buscarUsuarioPorEmail,
   confirmarPedido,
   contarTentativas,
@@ -47,6 +57,12 @@ import {
   revogarDispositivo,
   type ContextoSessao,
 } from "./repositorio";
+import {
+  emitirDesafioSinalizacao,
+  trocarDesafioPorToken,
+} from "./autenticacao-sinalizacao";
+import { buscarDispositivoAtivoPorChave } from "./repositorio-sinalizacao";
+import { ErroAtualizacoes, ServicoAtualizacoesGitHub } from "./atualizacoes";
 
 /**
  * API do SLATE.
@@ -62,10 +78,16 @@ export interface Dependencias {
   config: Config;
   /** Injetável para os testes não dependerem do relógio. */
   agora?: () => Date;
+  atualizacoes?: ServicoAtualizacoesGitHub;
 }
 
-export function criarServidor({ db, config, agora = () => new Date() }: Dependencias) {
+export function criarServidor({ db, config, agora = () => new Date(), atualizacoes }: Dependencias) {
   const app = new Hono<{ Variables: Variaveis }>();
+  const servicoAtualizacoes =
+    atualizacoes ??
+    (config.releasesGitHub
+      ? new ServicoAtualizacoesGitHub(config.releasesGitHub)
+      : undefined);
 
   const opcoesCookie = {
     seguro: config.cookieSeguro,
@@ -142,6 +164,53 @@ export function criarServidor({ db, config, agora = () => new Date() }: Dependen
       // O motivo não é exposto: mensagem de erro de banco costuma conter host
       // e usuário.
       return c.json({ situacao: "degradado", banco: "inacessivel" }, 503);
+    }
+  });
+
+  // ---- Atualizações do Agente ------------------------------------------
+
+  // Esta rota precisa vir antes da rota parametrizada logo abaixo. Em Hono,
+  // "/download/11/22" também casa com "/:alvo/:arquitetura/:versao".
+  app.get("/atualizacoes/download/:releaseId/:assetId", async (c) => {
+    if (!servicoAtualizacoes) return c.json({ erro: "nao_encontrado" }, 404);
+    const releaseId = Number(c.req.param("releaseId"));
+    const assetId = Number(c.req.param("assetId"));
+    if (!Number.isSafeInteger(releaseId) || !Number.isSafeInteger(assetId)) {
+      return c.json({ erro: "nao_encontrado" }, 404);
+    }
+    try {
+      return c.redirect(await servicoAtualizacoes.urlTemporaria(releaseId, assetId), 302);
+    } catch (erro) {
+      if (erro instanceof ErroAtualizacoes && erro.codigo === "pacote_ausente") {
+        return c.json({ erro: "nao_encontrado" }, 404);
+      }
+      console.error("Falha ao entregar pacote de atualização:", erro);
+      return c.json({ erro: "atualizacoes_indisponiveis" }, 503);
+    }
+  });
+
+  app.get("/atualizacoes/:alvo/:arquitetura/:versao", async (c) => {
+    if (!servicoAtualizacoes) {
+      c.header("Retry-After", "3600");
+      return c.json({ erro: "atualizacoes_indisponiveis" }, 503);
+    }
+    try {
+      const resultado = await servicoAtualizacoes.consultar(
+        c.req.param("alvo"),
+        c.req.param("arquitetura"),
+        c.req.param("versao"),
+      );
+      if (resultado.tipo === "nenhuma") return c.body(null, 204);
+      return c.json({
+        version: resultado.versao,
+        notes: resultado.notas,
+        pub_date: resultado.publicadaEm,
+        url: resultado.url,
+        signature: resultado.assinatura,
+      });
+    } catch (erro) {
+      console.error("Falha ao consultar atualização:", erro);
+      return c.json({ erro: "atualizacoes_indisponiveis" }, 503);
     }
   });
 
@@ -292,6 +361,8 @@ export function criarServidor({ db, config, agora = () => new Date() }: Dependen
         papel: d.papel,
         situacao: d.situacao,
         escopos: d.escopos.split(" ").filter(Boolean),
+        chavePublica: d.chavePublica,
+        algoritmo: d.algoritmo,
         criadoEm: d.criadoEm,
         ultimoAcessoEm: d.ultimoAcessoEm,
       })),
@@ -398,11 +469,34 @@ export function criarServidor({ db, config, agora = () => new Date() }: Dependen
   app.post("/pareamento/confirmar", exigirSessao, async (c) => {
     const sessao = c.get("sessao");
     const corpo = await c.req.json().catch(() => null);
-    const { codigo } = (corpo ?? {}) as Record<string, unknown>;
+    const { codigo, chavePublicaAgente, assinatura } = (corpo ?? {}) as Record<
+      string,
+      unknown
+    >;
 
-    if (typeof codigo !== "string") {
+    if (
+      typeof codigo !== "string" ||
+      typeof chavePublicaAgente !== "string" ||
+      typeof assinatura !== "string"
+    ) {
       return c.json({ erro: "codigo_invalido" }, 400);
     }
+
+    const agente = await buscarDispositivoAtivoPorChave(db, chavePublicaAgente);
+    const provaValida =
+      agente?.usuarioId === sessao.usuarioId &&
+      agente.papel === "agent" &&
+      (await verificar(
+        agente.chavePublica,
+        agente.algoritmo,
+        mensagemConfirmacaoPareamento({
+          codigo,
+          chavePublicaAgente,
+        }),
+        assinatura,
+      ));
+
+    if (!provaValida) return c.json({ erro: "agente_invalido" }, 401);
 
     const pedido = await buscarPedidoAtivo(db, sessao.usuarioId, agora());
     if (!pedido) {
@@ -424,26 +518,142 @@ export function criarServidor({ db, config, agora = () => new Date() }: Dependen
       return c.json({ erro: "codigo_incorreto", tentativasRestantes: restantes }, 401);
     }
 
-    let dispositivo;
-    try {
-      dispositivo = await criarDispositivo(db, {
-        usuarioId: sessao.usuarioId,
-        papel: "surface",
-        nome: pedido.nomeSolicitante,
-        chavePublica: pedido.chavePublicaSolicitante,
-        algoritmo: pedido.algoritmo,
-        escopos: ESCOPOS_PADRAO.join(" "),
-      });
-    } catch {
-      return c.json({ erro: "chave_ja_registrada" }, 409);
+    let dispositivo = await buscarDispositivoPorChave(
+      db,
+      pedido.chavePublicaSolicitante,
+    );
+    if (dispositivo) {
+      // Permite repetir a cerimônia física para recuperar a cópia local da
+      // chave do Agente (por exemplo, após limpar os dados da PWA). Isso não
+      // ressuscita dispositivo revogado nem move chave entre contas.
+      if (
+        dispositivo.usuarioId !== sessao.usuarioId ||
+        dispositivo.papel !== "surface" ||
+        dispositivo.situacao !== "ativo"
+      ) {
+        return c.json({ erro: "chave_ja_registrada" }, 409);
+      }
+    } else {
+      try {
+        dispositivo = await criarDispositivo(db, {
+          usuarioId: sessao.usuarioId,
+          papel: "surface",
+          nome: pedido.nomeSolicitante,
+          chavePublica: pedido.chavePublicaSolicitante,
+          algoritmo: pedido.algoritmo,
+          escopos: ESCOPOS_PADRAO.join(" "),
+        });
+      } catch {
+        return c.json({ erro: "chave_ja_registrada" }, 409);
+      }
     }
 
-    await confirmarPedido(db, pedido.id);
+    await confirmarPedido(db, pedido.id, agente.id);
 
     return c.json({
       pareado: true,
-      dispositivo: { id: dispositivo.id, nome: dispositivo.nome },
+      dispositivo: {
+        id: dispositivo.id,
+        nome: dispositivo.nome,
+        papel: dispositivo.papel,
+        situacao: dispositivo.situacao,
+        chavePublica: dispositivo.chavePublica,
+        algoritmo: dispositivo.algoritmo,
+        escopos: dispositivo.escopos.split(" ").filter(Boolean),
+      },
     });
+  });
+
+  /**
+   * A superfície consulta o pedido específico que ela criou. Quando o Agente
+   * confirma, esta resposta entrega a chave que será fixada no IndexedDB; a
+   * lista geral de dispositivos nunca cria confiança.
+   */
+  app.get("/pareamento/pedidos/:id", exigirSessao, async (c) => {
+    const sessao = c.get("sessao");
+    const pedidoId = c.req.param("id");
+    if (!pedidoId) return c.json({ erro: "nao_encontrado" }, 404);
+    const resultado = await buscarResultadoPedidoPareamento(
+      db,
+      sessao.usuarioId,
+      pedidoId,
+    );
+    if (!resultado) return c.json({ erro: "nao_encontrado" }, 404);
+    if (resultado.bloqueadoEm) return c.json({ situacao: "bloqueado" });
+    if (!resultado.confirmadoEm) {
+      return c.json({
+        situacao: resultado.expiraEm.getTime() > agora().getTime() ? "pendente" : "expirado",
+      });
+    }
+    if (
+      !resultado.agenteId ||
+      resultado.agentePapel !== "agent" ||
+      resultado.agenteSituacao !== "ativo" ||
+      !resultado.agenteChavePublica ||
+      !resultado.agenteAlgoritmo
+    ) {
+      return c.json({ erro: "agente_invalido" }, 409);
+    }
+    return c.json({
+      situacao: "confirmado",
+      agente: {
+        id: resultado.agenteId,
+        nome: resultado.agenteNome ?? "Computador",
+        papel: "agent" as const,
+        chavePublica: resultado.agenteChavePublica,
+        algoritmo: resultado.agenteAlgoritmo,
+        escopos: (resultado.agenteEscopos ?? "").split(" ").filter(Boolean),
+      },
+    });
+  });
+
+  // ---- Autenticação da sinalização ------------------------------------
+
+  /**
+   * Emite um desafio para um dispositivo já pareado.
+   *
+   * Não exige cookie de conta: depois do pareamento, a chave do dispositivo é
+   * a credencial. Isso permite que o Agente volte a conectar ao iniciar o
+   * Windows sem pedir a senha da pessoa a cada reinicialização.
+   */
+  app.post("/sinalizacao/desafios", async (c) => {
+    const corpo = await c.req.json().catch(() => null);
+    const analise = pedidoDesafioSinalizacao.safeParse(corpo);
+    if (!analise.success) return c.json({ erro: "dados_invalidos" }, 400);
+
+    const resultado = await emitirDesafioSinalizacao(
+      db,
+      analise.data.chavePublica,
+      agora(),
+    );
+    if (!resultado.ok) {
+      return c.json(
+        { erro: resultado.erro },
+        resultado.erro === "limite_excedido" ? 429 : 404,
+      );
+    }
+
+    return c.json(
+      {
+        desafioId: resultado.desafioId,
+        dispositivoId: resultado.dispositivoId,
+        nonce: resultado.nonce,
+        expiraEm: resultado.expiraEm,
+        urlSinalizacao: config.urlSinalizacao,
+      },
+      201,
+    );
+  });
+
+  app.post("/sinalizacao/tokens", async (c) => {
+    const corpo = await c.req.json().catch(() => null);
+    const analise = provaDesafioSinalizacao.safeParse(corpo);
+    if (!analise.success) return c.json({ erro: "dados_invalidos" }, 400);
+
+    const resultado = await trocarDesafioPorToken(db, analise.data, agora());
+    if (!resultado.ok) return c.json({ erro: resultado.erro }, 401);
+
+    return c.json({ token: resultado.token, expiraEm: resultado.expiraEm }, 201);
   });
 
   app.notFound((c) => c.json({ erro: "nao_encontrado" }, 404));
