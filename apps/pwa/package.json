@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "icones": "node scripts/gerar-icones.mjs",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:producao": "playwright test"
   },
   "dependencies": {
     "@slate/design-system": "workspace:*",
