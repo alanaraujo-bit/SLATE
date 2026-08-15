@@ -430,10 +430,47 @@ export const ROADMAP: SeedItem[] = [
           "Manifest, service worker, casca offline, instalabilidade, áreas seguras e estados de conexão (§7, §37).",
         weight: 3,
         children: [
-          { key: "P2-M1-T1", kind: "TASK", title: "Manifest, ícones e instalabilidade" },
-          { key: "P2-M1-T2", kind: "TASK", title: "Service worker e casca offline" },
-          { key: "P2-M1-T3", kind: "TASK", title: "Exibição dos estados de conexão" },
-          { key: "P2-M1-T4", kind: "TASK", title: "Primeiro acesso e fluxo de pareamento" },
+          {
+            key: "P2-M1-T1",
+            kind: "TASK",
+            title: "Manifest, ícones e instalabilidade",
+            gates: [
+              g("manifest", "Manifest completo e tipado"),
+              g("icones", "Ícones gerados, incluindo maskable"),
+              g("instalavel", "Instalabilidade verificada por teste"),
+            ],
+          },
+          {
+            key: "P2-M1-T2",
+            kind: "TASK",
+            title: "Service worker e casca offline",
+            gates: [
+              g("registro", "Service worker registra e assume o controle"),
+              g("offline", "Aplicação abre sem rede"),
+              g("sem-estado-velho", "Dado do computador nunca é servido de cache"),
+            ],
+          },
+          {
+            key: "P2-M1-T3",
+            kind: "TASK",
+            title: "Exibição dos estados de conexão",
+            gates: [
+              g("cobertura", "Todo estado do protocolo tem mensagem"),
+              g("acao", "Todo estado que depende da pessoa diz o que fazer"),
+              g("sem-jargao", "Nenhuma mensagem usa jargão técnico"),
+            ],
+          },
+          {
+            key: "P2-M1-T4",
+            kind: "TASK",
+            title: "Primeiro acesso e fluxo de pareamento",
+            description:
+              "Depende do serviço de contas e do Agente Desktop, que ainda não existem.",
+            gates: [
+              g("onboarding", "Primeiro acesso guiado"),
+              g("pareamento", "Pareamento concluído de ponta a ponta"),
+            ],
+          },
         ],
       },
       {

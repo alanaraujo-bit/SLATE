@@ -96,8 +96,62 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
         run: pnpm --filter @slate/roadmap-cli test
 
+  pwa:
+    name: PWA — instalabilidade e offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: qualidade
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Instalar navegadores
+        # WebKit entra porque é o motor do iPad e do iPhone, onde as
+        # limitações de PWA são maiores. Testar só em Chromium deixaria de
+        # fora justamente a plataforma mais restritiva.
+        run: pnpm --filter @slate/pwa exec playwright install chromium webkit --with-deps
+
+      - name: Subir a PWA
+        run: |
+          pnpm --filter @slate/pwa exec next build
+          pnpm --filter @slate/pwa exec next start -p 4400 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4400/manifest.webmanifest > /dev/null; then
+              echo "no ar após ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::A PWA não respondeu em 60s"
+          exit 1
+
+      - name: Testes de instalabilidade
+        env:
+          E2E_BASE_URL: http://localhost:4400
+        run: pnpm --filter @slate/pwa exec playwright test
+
+      - name: Guardar o relatório quando falhar
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-pwa
+          path: apps/pwa/playwright-report/
+          retention-days: 7
+
   e2e:
-    name: Testes ponta a ponta
+    name: Centro de Controle — ponta a ponta
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: qualidade

@@ -1,0 +1,152 @@
+@import "@slate/design-system/tokens.css";
+@import "@slate/design-system/primitivas.css";
+
+/*
+ * Base da PWA.
+ *
+ * Tudo que é vocabulário visual vem do design system. O que fica aqui é o que
+ * só existe por ser uma aplicação instalada num aparelho de toque: áreas
+ * seguras, supressão de gestos do navegador e o comportamento de tela cheia.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Impede o "puxar para atualizar" e o repique nas bordas: numa superfície de
+     controle esses gestos disparam sem querer durante o uso normal. */
+  overscroll-behavior: none;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--s-bg);
+  color: var(--s-text);
+  font-family: var(--s-font-sans);
+  line-height: var(--s-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+
+  /* Respeita entalhe, ilha dinâmica e barra de gestos. Sem isto, um controle
+     no rodapé fica embaixo da barra do sistema e vira intocável. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/*
+ * Sem seleção de texto por padrão.
+ *
+ * Numa superfície de controle, o toque longo que selecionaria texto acontece o
+ * tempo todo por acidente, e a alça de seleção atrapalha o toque seguinte. Onde
+ * o texto precisa ser copiável, isso é reativado explicitamente.
+ */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.s-selecionavel {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+  border-radius: var(--s-radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ======================================================================= */
+/* Estrutura                                                               */
+/* ======================================================================= */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.app__cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-space-3);
+  padding: var(--s-space-3) var(--s-space-4);
+  border-bottom: 1px solid var(--s-border);
+}
+
+.app__corpo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--s-space-4);
+  gap: var(--s-space-4);
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: var(--s-space-2);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-tight);
+}
+
+.marca__simbolo {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--s-radius-sm);
+}
+
+/* ======================================================================= */
+/* Estado vazio e mensagens                                                */
+/* ======================================================================= */
+
+.aviso {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-space-3);
+  flex: 1;
+  text-align: center;
+  padding: var(--s-space-8) var(--s-space-4);
+}
+
+.aviso__titulo {
+  font-size: var(--s-text-lg);
+  font-weight: var(--s-weight-semibold);
+}
+
+.aviso__texto {
+  color: var(--s-text-muted);
+  font-size: var(--s-text-sm);
+  max-width: 32ch;
+}
