@@ -46,7 +46,21 @@ const limpeza = setInterval(() => {
 // Não segura o processo caso o resto termine.
 limpeza.unref?.();
 
-const servidor = serve({ fetch: app.fetch, port: config.porta }, (info) => {
+const servidor = serve(
+  {
+    fetch: app.fetch,
+    port: config.porta,
+    /*
+     * Escuta em todas as interfaces, IPv6 incluído.
+     *
+     * A rede privada do Railway — por onde a PWA alcança este serviço sem sair
+     * para a internet — é IPv6. O padrão do Node escuta apenas em IPv4, e o
+     * efeito foi o proxy da PWA respondendo 500 com este serviço no ar e
+     * saudável quando consultado pelo endereço público.
+     */
+    hostname: "::",
+  },
+  (info) => {
   console.log(
     `API do SLATE na porta ${info.port} ` +
       `(${config.producao ? "produção" : "desenvolvimento"}), ` +
