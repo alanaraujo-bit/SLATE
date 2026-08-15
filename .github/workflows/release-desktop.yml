@@ -45,7 +45,9 @@ jobs:
           $esperada = (Get-Content apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
           $versaoPackage = (Get-Content apps/desktop/package.json | ConvertFrom-Json).version
           $cargo = Get-Content apps/desktop/src-tauri/Cargo.toml -Raw
-          if ($cargo -notmatch '(?m)^version = "([0-9]+\.[0-9]+\.[0-9]+)"$') {
+          # O `\r?` existe porque o runner Windows clona com CRLF: sem ele o
+          # `$` não casa e a conferência falha dizendo que não achou a versão.
+          if ($cargo -notmatch '(?m)^version = "([0-9]+\.[0-9]+\.[0-9]+)"\r?$') {
             throw "Não foi possível ler a versão do Cargo.toml."
           }
           $versaoCargo = $Matches[1]
