@@ -198,8 +198,12 @@ prevê isso explicitamente — não crie um serviço novo.
 3. Par WebRTC no Agente, em Rust com `webrtc-rs`.
 4. Máquina de estados de conexão, ligada aos estados que a PWA já sabe exibir
    (`apps/pwa/lib/estados-conexao.ts` — todos os oito já têm mensagem e teste).
-5. Primeiro corte do Motor de Ações e controle de reproduzir/pausar, concluído
-   no Agente `0.1.1`.
+5. Primeiro corte do Motor de Ações e controle de reproduzir/pausar, concluído.
+
+O Agente `0.1.2` acrescentou pareamento por QR descartável sem remover o código
+de seis dígitos. A PWA consulta a presença WSS, escolhe a identidade confiável
+que está realmente online e separa instalações antigas de computadores com o
+mesmo nome; nunca revoga automaticamente apenas pelo nome.
 
 ## 7. Distribuição e atualização do Agente
 
@@ -214,7 +218,7 @@ pessoa vê versão, notas, bytes baixados e pode adiar. A instalação é passiv
 começa depois da confirmação explícita.
 
 O instalador local mais recente é
-`apps/desktop/src-tauri/target/release/bundle/nsis/SLATE_0.1.1_x64-setup.exe`.
+`apps/desktop/src-tauri/target/release/bundle/nsis/SLATE_0.1.2_x64-setup.exe`.
 Sua assinatura `.sig` foi verificada contra a chave pública do próprio Agente.
 
 Como o repositório é privado, o Agente não acessa o GitHub diretamente. A API

@@ -58,16 +58,18 @@ operacional está na [AÇÃO-008](../../docs/operator/OPERATOR_ACTIONS.md).
 
 ## Como testar o pareamento de ponta a ponta
 
-1. Abra <https://slate.aionixdev.com> no celular e crie uma conta.
-2. Abra o Agente no computador e entre com **a mesma conta**.
-3. No celular, toque em **Parear este aparelho** — aparece um código de seis
-   dígitos, válido por dois minutos.
-4. Digite esse código no Agente e confirme.
-5. O aparelho passa a aparecer na lista dos dois lados.
+1. Abra <https://slate.aionixdev.com> no celular e entre na mesma conta do
+   Agente.
+2. No Agente, mantenha **QR Code** selecionado. Na PWA, toque em **Ler QR Code**,
+   aponte a câmera para o computador e confirme o nome exibido.
+3. Se preferir, selecione **Código** no Agente e **Usar código de 6 dígitos**
+   na PWA. Digite no computador o código temporário mostrado pelo celular.
+4. O aparelho passa a aparecer na lista dos dois lados. O convite QR e o código
+   expiram em dois minutos e só podem ser usados uma vez.
 
 ## Como testar o primeiro controle real
 
-1. Instale `SLATE_0.1.1_x64-setup.exe` por cima da versão atual.
+1. Instale `SLATE_0.1.2_x64-setup.exe` por cima da versão atual.
 2. Abra um aplicativo de música ou vídeo no Windows e inicie a reprodução.
 3. Mantenha o Agente aberto e espere o PWA indicar **Conectado**.
 4. No celular, toque em **Reproduzir / pausar**.
