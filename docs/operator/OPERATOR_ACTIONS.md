@@ -136,12 +136,36 @@ A causa real aparece na tela de configuração da aplicação: há um aviso de
 a atualização pendente, a conexão aparece como feita do lado da Vercel e mesmo
 assim nenhum evento de push chega até lá.
 
+### O que já foi tentado — e não resolveu
+
+| Tentativa | Resultado |
+|---|---|
+| Aprovar a atualização de permissões da aplicação | aprovada, sem efeito |
+| Confirmar que a aplicação está instalada no repositório | está: aparece em *Installed GitHub Apps*, com *All repositories* |
+| Desconectar e reconectar o repositório na Vercel | reconectou, sem efeito |
+| Quatro pushes na `main` | nenhuma publicação nova |
+| Conferir webhooks do repositório | continua **nenhum** apontando para a Vercel |
+
+Nesse ponto parei de tentar por linha de comando. Todas as condições visíveis
+estão corretas e mesmo assim o webhook não é criado — o que a CLI expõe já se
+esgotou, e insistir custaria tempo sem trazer informação nova.
+
 ### O que fazer
 
-1. Abra <https://github.com/settings/installations> e escolha **Vercel**
-2. No aviso *"Vercel is requesting an update to its permissions"*, clique em
-   **Review request**
-3. Aprove a atualização
+A informação que falta está no painel, que mostra mais do que a linha de
+comando:
+
+1. Abra <https://vercel.com/aionixdev/slate-pwa/settings/git>
+2. Confira se o repositório aparece conectado e qual é a *Production Branch*
+   (precisa ser `main`)
+3. Procure por *Ignored Build Step* ou qualquer opção de publicação automática
+   desligada
+4. Se estiver tudo certo ali, desconectar e reconectar **pelo painel** costuma
+   recriar o webhook — a reconexão pela linha de comando não recriou
+
+Vale notar: o repositório tem três aplicações instaladas (Railway, Render e
+Vercel) e dois projetos da Vercel apontando para ele. Nada disso deveria
+conflitar, mas é a diferença mais visível em relação a uma configuração comum.
 
 ### Como validar
 
