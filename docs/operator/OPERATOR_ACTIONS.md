@@ -219,10 +219,18 @@ releases reais sem expor a credencial do repositório.
 
 ## AÇÃO-009 — Guardar a chave de atualização no GitHub Actions
 
-**SITUAÇÃO:** ABERTA
+**SITUAÇÃO:** ✅ RESOLVIDA em 15/08/2026
 **TRAVA O PROJETO:** NÃO
-**IMPEDE:** o workflow publicar o primeiro pacote assinado. O instalador local e
-os testes de adulteração já usam a chave definitiva.
+
+> Os dois segredos foram gravados com autorização do operador e a release
+> **SLATE 0.1.3** saiu assinada: `latest.json`, `SLATE_0.1.3_x64-setup.exe` e o
+> `.sig` correspondente. O download foi conferido sem autenticação nenhuma,
+> que é o caminho que o Agente percorre.
+>
+> **Pendência que continua sendo só do operador:** a cópia de segurança cifrada
+> de `updater.key` e da senha, fora deste computador. A partir desta release,
+> perder a chave deixa toda instalação existente sem caminho de atualização —
+> a recuperação seria reinstalar manualmente, máquina por máquina.
 
 ### Por que
 
