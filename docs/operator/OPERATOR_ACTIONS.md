@@ -107,43 +107,59 @@ desaparecem, e a atualização automática consegue verificar assinaturas.
 operador ([D-007](./DECISIONS.md)). Precisa ser resolvido antes da PWA do SLATE,
 que é de fato hospedada na nuvem.
 
-### Por que
+### Por que — causa identificada
 
 No escopo `aionixdev` da Vercel, o projeto `slate-control-center` publicou com
 sucesso exatamente uma vez (44s, `READY`). Toda publicação posterior foi criada
-mas nunca começou a compilar:
+mas nunca começou a compilar. A CLI mostrava o status como `UNKNOWN` e não
+retornava log nenhum, o que escondia o motivo.
 
-- o status fica num valor que a CLI mostra como `UNKNOWN`, nunca `READY`
-- não existe log de build — `vercel inspect --logs` não retorna nada
-- `vercel promote` recusa com `422 … is not ready`
+Rodando `vercel deploy --debug`, a resposta crua da API entrega a causa:
 
-Descartados como causa:
+```json
+"readyState": "BLOCKED",
+"status": "BLOCKED",
+"seatBlock": { "blockCode": "TEAM_ACCESS_REQUIRED", "isVerified": false },
+"isInConcurrentBuildsQueue": false,
+"isInSystemBuildsQueue": false
+```
+
+Ou seja:
+
+- o estado real é **`BLOCKED`** — a CLI (58 e 59) não conhece esse valor e o
+  exibe como `UNKNOWN`, que é por que o diagnóstico normal não levava a lugar
+  nenhum;
+- o motivo é **`TEAM_ACCESS_REQUIRED`** com **`isVerified: false`** — é um
+  bloqueio de assento no time `aionixdev`, não um problema técnico;
+- `isInConcurrentBuildsQueue: false` confirma que **nunca foi fila de build**.
+
+Isso encerra a investigação: nada no repositório, no build ou na configuração do
+projeto causa ou resolve isso. O que foi verificado pelo caminho e continua
+válido como garantia de que o lado do código está sadio:
 
 | Hipótese | Teste | Resultado |
 |---|---|---|
 | Fila travada por um build preso | Removi as publicações paradas | Voltou na hora, com a fila vazia |
-| CLI desatualizada reportando errado | Atualizei 58.9.0 → 59.0.0 | Igual |
+| CLI desatualizada reportando errado | Atualizei 58.9.0 → 59.0.0 | Igual (mas `--debug` revelou o estado real) |
 | Build quebrado ou monorepo mal configurado | `vercel build` local | Funciona |
 | Problema no código ou nas dependências | Mesmo commit compilado em Docker | Compila e roda |
-| Ambiente remoto de build | `vercel deploy --prebuilt` | Também não sai da fila |
-
-A última linha é decisiva: uma publicação pré-compilada não executa build remoto
-nenhum, e mesmo assim trava igual. A falha está na aceitação da publicação, não
-na compilação, e está acima do projeto — provavelmente um limite da conta, uma
-retenção por cobrança, ou um incidente da plataforma.
+| Ambiente remoto de build | `vercel deploy --prebuilt` | Também bloqueado |
 
 ### O que fazer
 
-1. Abrir <https://vercel.com/aionixdev/slate-control-center> e ler o status de
-   qualquer publicação mais nova que `pa0vyded8`. O painel mostra um motivo que
-   a CLI não expõe.
-2. Conferir na conta se há retenção por cobrança, limite de gasto atingido ou
-   limite de builds simultâneos esgotado: <https://vercel.com/account/billing> e
-   a página de uso do time.
-3. Conferir <https://www.vercel-status.com> por incidente entre
-   2026-08-15 01:00 e 02:00 (horário de Brasília).
-4. Se nada disso explicar, acionar o suporte da Vercel com o id de publicação
-   `dpl_96RDqKidmsE2fSK1ygzJmbbPSf2Q`, que foi criado e nunca compilou.
+1. Abrir <https://vercel.com/teams/aionixdev/settings/members> e conferir o
+   assento da conta `alanarauj0` no time `aionixdev`. O código
+   `TEAM_ACCESS_REQUIRED` indica assento ausente, não confirmado ou pendente de
+   aprovação.
+2. Conferir se há convite pendente de aceite ou verificação de e-mail em aberto
+   — `isVerified: false` aponta para isso.
+3. Conferir cobrança do time em
+   <https://vercel.com/teams/aionixdev/settings/billing>: em times pagos por
+   assento, um pagamento pendente bloqueia assentos e, por consequência,
+   publicações.
+4. Se o assento estiver correto e verificado, acionar o suporte da Vercel
+   citando `blockCode: TEAM_ACCESS_REQUIRED` e o id de publicação
+   `dpl_96RDqKidmsE2fSK1ygzJmbbPSf2Q`.
 
 ### Como validar
 

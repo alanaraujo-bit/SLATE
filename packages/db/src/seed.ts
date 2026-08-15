@@ -72,18 +72,22 @@ const OPERATOR_ACTIONS = [
     blocks:
       "Nada no momento. Precisa ser resolvido antes da PWA, que é de fato hospedada na nuvem.",
     why:
-      "No escopo aionixdev, o projeto slate-control-center publicou com sucesso exatamente " +
-      "uma vez. Toda publicação posterior foi criada mas nunca começou a compilar: sem logs " +
-      "de build e com o promote recusando por 'não está pronta'. Foram descartados: fila " +
-      "travada (limpei e voltou na hora), CLI desatualizada (atualizei 58 para 59, igual), " +
-      "build quebrado (compila local e em Docker) e o ambiente remoto de build — uma " +
-      "publicação pré-compilada, que não compila nada remotamente, trava do mesmo jeito. " +
-      "Ou seja, a falha é da conta ou da plataforma, acima do projeto.",
+      "Causa identificada. A CLI mostrava o status como UNKNOWN e não retornava log nenhum, " +
+      "o que escondia o motivo. Rodando `vercel deploy --debug`, a resposta crua da API " +
+      "mostra readyState BLOCKED, com seatBlock blockCode TEAM_ACCESS_REQUIRED e " +
+      "isVerified false, e isInConcurrentBuildsQueue false. Ou seja: é bloqueio de assento " +
+      "no time aionixdev — não é fila de build e não é problema técnico. As CLIs 58 e 59 " +
+      "não conhecem o estado BLOCKED e o exibem como UNKNOWN, que é por que o diagnóstico " +
+      "normal não levava a lugar nenhum. O lado do código está sadio: compila local, " +
+      "compila em Docker, e uma publicação pré-compilada é bloqueada igual.",
     whatToDo:
-      "Abrir vercel.com/aionixdev/slate-control-center e ver o motivo que o painel mostra e " +
-      "a CLI não; conferir cobrança, limite de gasto e limite de builds simultâneos da conta; " +
-      "conferir vercel-status.com. Persistindo, acionar o suporte com o id " +
-      "dpl_96RDqKidmsE2fSK1ygzJmbbPSf2Q, que foi criado e nunca compilou.",
+      "Conferir o assento da conta alanarauj0 no time aionixdev em " +
+      "vercel.com/teams/aionixdev/settings/members — TEAM_ACCESS_REQUIRED indica assento " +
+      "ausente, não confirmado ou pendente de aprovação. Conferir também convite pendente " +
+      "de aceite ou verificação de e-mail em aberto (isVerified false aponta para isso) e a " +
+      "cobrança do time, já que pagamento pendente bloqueia assentos. Se o assento estiver " +
+      "correto e verificado, acionar o suporte citando blockCode TEAM_ACCESS_REQUIRED e o " +
+      "id de publicação dpl_96RDqKidmsE2fSK1ygzJmbbPSf2Q.",
     howToValidate:
       "`vercel deploy --prod --yes --scope aionixdev` chega em Ready e o domínio serve a nova versão.",
     alreadyCompleted:
