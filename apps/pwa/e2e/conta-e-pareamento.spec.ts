@@ -28,14 +28,14 @@ test.describe("conta", () => {
     await page.getByLabel("Senha").fill(SENHA);
     await page.getByRole("button", { name: /criar conta/i }).click();
 
-    await expect(page.getByRole("button", { name: /parear este aparelho/i })).toBeVisible({
+    await expect(page.getByRole("button", { name: /ler QR Code/i })).toBeVisible({
       timeout: 20_000,
     });
 
     // O ponto do teste: recarregar precisa manter a sessão. Se o cookie não
     // estivesse atravessando, aqui voltaria a tela de entrada.
     await page.reload();
-    await expect(page.getByRole("button", { name: /parear este aparelho/i })).toBeVisible({
+    await expect(page.getByRole("button", { name: /ler QR Code/i })).toBeVisible({
       timeout: 20_000,
     });
   });
@@ -106,7 +106,7 @@ test.describe("pareamento", () => {
     await page.getByLabel("Senha").fill(SENHA);
     await page.getByRole("button", { name: /criar conta/i }).click();
 
-    await page.getByRole("button", { name: /parear este aparelho/i }).click({
+    await page.getByRole("button", { name: /usar código de 6 dígitos/i }).click({
       timeout: 20_000,
     });
 
@@ -122,7 +122,7 @@ test.describe("pareamento", () => {
     await page.getByLabel("Senha").fill(SENHA);
     await page.getByRole("button", { name: /criar conta/i }).click();
 
-    await page.getByRole("button", { name: /parear este aparelho/i }).click({
+    await page.getByRole("button", { name: /usar código de 6 dígitos/i }).click({
       timeout: 20_000,
     });
 
@@ -138,7 +138,7 @@ test.describe("pareamento", () => {
     await page.getByLabel("Senha").fill(SENHA);
     await page.getByRole("button", { name: /criar conta/i }).click();
 
-    await page.getByRole("button", { name: /parear este aparelho/i }).click({
+    await page.getByRole("button", { name: /usar código de 6 dígitos/i }).click({
       timeout: 20_000,
     });
     await expect(page.locator(".pareamento__codigo")).toBeVisible({ timeout: 20_000 });

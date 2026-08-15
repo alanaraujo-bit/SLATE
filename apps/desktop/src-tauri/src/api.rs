@@ -81,6 +81,21 @@ pub struct TokenSinalizacao {
     pub expira_em: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConvitePareamentoQr {
+    pub convite_id: String,
+    pub expira_em: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SituacaoConviteQr {
+    pub situacao: String,
+    pub dispositivo: Option<Dispositivo>,
+}
+
 pub struct ClienteApi {
     http: reqwest::Client,
     base: String,
@@ -256,6 +271,45 @@ impl ClienteApi {
         let corpo: RespostaDispositivos =
             resposta.json().await.map_err(|_| ErroApi::Inesperado(0))?;
         Ok(corpo.dispositivos)
+    }
+
+    pub async fn criar_convite_qr(
+        &self,
+        nonce: &str,
+        chave_publica_agente: &str,
+        assinatura: &str,
+    ) -> Result<ConvitePareamentoQr, ErroApi> {
+        let resposta = self
+            .http
+            .post(self.url("/pareamento/convites"))
+            .json(&serde_json::json!({
+                "nonce": nonce,
+                "chavePublicaAgente": chave_publica_agente,
+                "assinatura": assinatura,
+            }))
+            .send()
+            .await
+            .map_err(|_| ErroApi::SemConexao)?;
+        if !resposta.status().is_success() {
+            return Err(self.erro_de(resposta).await);
+        }
+        resposta.json().await.map_err(|_| ErroApi::Inesperado(0))
+    }
+
+    pub async fn consultar_convite_qr(
+        &self,
+        convite_id: &str,
+    ) -> Result<SituacaoConviteQr, ErroApi> {
+        let resposta = self
+            .http
+            .get(self.url(&format!("/pareamento/convites/{convite_id}")))
+            .send()
+            .await
+            .map_err(|_| ErroApi::SemConexao)?;
+        if !resposta.status().is_success() {
+            return Err(self.erro_de(resposta).await);
+        }
+        resposta.json().await.map_err(|_| ErroApi::Inesperado(0))
     }
 
     pub async fn pedir_desafio_sinalizacao(

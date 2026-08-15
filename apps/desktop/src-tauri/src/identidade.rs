@@ -89,6 +89,10 @@ pub fn mensagem_confirmacao_pareamento(codigo: &str, chave_publica_agente: &str)
     )
 }
 
+pub fn mensagem_criacao_convite_qr(nonce: &str, chave_publica_agente: &str) -> String {
+    format!("SLATE-PAIR-QR-CREATE/v1\n{nonce}\n{chave_publica_agente}")
+}
+
 pub fn normalizar_fingerprint_dtls(valor: &str) -> String {
     valor.trim().to_ascii_uppercase()
 }

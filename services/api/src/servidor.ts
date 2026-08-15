@@ -7,6 +7,7 @@ import {
 } from "@slate/protocol";
 import {
   mensagemConfirmacaoPareamento,
+  mensagemCriacaoConviteQr,
   verificar,
 } from "@slate/identidade";
 import {
@@ -37,7 +38,11 @@ import {
 import {
   MAX_TENTATIVAS_JANELA,
   atualizarHashSenha,
+  aceitarConvitePareamentoQr,
   bloquearPedido,
+  buscarConvitePareamentoQrPorId,
+  buscarConvitePareamentoQrPorToken,
+  buscarDispositivoDaConta,
   buscarPedidoAtivo,
   buscarDispositivoPorChave,
   buscarResultadoPedidoPareamento,
@@ -45,6 +50,7 @@ import {
   confirmarPedido,
   contarTentativas,
   criarDispositivo,
+  criarConvitePareamentoQr,
   criarPedidoPareamento,
   criarSessao,
   criarUsuario,
@@ -79,9 +85,16 @@ export interface Dependencias {
   /** Injetável para os testes não dependerem do relógio. */
   agora?: () => Date;
   atualizacoes?: ServicoAtualizacoesGitHub;
+  estaDispositivoOnline?: (dispositivoId: string) => boolean;
 }
 
-export function criarServidor({ db, config, agora = () => new Date(), atualizacoes }: Dependencias) {
+export function criarServidor({
+  db,
+  config,
+  agora = () => new Date(),
+  atualizacoes,
+  estaDispositivoOnline = () => false,
+}: Dependencias) {
   const app = new Hono<{ Variables: Variaveis }>();
   const servicoAtualizacoes =
     atualizacoes ??
@@ -365,6 +378,7 @@ export function criarServidor({ db, config, agora = () => new Date(), atualizaco
         algoritmo: d.algoritmo,
         criadoEm: d.criadoEm,
         ultimoAcessoEm: d.ultimoAcessoEm,
+        online: estaDispositivoOnline(d.id),
       })),
     });
   });
@@ -463,6 +477,194 @@ export function criarServidor({ db, config, agora = () => new Date(), atualizaco
       },
       201,
     );
+  });
+
+  /** Convite iniciado fisicamente no Agente e exibido como QR descartável. */
+  app.post("/pareamento/convites", exigirSessao, async (c) => {
+    const sessao = c.get("sessao");
+    const corpo = await c.req.json().catch(() => null);
+    const { nonce, chavePublicaAgente, assinatura } = (corpo ?? {}) as Record<
+      string,
+      unknown
+    >;
+    if (
+      typeof nonce !== "string" ||
+      nonce.length < 16 ||
+      nonce.length > 128 ||
+      typeof chavePublicaAgente !== "string" ||
+      typeof assinatura !== "string"
+    ) {
+      return c.json({ erro: "dados_invalidos" }, 400);
+    }
+
+    const agente = await buscarDispositivoAtivoPorChave(db, chavePublicaAgente);
+    const autorizado =
+      agente?.usuarioId === sessao.usuarioId &&
+      agente.papel === "agent" &&
+      (await verificar(
+        agente.chavePublica,
+        agente.algoritmo,
+        mensagemCriacaoConviteQr({ nonce, chavePublicaAgente }),
+        assinatura,
+      ));
+    if (!autorizado || !agente) return c.json({ erro: "agente_invalido" }, 401);
+
+    const momento = agora();
+    const token = criarTokenSessao(momento);
+    const convite = await criarConvitePareamentoQr(db, {
+      usuarioId: sessao.usuarioId,
+      agenteId: agente.id,
+      tokenHash: token.hash,
+      expiraEm: new Date(momento.getTime() + VALIDADE_PAREAMENTO_MS),
+    });
+    const origemPwa =
+      config.origensPermitidas.find((origem) => origem.startsWith("https://")) ??
+      config.origensPermitidas[0] ??
+      "http://localhost:4400";
+
+    return c.json(
+      {
+        conviteId: convite.id,
+        expiraEm: convite.expiraEm,
+        // Fragmento não viaja ao servidor nem aparece em logs HTTP.
+        url: `${origemPwa}/#convite=${encodeURIComponent(token.token)}`,
+      },
+      201,
+    );
+  });
+
+  app.post("/pareamento/convites/visualizar", exigirSessao, async (c) => {
+    const sessao = c.get("sessao");
+    const corpo = await c.req.json().catch(() => null);
+    const token = (corpo as { token?: unknown } | null)?.token;
+    if (typeof token !== "string" || token.length < 32 || token.length > 256) {
+      return c.json({ erro: "convite_invalido" }, 400);
+    }
+    const convite = await buscarConvitePareamentoQrPorToken(
+      db,
+      sessao.usuarioId,
+      hashDoToken(token),
+      agora(),
+    );
+    if (!convite) return c.json({ erro: "convite_invalido" }, 404);
+    const agente = await buscarDispositivoDaConta(db, sessao.usuarioId, convite.agenteId);
+    if (!agente || agente.papel !== "agent") {
+      return c.json({ erro: "agente_invalido" }, 409);
+    }
+    return c.json({
+      conviteId: convite.id,
+      expiraEm: convite.expiraEm,
+      agente: { id: agente.id, nome: agente.nome },
+    });
+  });
+
+  app.post("/pareamento/convites/aceitar", exigirSessao, async (c) => {
+    const sessao = c.get("sessao");
+    const corpo = await c.req.json().catch(() => null);
+    const { token, chavePublica, algoritmo, nome } = (corpo ?? {}) as Record<
+      string,
+      unknown
+    >;
+    if (
+      typeof token !== "string" ||
+      token.length < 32 ||
+      token.length > 256 ||
+      typeof chavePublica !== "string" ||
+      chavePublica.length < 20 ||
+      typeof algoritmo !== "string" ||
+      typeof nome !== "string"
+    ) {
+      return c.json({ erro: "dados_invalidos" }, 400);
+    }
+    const momento = agora();
+    const convite = await buscarConvitePareamentoQrPorToken(
+      db,
+      sessao.usuarioId,
+      hashDoToken(token),
+      momento,
+    );
+    if (!convite) return c.json({ erro: "convite_invalido" }, 404);
+    const agente = await buscarDispositivoDaConta(db, sessao.usuarioId, convite.agenteId);
+    if (!agente || agente.papel !== "agent") {
+      return c.json({ erro: "agente_invalido" }, 409);
+    }
+
+    let superficie = await buscarDispositivoPorChave(db, chavePublica);
+    if (superficie) {
+      if (
+        superficie.usuarioId !== sessao.usuarioId ||
+        superficie.papel !== "surface" ||
+        superficie.situacao !== "ativo"
+      ) {
+        return c.json({ erro: "chave_ja_registrada" }, 409);
+      }
+    } else {
+      superficie = await criarDispositivo(db, {
+        usuarioId: sessao.usuarioId,
+        papel: "surface",
+        nome: nome.trim().slice(0, 100) || "Dispositivo",
+        chavePublica,
+        algoritmo,
+        escopos: ESCOPOS_PADRAO.join(" "),
+      });
+    }
+
+    const aceito = await aceitarConvitePareamentoQr(
+      db,
+      convite.id,
+      superficie.id,
+      momento,
+    );
+    if (!aceito) return c.json({ erro: "convite_invalido" }, 409);
+
+    return c.json({
+      pareado: true,
+      agente: {
+        id: agente.id,
+        nome: agente.nome,
+        papel: "agent" as const,
+        chavePublica: agente.chavePublica,
+        algoritmo: agente.algoritmo,
+        escopos: agente.escopos.split(" ").filter(Boolean),
+      },
+    });
+  });
+
+  app.get("/pareamento/convites/:id", exigirSessao, async (c) => {
+    const sessao = c.get("sessao");
+    const conviteId = c.req.param("id");
+    if (!conviteId) return c.json({ erro: "nao_encontrado" }, 404);
+    const convite = await buscarConvitePareamentoQrPorId(
+      db,
+      sessao.usuarioId,
+      conviteId,
+    );
+    if (!convite) return c.json({ erro: "nao_encontrado" }, 404);
+    if (!convite.aceitoEm || !convite.superficieId) {
+      return c.json({
+        situacao: convite.expiraEm.getTime() > agora().getTime() ? "pendente" : "expirado",
+      });
+    }
+    const superficie = await buscarDispositivoDaConta(
+      db,
+      sessao.usuarioId,
+      convite.superficieId,
+    );
+    if (!superficie || superficie.papel !== "surface") {
+      return c.json({ erro: "dispositivo_invalido" }, 409);
+    }
+    return c.json({
+      situacao: "confirmado",
+      dispositivo: {
+        id: superficie.id,
+        nome: superficie.nome,
+        papel: superficie.papel,
+        situacao: superficie.situacao,
+        chavePublica: superficie.chavePublica,
+        algoritmo: superficie.algoritmo,
+        escopos: superficie.escopos.split(" ").filter(Boolean),
+      },
+    });
   });
 
   /** O Agente confirma, com o código que a pessoa digitou no computador. */

@@ -34,6 +34,9 @@ export interface DispositivoResumo {
   escopos: string[];
   chavePublica: string;
   algoritmo: string;
+  criadoEm: string;
+  ultimoAcessoEm: string | null;
+  online: boolean;
 }
 
 export type ResultadoApi<T> =
@@ -59,6 +62,8 @@ const MENSAGENS: Record<string, string> = {
   codigo_incorreto: "Código incorreto.",
   bloqueado: "Tentativas esgotadas. Peça um código novo.",
   nenhum_pedido_ativo: "Nenhum pareamento em andamento.",
+  convite_invalido: "Este QR Code expirou ou já foi usado.",
+  agente_invalido: "Este computador não está mais disponível para pareamento.",
   chave_ja_registrada: "Este dispositivo já está registrado.",
   dados_invalidos: "Não foi possível enviar os dados.",
   erro_interno: "Algo deu errado no servidor. Tente de novo em instantes.",
@@ -126,6 +131,11 @@ export const api = {
 
   dispositivos: () => chamar<{ dispositivos: DispositivoResumo[] }>("/dispositivos"),
 
+  removerDispositivo: (id: string) =>
+    chamar<{ revogado: boolean }>(`/dispositivos/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
   pedirPareamento: (dados: { chavePublica: string; algoritmo: string; nome: string }) =>
     chamar<{
       pedidoId: string;
@@ -152,6 +162,37 @@ export const api = {
           };
         }
     >(`/pareamento/pedidos/${encodeURIComponent(pedidoId)}`),
+
+  visualizarConviteQr: (token: string) =>
+    chamar<{
+      conviteId: string;
+      expiraEm: string;
+      agente: { id: string; nome: string };
+    }>("/pareamento/convites/visualizar", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  aceitarConviteQr: (dados: {
+    token: string;
+    chavePublica: string;
+    algoritmo: string;
+    nome: string;
+  }) =>
+    chamar<{
+      pareado: true;
+      agente: {
+        id: string;
+        nome: string;
+        papel: "agent";
+        chavePublica: string;
+        algoritmo: string;
+        escopos: string[];
+      };
+    }>("/pareamento/convites/aceitar", {
+      method: "POST",
+      body: JSON.stringify(dados),
+    }),
 
   pedirDesafioSinalizacao: (chavePublica: string) =>
     chamar<{

@@ -1,6 +1,7 @@
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import type { Database } from "@slate/db";
 import {
+  convitesPareamentoQr,
   dispositivos,
   pedidosPareamento,
   sessoes,
@@ -212,6 +213,25 @@ export async function buscarDispositivoPorChave(db: Database, chavePublica: stri
   return dispositivo ?? null;
 }
 
+export async function buscarDispositivoDaConta(
+  db: Database,
+  usuarioId: string,
+  dispositivoId: string,
+) {
+  const [dispositivo] = await db
+    .select()
+    .from(dispositivos)
+    .where(
+      and(
+        eq(dispositivos.id, dispositivoId),
+        eq(dispositivos.usuarioId, usuarioId),
+        eq(dispositivos.situacao, "ativo"),
+      ),
+    )
+    .limit(1);
+  return dispositivo ?? null;
+}
+
 export async function criarDispositivo(
   db: Database,
   dados: {
@@ -351,4 +371,80 @@ export async function buscarResultadoPedidoPareamento(
     )
     .limit(1);
   return resultado ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Pareamento iniciado pelo QR exibido no Agente
+// ---------------------------------------------------------------------------
+
+export async function criarConvitePareamentoQr(
+  db: Database,
+  dados: {
+    usuarioId: string;
+    agenteId: string;
+    tokenHash: string;
+    expiraEm: Date;
+  },
+) {
+  const [convite] = await db.insert(convitesPareamentoQr).values(dados).returning();
+  return convite!;
+}
+
+export async function buscarConvitePareamentoQrPorToken(
+  db: Database,
+  usuarioId: string,
+  tokenHash: string,
+  agora: Date,
+) {
+  const [convite] = await db
+    .select()
+    .from(convitesPareamentoQr)
+    .where(
+      and(
+        eq(convitesPareamentoQr.usuarioId, usuarioId),
+        eq(convitesPareamentoQr.tokenHash, tokenHash),
+        isNull(convitesPareamentoQr.aceitoEm),
+        gte(convitesPareamentoQr.expiraEm, agora),
+      ),
+    )
+    .limit(1);
+  return convite ?? null;
+}
+
+export async function buscarConvitePareamentoQrPorId(
+  db: Database,
+  usuarioId: string,
+  conviteId: string,
+) {
+  const [convite] = await db
+    .select()
+    .from(convitesPareamentoQr)
+    .where(
+      and(
+        eq(convitesPareamentoQr.id, conviteId),
+        eq(convitesPareamentoQr.usuarioId, usuarioId),
+      ),
+    )
+    .limit(1);
+  return convite ?? null;
+}
+
+export async function aceitarConvitePareamentoQr(
+  db: Database,
+  conviteId: string,
+  superficieId: string,
+  agora: Date,
+) {
+  const [convite] = await db
+    .update(convitesPareamentoQr)
+    .set({ superficieId, aceitoEm: agora })
+    .where(
+      and(
+        eq(convitesPareamentoQr.id, conviteId),
+        isNull(convitesPareamentoQr.aceitoEm),
+        gte(convitesPareamentoQr.expiraEm, agora),
+      ),
+    )
+    .returning();
+  return convite ?? null;
 }

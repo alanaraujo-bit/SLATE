@@ -10,6 +10,7 @@ import {
   lerPedidoPareamento,
   obterOuCriarIdentidade,
 } from "@/lib/identidade-local";
+import { LeitorQr } from "./leitor-qr";
 
 interface CodigoAtivo {
   pedidoId: string;
@@ -28,13 +29,18 @@ interface CodigoAtivo {
  */
 export function PainelPareamento({
   aoParear,
+  aoLerConvite,
+  aoCancelar,
 }: {
   aoParear: () => void;
+  aoLerConvite: (token: string) => void;
+  aoCancelar?: () => void;
 }) {
   const [codigo, setCodigo] = useState<CodigoAtivo | null>(null);
   const [restante, setRestante] = useState(0);
   const [erro, setErro] = useState<string | null>(null);
   const [pedindo, setPedindo] = useState(false);
+  const [lendoQr, setLendoQr] = useState(false);
   const consultando = useRef(false);
 
   useEffect(() => {
@@ -166,6 +172,17 @@ export function PainelPareamento({
     );
   }
 
+  if (lendoQr) {
+    return (
+      <Superficie nivel="elevada" preenchida>
+        <LeitorQr
+          aoLer={aoLerConvite}
+          aoCancelar={() => setLendoQr(false)}
+        />
+      </Superficie>
+    );
+  }
+
   return (
     <Superficie nivel="elevada" preenchida>
       <div className="aviso">
@@ -181,14 +198,19 @@ export function PainelPareamento({
           </p>
         )}
 
-        <Botao
-          tom="acento"
-          tamanho="lg"
-          estado={pedindo ? "loading" : "idle"}
-          onClick={pedir}
-        >
-          Parear este aparelho
-        </Botao>
+        <div className="pareamento__opcoes">
+          <Botao tom="acento" tamanho="lg" onClick={() => setLendoQr(true)}>
+            Ler QR Code
+          </Botao>
+          <Botao
+            tamanho="lg"
+            estado={pedindo ? "loading" : "idle"}
+            onClick={pedir}
+          >
+            Usar código de 6 dígitos
+          </Botao>
+          {aoCancelar && <Botao onClick={aoCancelar}>Cancelar</Botao>}
+        </div>
       </div>
     </Superficie>
   );

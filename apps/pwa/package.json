@@ -19,6 +19,7 @@
     "@slate/identidade": "workspace:*",
     "@slate/protocol": "workspace:*",
     "next": "^15.5.4",
+    "qr-scanner": "^1.4.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

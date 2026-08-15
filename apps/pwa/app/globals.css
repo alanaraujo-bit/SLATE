@@ -276,6 +276,90 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.pareamento__opcoes {
+  width: 100%;
+  display: grid;
+  gap: var(--s-space-2);
+}
+
+.leitor-qr {
+  display: grid;
+  justify-items: stretch;
+  gap: var(--s-space-3);
+  text-align: center;
+}
+
+.leitor-qr__camera {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-lg);
+  background: var(--s-surface-sunken);
+  color: var(--s-text-muted);
+}
+
+.leitor-qr__camera video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.leitor-qr__camera:not(.ativa) video {
+  display: none;
+}
+
+.botao-arquivo {
+  min-height: var(--s-touch-min);
+  display: grid;
+  place-items: center;
+  padding: var(--s-space-3);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface-raised);
+  color: var(--s-text);
+  font-size: var(--s-text-sm);
+  font-weight: var(--s-weight-medium);
+  cursor: pointer;
+}
+
+.botao-arquivo input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.convite-qr {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-space-4);
+  padding: var(--s-space-5) 0;
+  text-align: center;
+}
+
+.convite-qr__icone {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--s-success-soft);
+  color: var(--s-success);
+  font-size: var(--s-text-2xl);
+  font-weight: var(--s-weight-bold);
+}
+
+.convite-qr__acoes {
+  width: 100%;
+  display: grid;
+  gap: var(--s-space-2);
+}
+
 /* ======================================================================= */
 /* Dispositivos                                                            */
 /* ======================================================================= */
@@ -304,6 +388,38 @@ button {
 .dispositivo__nome {
   font-size: var(--s-text-sm);
   font-weight: var(--s-weight-medium);
+}
+
+.instalacoes-antigas {
+  width: 100%;
+  color: var(--s-text-muted);
+  text-align: left;
+}
+
+.instalacoes-antigas summary {
+  min-height: var(--s-touch-min);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: var(--s-text-sm);
+}
+
+.instalacoes-antigas__explicacao {
+  margin: 0 0 var(--s-space-3);
+  font-size: var(--s-text-xs);
+  line-height: 1.5;
+}
+
+.dispositivo--gerenciavel {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-space-3);
+}
+
+.dispositivo--gerenciavel > span {
+  display: grid;
+  gap: var(--s-space-1);
 }
 
 /* ======================================================================= */

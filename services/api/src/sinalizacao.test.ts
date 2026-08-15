@@ -159,6 +159,16 @@ describe("sinalização WSS", () => {
     expect(resposta).toEqual({ tipo: "erro", codigo: "nao_autenticado" });
   });
 
+  it("expõe presença somente enquanto o dispositivo está autenticado", async () => {
+    const cliente = await conectar();
+    expect(sinalizacao.estaOnline(A)).toBe(false);
+    await autenticar(cliente, TOKEN_A);
+    expect(sinalizacao.estaOnline(A)).toBe(true);
+    cliente.close();
+    await new Promise<void>((resolve) => cliente.once("close", () => resolve()));
+    expect(sinalizacao.estaOnline(A)).toBe(false);
+  });
+
   it("recusa no WebSocket um dispositivo revogado", async () => {
     dispositivosRevogados.add(A);
     const cliente = await conectar();

@@ -174,6 +174,34 @@ export const pedidosPareamento = pgTable(
 );
 
 /**
+ * Convite exibido como QR no computador e consumido uma única vez pelo PWA.
+ * O banco guarda somente o hash do token presente no QR.
+ */
+export const convitesPareamentoQr = pgTable(
+  "convites_pareamento_qr",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    usuarioId: uuid("usuario_id")
+      .notNull()
+      .references(() => usuarios.id, { onDelete: "cascade" }),
+    agenteId: uuid("agente_id")
+      .notNull()
+      .references(() => dispositivos.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
+    aceitoEm: timestamp("aceito_em", { withTimezone: true }),
+    superficieId: uuid("superficie_id").references(() => dispositivos.id, {
+      onDelete: "set null",
+    }),
+    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("convites_qr_token_idx").on(t.tokenHash),
+    index("convites_qr_agente_idx").on(t.agenteId, t.expiraEm),
+  ],
+);
+
+/**
  * Tentativas de entrada, para limitar força bruta.
  *
  * Guarda a chave de agrupamento — conta ou origem — e não o e-mail digitado,
@@ -209,3 +237,4 @@ export type Usuario = typeof usuarios.$inferSelect;
 export type Sessao = typeof sessoes.$inferSelect;
 export type Dispositivo = typeof dispositivos.$inferSelect;
 export type PedidoPareamento = typeof pedidosPareamento.$inferSelect;
+export type ConvitePareamentoQr = typeof convitesPareamentoQr.$inferSelect;

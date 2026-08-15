@@ -26,7 +26,12 @@ try {
 }
 
 const db = createDb(config.databaseUrl);
-const app = criarServidor({ db, config });
+const sinalizacao = criarSinalizacao({ db, config });
+const app = criarServidor({
+  db,
+  config,
+  estaDispositivoOnline: (id) => sinalizacao.estaOnline(id),
+});
 
 /**
  * Varredura de sessões vencidas.
@@ -70,7 +75,6 @@ const servidor = serve(
   );
 });
 
-const sinalizacao = criarSinalizacao({ db, config });
 // `serve` tipa o retorno como união HTTP/1 + HTTP/2; sem `createServer`
 // customizado ele cria HTTP/1, que é o protocolo que oferece upgrade WebSocket.
 sinalizacao.anexar(servidor as Server);

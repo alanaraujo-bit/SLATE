@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   mensagemConfirmacaoPareamento,
+  mensagemCriacaoConviteQr,
   mensagemDesafioSinalizacao,
   mensagemFingerprintDtls,
   normalizarFingerprintDtls,
@@ -33,6 +34,15 @@ describe("formas canônicas da sinalização", () => {
         chavePublicaAgente: "chave-do-agente",
       }),
     ).toBe("SLATE-PAIR-CONFIRM/v1\n123456\nchave-do-agente");
+  });
+
+  it("amarra a criação do QR à chave do Agente", () => {
+    expect(
+      mensagemCriacaoConviteQr({
+        nonce: "nonce-unico",
+        chavePublicaAgente: "chave-do-agente",
+      }),
+    ).toBe("SLATE-PAIR-QR-CREATE/v1\nnonce-unico\nchave-do-agente");
   });
 
   it("normaliza o fingerprint antes de assinar", () => {

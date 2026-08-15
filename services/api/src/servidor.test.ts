@@ -9,6 +9,7 @@ import {
   assinar,
   gerarIdentidade,
   mensagemConfirmacaoPareamento,
+  mensagemCriacaoConviteQr,
   type IdentidadeDispositivo,
 } from "@slate/identidade";
 
@@ -464,6 +465,26 @@ suite("API de contas", () => {
       ),
     });
 
+    const criarConviteQr = async (
+      cookie: string,
+      identidade: IdentidadeDispositivo,
+    ) => {
+      const nonce = crypto.randomUUID();
+      const chavePublicaAgente = identidade.chavePublicaExportada;
+      return app.request("/pareamento/convites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
+        body: JSON.stringify({
+          nonce,
+          chavePublicaAgente,
+          assinatura: await assinar(
+            identidade,
+            mensagemCriacaoConviteQr({ nonce, chavePublicaAgente }),
+          ),
+        }),
+      });
+    };
+
     it("o pedido devolve um código de seis dígitos", async () => {
       const { cookie } = await cadastrar(emailUnico("pede"));
       const { resposta, corpo } = await pedirPareamento(cookie);
@@ -486,6 +507,68 @@ suite("API de contas", () => {
 
       expect(resposta.status).toBe(200);
       expect((await resposta.json()).pareado).toBe(true);
+    });
+
+    it("o QR pareia, entrega as duas chaves e não pode ser repetido", async () => {
+      const { cookie } = await cadastrar(emailUnico("qr"));
+      const agente = await registrarAgente(cookie);
+      const respostaConvite = await criarConviteQr(cookie, agente);
+      expect(respostaConvite.status).toBe(201);
+      const convite = await respostaConvite.json();
+      const url = new URL(convite.url);
+      expect(url.search).toBe("");
+      const token = new URLSearchParams(url.hash.slice(1)).get("convite");
+      expect(token).toHaveLength(43);
+
+      const previa = await app.request("/pareamento/convites/visualizar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
+        body: JSON.stringify({ token }),
+      });
+      expect(previa.status).toBe(200);
+      expect((await previa.json()).agente.nome).toBe("PC de teste");
+
+      const superficie = await gerarIdentidade();
+      const aceitar = () =>
+        app.request("/pareamento/convites/aceitar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
+          body: JSON.stringify({
+            token,
+            chavePublica: superficie.chavePublicaExportada,
+            algoritmo: superficie.algoritmo,
+            nome: "iPhone por QR",
+          }),
+        });
+      const primeira = await aceitar();
+      expect(primeira.status).toBe(200);
+      expect((await primeira.json()).agente.chavePublica).toBe(
+        agente.chavePublicaExportada,
+      );
+
+      const resultado = await app.request(`/pareamento/convites/${convite.conviteId}`, {
+        headers: { Cookie: cookie },
+      });
+      expect((await resultado.json()).dispositivo.nome).toBe("iPhone por QR");
+      expect((await aceitar()).status).toBe(404);
+    }, 15_000);
+
+    it("uma conta diferente não consegue visualizar o QR", async () => {
+      const dono = await cadastrar(emailUnico("qr-dono"));
+      const estranho = await cadastrar(emailUnico("qr-estranho"));
+      const agente = await registrarAgente(dono.cookie);
+      const convite = await (await criarConviteQr(dono.cookie, agente)).json();
+      const token = new URLSearchParams(new URL(convite.url).hash.slice(1)).get("convite");
+      const resposta = await app.request("/pareamento/convites/visualizar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: estranho.cookie,
+          Origin: ORIGEM,
+        },
+        body: JSON.stringify({ token }),
+      });
+      expect(resposta.status).toBe(404);
     });
 
     it("o dispositivo pareado aparece na lista", async () => {

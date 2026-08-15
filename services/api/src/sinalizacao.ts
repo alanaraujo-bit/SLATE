@@ -41,6 +41,7 @@ interface SessaoSocket {
 
 export interface Sinalizacao {
   anexar(servidor: Server): void;
+  estaOnline(dispositivoId: string): boolean;
   encerrar(): Promise<void>;
 }
 
@@ -287,6 +288,9 @@ export function criarSinalizacao({
   return {
     anexar(servidor) {
       servidor.on("upgrade", aoUpgrade);
+    },
+    estaOnline(dispositivoId) {
+      return conexoes.get(dispositivoId)?.readyState === WebSocket.OPEN;
     },
     encerrar() {
       return new Promise((resolve) => {

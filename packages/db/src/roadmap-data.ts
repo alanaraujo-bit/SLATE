@@ -390,6 +390,7 @@ export const ROADMAP: SeedItem[] = [
               g("tempo-constante", "Comparação resistente a ataque de tempo"),
               g("limites", "Expiração e bloqueio por tentativas cobertos"),
               g("fluxo", "Fluxo ponta a ponta entre PWA e Agente"),
+              g("qr", "QR temporário no computador pareia pelo celular sem remover a opção de código"),
             ],
           },
           {
@@ -443,6 +444,7 @@ export const ROADMAP: SeedItem[] = [
               g("identidade", "Fingerprint DTLS remoto é verificado antes de confiar no canal"),
               g("canal", "DataChannel abre e troca envelopes válidos do protocolo"),
               g("capacidades", "Hello negocia versão e capacidades antes de declarar conexão"),
+              g("selecao", "PWA escolhe o Agente confiável online e não uma instalação antiga"),
             ],
           },
           {

@@ -4,8 +4,8 @@ mod identidade;
 mod pares;
 mod transporte;
 
-use api::{ClienteApi, Dispositivo, Usuario};
-use identidade::{mensagem_confirmacao_pareamento, Identidade};
+use api::{ClienteApi, ConvitePareamentoQr, Dispositivo, SituacaoConviteQr, Usuario};
+use identidade::{mensagem_confirmacao_pareamento, mensagem_criacao_convite_qr, Identidade};
 use pares::ParesConfiaveis;
 use serde::Serialize;
 use std::sync::Arc;
@@ -126,6 +126,41 @@ async fn confirmar_pareamento(
 }
 
 #[tauri::command]
+async fn criar_convite_qr(estado: tauri::State<'_, Estado>) -> Result<ConvitePareamentoQr, String> {
+    let nonce = uuid::Uuid::new_v4().to_string();
+    let chave_publica = estado.identidade.chave_publica();
+    let prova = mensagem_criacao_convite_qr(&nonce, &chave_publica);
+    estado
+        .api
+        .criar_convite_qr(
+            &nonce,
+            &chave_publica,
+            &estado.identidade.assinar(prova.as_bytes()),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn consultar_convite_qr(
+    estado: tauri::State<'_, Estado>,
+    convite_id: String,
+) -> Result<SituacaoConviteQr, String> {
+    let resultado = estado
+        .api
+        .consultar_convite_qr(&convite_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some(dispositivo) = &resultado.dispositivo {
+        estado
+            .pares
+            .guardar_confirmado(dispositivo)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(resultado)
+}
+
+#[tauri::command]
 async fn falha_inicial(estado: tauri::State<'_, Estado>) -> Result<Option<String>, String> {
     Ok(estado.falha_inicial.lock().await.clone())
 }
@@ -194,6 +229,8 @@ pub fn run() {
             entrar,
             sair,
             confirmar_pareamento,
+            criar_convite_qr,
+            consultar_convite_qr,
             falha_inicial
         ])
         .run(tauri::generate_context!())

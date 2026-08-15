@@ -45,6 +45,20 @@ export function mensagemConfirmacaoPareamento(
   ].join("\n");
 }
 
+export interface DadosCriacaoConviteQr {
+  nonce: string;
+  chavePublicaAgente: string;
+}
+
+/** Prova que o QR foi solicitado por um Agente registrado, não só pela conta. */
+export function mensagemCriacaoConviteQr(dados: DadosCriacaoConviteQr): string {
+  return [
+    "SLATE-PAIR-QR-CREATE/v1",
+    dados.nonce,
+    dados.chavePublicaAgente,
+  ].join("\n");
+}
+
 export interface DadosFingerprintDtls {
   sessaoId: string;
   dispositivoId: string;

@@ -64,6 +64,7 @@ const config: NextConfig = {
         { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         { key: "X-Frame-Options", value: "DENY" },
+        { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
         // A PWA comanda um computador. Uma injeção de script aqui consegue
         // usar a chave do dispositivo enquanto a página está aberta — limite
         // declarado no ADR-0004 —, então a política precisa ser restritiva.

@@ -11,11 +11,14 @@ import {
 import {
   listarParesConfiaveis,
   obterOuCriarIdentidade,
+  removerParesRevogados,
 } from "@/lib/identidade-local";
 import { TransporteWebRtc } from "@/lib/transporte-webrtc";
 import type { EstadoConexao } from "@/lib/estados-conexao";
+import { selecionarAgente } from "@/lib/selecionar-agente";
 import { EstadoDaConexao } from "./estado-da-conexao";
 import { ControlesBasicos } from "./controles-basicos";
+import { ConvitePareamentoQr } from "./convite-pareamento-qr";
 import { FormularioConta } from "./formulario-conta";
 import { PainelPareamento } from "./painel-pareamento";
 
@@ -35,6 +38,10 @@ export function Aplicacao() {
   const [estadoConexao, setEstadoConexao] = useState<EstadoConexao>("PAIRING_REQUIRED");
   const [temParConfiavel, setTemParConfiavel] = useState<boolean | null>(null);
   const [agenteControlaMidia, setAgenteControlaMidia] = useState(false);
+  const [agentePrincipalId, setAgentePrincipalId] = useState<string | null>(null);
+  const [removendoDispositivo, setRemovendoDispositivo] = useState<string | null>(null);
+  const [tokenConvite, setTokenConvite] = useState<string | null>(null);
+  const [adicionandoComputador, setAdicionandoComputador] = useState(false);
   const transporteAtual = useRef<TransporteWebRtc | null>(null);
 
   const carregar = useCallback(async () => {
@@ -64,6 +71,8 @@ export function Aplicacao() {
   }, []);
 
   useEffect(() => {
+    const parametros = new URLSearchParams(window.location.hash.slice(1));
+    setTokenConvite(parametros.get("convite"));
     void carregar();
 
     // A rede volta sozinha com frequência; quando voltar, a tela se recupera
@@ -107,25 +116,20 @@ export function Aplicacao() {
           d.situacao === "ativo" &&
           d.chavePublica === identidade.chavePublicaExportada,
       );
-      const agenteConfiavel = pares.find((d) => d.papel === "agent");
-      const agenteAtivo = dispositivos.find(
-        (d) =>
-          d.id === agenteConfiavel?.id &&
-          d.papel === "agent" &&
-          d.situacao === "ativo" &&
-          d.chavePublica === agenteConfiavel.chavePublica,
-      );
+      const agenteSelecionado = selecionarAgente(pares, dispositivos);
 
-      if (!superficie || !agenteConfiavel || !agenteAtivo) {
+      if (!superficie || !agenteSelecionado) {
+        setAgentePrincipalId(null);
         setTemParConfiavel(false);
         setEstadoConexao("PAIRING_REQUIRED");
         return;
       }
 
       setTemParConfiavel(true);
+      setAgentePrincipalId(agenteSelecionado.dispositivo.id);
       transporte = new TransporteWebRtc({
         identidade,
-        agente: agenteConfiavel,
+        agente: agenteSelecionado.par,
         aoMudarEstado: setEstadoConexao,
         aoNegociarCapacidades: (capacidades) =>
           setAgenteControlaMidia(capacidades.includes("action.media")),
@@ -142,12 +146,68 @@ export function Aplicacao() {
     };
   }, [situacao, dispositivos]);
 
+  useEffect(() => {
+    if (situacao !== "logado" || estadoConexao !== "AGENT_UNAVAILABLE") return;
+
+    // A presença pode mudar sem a página ser recarregada. Uma consulta
+    // moderada permite migrar para outra instalação confiável que ficou
+    // online, mas só altera o estado quando o resultado realmente mudou. Isso
+    // evita reiniciar o WebRTC e martelar a API a cada tentativa de reconexão.
+    const atualizarPresenca = async () => {
+      const lista = await api.dispositivos();
+      if (!lista.ok) return;
+
+      setDispositivos((atuais) => {
+        const assinatura = (itens: DispositivoResumo[]) =>
+          itens
+            .map((item) => `${item.id}:${item.situacao}:${item.online}`)
+            .sort()
+            .join("|");
+        return assinatura(atuais) === assinatura(lista.dados.dispositivos)
+          ? atuais
+          : lista.dados.dispositivos;
+      });
+    };
+
+    void atualizarPresenca();
+    const intervalo = window.setInterval(() => void atualizarPresenca(), 7_500);
+    return () => window.clearInterval(intervalo);
+  }, [situacao, estadoConexao]);
+
   const sair = async () => {
     await api.sair();
     setUsuario(null);
     setDispositivos([]);
     setTemParConfiavel(null);
+    setAgentePrincipalId(null);
     setSituacao("deslogado");
+  };
+
+  const removerInstalacao = async (dispositivo: DispositivoResumo) => {
+    if (
+      !window.confirm(
+        `Remover a instalação ${dispositivo.nome}? Ela precisará ser pareada novamente para voltar.`,
+      )
+    ) {
+      return;
+    }
+    setRemovendoDispositivo(dispositivo.id);
+    const resultado = await api.removerDispositivo(dispositivo.id);
+    if (resultado.ok) {
+      await removerParesRevogados([dispositivo.id]);
+      await carregar();
+    }
+    setRemovendoDispositivo(null);
+  };
+
+  const instalacoesAntigas = dispositivos.filter(
+    (d) => d.papel === "agent" && d.id !== agentePrincipalId && !d.online,
+  );
+
+  const encerrarConvite = async (concluido: boolean) => {
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    setTokenConvite(null);
+    if (concluido) await carregar();
   };
 
   return (
@@ -197,32 +257,99 @@ export function Aplicacao() {
           </Superficie>
         )}
 
-        {situacao === "logado" && temParConfiavel === null && (
+        {situacao === "logado" && tokenConvite && (
+          <ConvitePareamentoQr
+            token={tokenConvite}
+            aoConcluir={() => void encerrarConvite(true)}
+            aoCancelar={() => void encerrarConvite(false)}
+          />
+        )}
+
+        {situacao === "logado" && !tokenConvite && temParConfiavel === null && (
           <div className="aviso" aria-busy="true">
             <Rotulo tom="atenuado">Verificando o pareamento…</Rotulo>
           </div>
         )}
 
-        {situacao === "logado" && temParConfiavel === false && (
-          <PainelPareamento aoParear={() => void carregar()} />
+        {situacao === "logado" && !tokenConvite && temParConfiavel === false && (
+          <PainelPareamento
+            aoParear={() => void carregar()}
+            aoLerConvite={setTokenConvite}
+          />
         )}
 
-        {situacao === "logado" && temParConfiavel === true && (
+        {situacao === "logado" && !tokenConvite && temParConfiavel === true && adicionandoComputador && (
+          <PainelPareamento
+            aoParear={() => {
+              setAdicionandoComputador(false);
+              void carregar();
+            }}
+            aoLerConvite={setTokenConvite}
+            aoCancelar={() => setAdicionandoComputador(false)}
+          />
+        )}
+
+        {situacao === "logado" && !tokenConvite && temParConfiavel === true && !adicionandoComputador && (
           <Superficie nivel="elevada" preenchida>
             <div className="aviso">
               <h1 className="aviso__titulo">Dispositivos da sua conta</h1>
 
               <ul className="dispositivos">
-                {dispositivos.map((d) => (
+                {dispositivos
+                  .filter((d) => d.papel !== "agent" || d.id === agentePrincipalId)
+                  .map((d) => (
                   <li className="dispositivo" key={d.id}>
                     <span className="dispositivo__nome">{d.nome}</span>
                     <Rotulo tamanho="xs" tom="sutil">
                       {d.papel === "agent" ? "Computador" : "Superfície"} ·{" "}
-                      {d.situacao === "ativo" ? "ativo" : d.situacao}
+                      {d.papel === "agent"
+                        ? d.online
+                          ? "conectado agora"
+                          : "desconectado"
+                        : d.situacao === "ativo"
+                          ? "ativo"
+                          : d.situacao}
                     </Rotulo>
                   </li>
                 ))}
               </ul>
+
+              {instalacoesAntigas.length > 0 && (
+                <details className="instalacoes-antigas">
+                  <summary>
+                    {instalacoesAntigas.length === 1
+                      ? "1 instalação antiga"
+                      : `${instalacoesAntigas.length} instalações antigas`}
+                  </summary>
+                  <p className="instalacoes-antigas__explicacao">
+                    São identidades anteriores que estão desconectadas. O SLATE não as
+                    usa enquanto o computador atual estiver disponível.
+                  </p>
+                  <ul className="dispositivos">
+                    {instalacoesAntigas.map((d) => (
+                      <li className="dispositivo dispositivo--gerenciavel" key={d.id}>
+                        <span>
+                          <span className="dispositivo__nome">{d.nome}</span>
+                          <Rotulo tamanho="xs" tom="sutil">
+                            Desconectado
+                          </Rotulo>
+                        </span>
+                        <Botao
+                          tamanho="sm"
+                          estado={removendoDispositivo === d.id ? "loading" : "idle"}
+                          onClick={() => void removerInstalacao(d)}
+                        >
+                          Remover
+                        </Botao>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              <Botao onClick={() => setAdicionandoComputador(true)}>
+                Conectar outro computador
+              </Botao>
 
               <p className="aviso__texto">
                 {estadoConexao === "CONNECTED"

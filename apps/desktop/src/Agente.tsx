@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { QRCodeSVG } from "qrcode.react";
 import { Atualizador } from "./atualizador";
 import { InicioAutomatico } from "./inicio-automatico";
 
@@ -22,6 +23,17 @@ interface Situacao {
   nomeComputador: string;
   chavePublica: string;
   dispositivos: Dispositivo[];
+}
+
+interface ConviteQr {
+  conviteId: string;
+  expiraEm: string;
+  url: string;
+}
+
+interface SituacaoConviteQr {
+  situacao: "pendente" | "expirado" | "confirmado";
+  dispositivo?: Dispositivo;
 }
 
 /**
@@ -169,6 +181,7 @@ function Pareamento({
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [modo, setModo] = useState<"qr" | "codigo">("qr");
 
   const superficies = situacao.dispositivos.filter((d) => d.papel === "surface");
 
@@ -209,45 +222,72 @@ function Pareamento({
         </button>
       </div>
 
-      <form className="bloco" onSubmit={confirmar}>
+      <section className="bloco pareamento-escolha">
         <h2>Parear um aparelho</h2>
         <p className="atenuado">
-          Abra o SLATE no celular, toque em <strong>Parear este aparelho</strong> e
-          digite aqui o código que aparecer.
+          Escolha a forma mais confortável. As duas opções são temporárias e
+          confirmam que você está na frente deste computador.
         </p>
 
-        <input
-          className="codigo"
-          value={codigo}
-          onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          placeholder="000000"
-          inputMode="numeric"
-          // Autofoco aqui porque digitar o código é a única coisa que se faz
-          // nesta tela — a pessoa chega com o celular na mão e o código
-          // correndo contra o tempo.
-          autoFocus
-          aria-label="Código de pareamento"
-        />
+        <div className="seletor-modo" aria-label="Forma de pareamento">
+          <button
+            type="button"
+            className={modo === "qr" ? "seletor-modo__opcao ativa" : "seletor-modo__opcao"}
+            aria-pressed={modo === "qr"}
+            onClick={() => setModo("qr")}
+          >
+            QR Code
+          </button>
+          <button
+            type="button"
+            className={modo === "codigo" ? "seletor-modo__opcao ativa" : "seletor-modo__opcao"}
+            aria-pressed={modo === "codigo"}
+            onClick={() => setModo("codigo")}
+          >
+            Código
+          </button>
+        </div>
 
-        {erro && (
-          <p className="erro" role="alert">
-            {erro}
-          </p>
-        )}
-        {sucesso && (
-          <p className="sucesso" role="status">
-            {sucesso}
-          </p>
-        )}
+        {modo === "qr" ? (
+          <PareamentoQr aoMudar={aoMudar} />
+        ) : (
+          <form className="pareamento-codigo" onSubmit={confirmar}>
+            <p className="atenuado">
+              No celular, toque em <strong>Parear este aparelho</strong> e digite
+              aqui o código de seis dígitos.
+            </p>
 
-        <button
-          type="submit"
-          className="botao principal"
-          disabled={enviando || codigo.length !== 6}
-        >
-          {enviando ? "Confirmando…" : "Confirmar pareamento"}
-        </button>
-      </form>
+            <input
+              className="codigo"
+              value={codigo}
+              onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+              inputMode="numeric"
+              autoFocus
+              aria-label="Código de pareamento"
+            />
+
+            {erro && (
+              <p className="erro" role="alert">
+                {erro}
+              </p>
+            )}
+            {sucesso && (
+              <p className="sucesso" role="status">
+                {sucesso}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className="botao principal"
+              disabled={enviando || codigo.length !== 6}
+            >
+              {enviando ? "Confirmando…" : "Confirmar pareamento"}
+            </button>
+          </form>
+        )}
+      </section>
 
       <section className="bloco">
         <h2>Aparelhos pareados</h2>
@@ -264,6 +304,105 @@ function Pareamento({
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function PareamentoQr({ aoMudar }: { aoMudar: () => void }) {
+  const [convite, setConvite] = useState<ConviteQr | null>(null);
+  const [restante, setRestante] = useState(0);
+  const [erro, setErro] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState<string | null>(null);
+
+  const criar = useCallback(async () => {
+    setConvite(null);
+    setErro(null);
+    setSucesso(null);
+    try {
+      setConvite(await invoke<ConviteQr>("criar_convite_qr"));
+    } catch {
+      setErro("Não foi possível criar o QR Code agora. Use o código ou tente novamente.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void criar();
+  }, [criar]);
+
+  useEffect(() => {
+    if (!convite) return;
+    const atualizar = () =>
+      setRestante(
+        Math.max(0, Math.ceil((new Date(convite.expiraEm).getTime() - Date.now()) / 1_000)),
+      );
+    atualizar();
+    const timer = window.setInterval(atualizar, 1_000);
+    return () => window.clearInterval(timer);
+  }, [convite]);
+
+  useEffect(() => {
+    if (!convite || restante === 0) return;
+    let consultando = false;
+    const verificar = async () => {
+      if (consultando) return;
+      consultando = true;
+      try {
+        const resultado = await invoke<SituacaoConviteQr>("consultar_convite_qr", {
+          conviteId: convite.conviteId,
+        });
+        if (resultado.situacao === "confirmado" && resultado.dispositivo) {
+          setSucesso(`${resultado.dispositivo.nome} foi conectado com segurança.`);
+          setConvite(null);
+          aoMudar();
+        } else if (resultado.situacao === "expirado") {
+          setRestante(0);
+        }
+      } catch {
+        // Uma consulta pontual não invalida um QR ainda dentro do prazo.
+      } finally {
+        consultando = false;
+      }
+    };
+    const timer = window.setInterval(() => void verificar(), 2_000);
+    return () => window.clearInterval(timer);
+  }, [convite, restante, aoMudar]);
+
+  if (sucesso) return <p className="sucesso" role="status">{sucesso}</p>;
+
+  return (
+    <div className="pareamento-qr">
+      <p className="atenuado">
+        Aponte a câmera do celular para o QR Code e abra o link do SLATE.
+      </p>
+      {convite ? (
+        <>
+          <div className="qr-moldura">
+            <QRCodeSVG
+              value={convite.url}
+              size={212}
+              level="M"
+              marginSize={2}
+              bgColor="#ffffff"
+              fgColor="#07111f"
+              title="QR Code para parear com este computador"
+            />
+            <span>SLATE</span>
+          </div>
+          <p className="qr-prazo" role="timer">
+            {restante > 0
+              ? `Expira em ${Math.floor(restante / 60)}:${String(restante % 60).padStart(2, "0")}`
+              : "QR Code expirado"}
+          </p>
+        </>
+      ) : !erro ? (
+        <p className="atenuado" aria-busy="true">Preparando QR Code…</p>
+      ) : null}
+      {erro && <p className="erro" role="alert">{erro}</p>}
+      {(!convite || restante === 0) && (
+        <button type="button" className="botao" onClick={() => void criar()}>
+          Gerar novo QR Code
+        </button>
+      )}
     </div>
   );
 }
