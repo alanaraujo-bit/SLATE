@@ -123,6 +123,20 @@ jobs:
             echo "configurado=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Preparar o banco de homologação
+        if: steps.verificar.outputs.configurado == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+        # Os testes verificam que o conteúdo real do plano aparece na tela, o
+        # que só é determinístico se o banco estiver num estado conhecido. Sem
+        # este passo, a suíte falha quando homologação fica para trás — foi
+        # exatamente o que aconteceu: o plano foi traduzido em produção e
+        # homologação continuou em inglês. A carga é aditiva e não rebobina
+        # status já avançado.
+        run: |
+          pnpm --filter @slate/db exec tsx src/migrate.ts
+          pnpm --filter @slate/db exec tsx src/seed.ts
+
       - name: Instalar navegador
         if: steps.verificar.outputs.configurado == 'true'
         run: pnpm --filter @slate/control-center exec playwright install chromium --with-deps
