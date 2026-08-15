@@ -3,74 +3,75 @@ import { parseArgs } from "node:util";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { createDb } from "@slate/db";
 import {
   activityEvents,
   deployments,
-  executionState,
   projects,
   qualityGates,
   workItems,
+  type GateStatus,
   type WorkStatus,
 } from "@slate/db/schema";
+import { overallProgress, toPercent, type WorkItemInput } from "@slate/db/progress";
 import {
-  blockersToCompletion,
-  overallProgress,
-  toPercent,
-  type WorkItemInput,
-} from "@slate/db/progress";
+  ConclusaoRecusada,
+  ItemNaoEncontrado,
+  buscarItem,
+  concluir,
+  definirCriterio,
+  definirExecucao,
+  definirStatus,
+  registrarEvento,
+} from "./operacoes";
 
 /**
- * The roadmap write path (mandate §24).
+ * O caminho de escrita do plano (mandato §24).
  *
- * Execution drives roadmap state through this CLI rather than by editing a
- * page, so the published progress figure always derives from the same rows the
- * Control Center reads.
- *
- * The `complete` command deliberately refuses when quality gates are unmet or
- * children are unfinished. That refusal is the point: §57 forbids optimising
- * the number at the expense of the truth, and the cheapest way to enforce that
- * is to make the dishonest state unreachable through the only available tool.
+ * Esta é uma casca fina: toda a lógica de verdade vive em `operacoes.ts`, para
+ * que possa ser testada contra um banco real sem passar pelo processamento de
+ * argumentos. O que sobra aqui é ler a linha de comando e imprimir resultado.
  */
 
 /**
- * Load DATABASE_URL from the nearest env file so the CLI works from any
- * directory without the caller exporting anything. An already-set environment
- * variable always wins, so CI and one-off overrides behave as expected.
+ * Carrega DATABASE_URL do arquivo de ambiente mais próximo, para a CLI
+ * funcionar de qualquer diretório sem ninguém exportar nada. Variável já
+ * definida no ambiente sempre vence, para que CI e execuções pontuais possam
+ * sobrescrever.
  */
-function loadEnv() {
+function carregarAmbiente() {
   if (process.env.DATABASE_URL) return;
 
-  const here = dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    resolve(here, "..", ".env"),
-    resolve(here, "..", "..", "..", "apps", "control-center", ".env.local"),
-    resolve(here, "..", "..", "..", ".env"),
+  const aqui = dirname(fileURLToPath(import.meta.url));
+  const candidatos = [
+    resolve(aqui, "..", ".env"),
+    resolve(aqui, "..", "..", "..", "apps", "control-center", ".env.local"),
+    resolve(aqui, "..", "..", "..", ".env"),
   ];
 
-  for (const candidate of candidates) {
-    if (!existsSync(candidate)) continue;
+  for (const candidato of candidatos) {
+    if (!existsSync(candidato)) continue;
     try {
-      process.loadEnvFile(candidate);
+      process.loadEnvFile(candidato);
       if (process.env.DATABASE_URL) return;
     } catch {
-      /* try the next candidate */
+      /* tenta o próximo */
     }
   }
 }
 
-loadEnv();
+carregarAmbiente();
 
-const USAGE = `
+const USO = `
 slate-roadmap — controle do plano de trabalho do SLATE
 
   start <chave>                   Marca EM ANDAMENTO e define a execução atual
   status <chave> <STATUS>         Define um status explícito
   testing <chave>                 Marca EM TESTE
   validating <chave>              Marca VALIDANDO
-  complete <chave>                Marca CONCLUÍDO (recusado se houver critério ou filho pendente)
-  reopen <chave> [--reason <t>]   Regressão: CONCLUÍDO -> REABERTO
+  complete <chave>                Marca CONCLUÍDO (recusado se houver pendência)
+  reopen <chave> [--reason <t>]   Regressão: CONCLUÍDO → REABERTO
   block <chave> [--operator]      Marca BLOQUEADO ou PRECISA DE VOCÊ
 
   gate <chave> <critério> --pass|--fail|--na [--evidence <texto>]
@@ -83,27 +84,7 @@ Opções: --project <slug> (padrão: slate)
 Requer DATABASE_URL.
 `;
 
-/** Status em português, para o log de atividade que aparece na tela. */
-const STATUS_PT: Record<WorkStatus, string> = {
-  PLANNED: "Planejado",
-  READY: "Pronto",
-  IN_PROGRESS: "Em andamento",
-  TESTING: "Em teste",
-  VALIDATING: "Validando",
-  BLOCKED_EXTERNAL: "Bloqueado",
-  OPERATOR_REQUIRED: "Precisa de você",
-  COMPLETED: "Concluído",
-  REOPENED: "Reaberto",
-};
-
-const CRITERIO_PT: Record<string, string> = {
-  PASSED: "Aprovado",
-  FAILED: "Reprovado",
-  PENDING: "Pendente",
-  NOT_APPLICABLE: "Não se aplica",
-};
-
-const STATUSES: WorkStatus[] = [
+const STATUS_VALIDOS: WorkStatus[] = [
   "PLANNED",
   "READY",
   "IN_PROGRESS",
@@ -133,6 +114,7 @@ async function main() {
       severity: { type: "string" },
       target: { type: "string" },
       url: { type: "string" },
+      status: { type: "string" },
       pass: { type: "boolean" },
       fail: { type: "boolean" },
       na: { type: "boolean" },
@@ -141,354 +123,255 @@ async function main() {
     },
   });
 
-  const [command, ...rest] = positionals;
+  const [comando, ...resto] = positionals;
 
-  if (values.help || !command) {
-    console.log(USAGE);
-    process.exit(command ? 0 : 1);
+  if (values.help || !comando) {
+    console.log(USO);
+    process.exit(comando ? 0 : 1);
   }
 
   const url = process.env.DATABASE_URL;
   if (!url) {
-    console.error("DATABASE_URL is not set.");
+    console.error("DATABASE_URL não está definida.");
     process.exit(1);
   }
 
   const db = createDb(url);
   const slug = values.project ?? "slate";
 
-  const [project] = await db
+  const [projeto] = await db
     .select()
     .from(projects)
     .where(eq(projects.slug, slug))
     .limit(1);
-  if (!project) {
-    console.error(`Project '${slug}' not found. Run the seed first.`);
+
+  if (!projeto) {
+    console.error(`Projeto '${slug}' não encontrado. Rode a carga inicial antes.`);
     process.exit(1);
   }
-  const projectId = project.id;
+  const projectId = projeto.id;
 
-  const findItem = async (key: string) => {
-    const [item] = await db
-      .select()
-      .from(workItems)
-      .where(and(eq(workItems.projectId, projectId), eq(workItems.key, key)))
-      .limit(1);
-    if (!item) {
-      console.error(`Work item '${key}' not found.`);
-      process.exit(1);
-    }
-    return item;
-  };
+  const mostrarMudanca = (r: { anterior: WorkStatus; atual: WorkStatus }, chave: string) =>
+    console.log(`${chave}: ${r.anterior} → ${r.atual}`);
 
-  const logEvent = async (
-    type: string,
-    title: string,
-    opts: {
-      detail?: string;
-      severity?: "INFO" | "SUCCESS" | "WARNING" | "ERROR";
-      workItemId?: string;
-    } = {},
-  ) => {
-    await db.insert(activityEvents).values({
-      projectId,
-      workItemId: opts.workItemId ?? null,
-      type,
-      title,
-      detail: opts.detail ?? null,
-      severity: opts.severity ?? "INFO",
-    });
-  };
-
-  const setStatus = async (key: string, status: WorkStatus, detail?: string) => {
-    const item = await findItem(key);
-    const now = new Date();
-
-    const patch: Partial<typeof workItems.$inferInsert> = { status, updatedAt: now };
-    if (status === "IN_PROGRESS" && !item.startedAt) patch.startedAt = now;
-    if (status === "COMPLETED") patch.completedAt = now;
-    if (status === "REOPENED") patch.completedAt = null;
-
-    await db.update(workItems).set(patch).where(eq(workItems.id, item.id));
-
-    await logEvent(
-      `status.${status.toLowerCase()}`,
-      `${item.key} — ${item.title}: ${STATUS_PT[item.status]} → ${STATUS_PT[status]}`,
-      {
-        detail,
-        severity:
-          status === "COMPLETED"
-            ? "SUCCESS"
-            : status === "REOPENED" || status.startsWith("BLOCKED") || status === "OPERATOR_REQUIRED"
-              ? "WARNING"
-              : "INFO",
-        workItemId: item.id,
-      },
-    );
-
-    console.log(`${item.key}: ${item.status} → ${status}`);
-    return item;
-  };
-
-  switch (command) {
+  switch (comando) {
     case "start": {
-      const key = requireArg(rest[0], "key");
-      const item = await setStatus(key, "IN_PROGRESS");
-      await db
-        .insert(executionState)
-        .values({
-          projectId,
-          currentWorkItemId: item.id,
-          operation: values.operation ?? item.title,
-          branch: values.branch ?? null,
-          commitSha: values.commit ?? null,
-          environment: values.env ?? null,
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: executionState.projectId,
-          set: {
-            currentWorkItemId: item.id,
-            operation: values.operation ?? item.title,
-            updatedAt: new Date(),
-          },
-        });
+      const chave = exigir(resto[0], "chave");
+      const r = await definirStatus(db, projectId, chave, "IN_PROGRESS");
+      await definirExecucao(db, projectId, {
+        workItemId: r.item.id,
+        operacao: values.operation ?? r.item.title,
+        branch: values.branch ?? null,
+        commit: values.commit ?? null,
+        ambiente: values.env ?? null,
+      });
+      mostrarMudanca(r, chave);
       break;
     }
 
     case "status": {
-      const key = requireArg(rest[0], "key");
-      const raw = requireArg(rest[1], "STATUS").toUpperCase() as WorkStatus;
-      if (!STATUSES.includes(raw)) {
-        console.error(`Unknown status '${raw}'. One of: ${STATUSES.join(", ")}`);
+      const chave = exigir(resto[0], "chave");
+      const bruto = exigir(resto[1], "STATUS").toUpperCase() as WorkStatus;
+      if (!STATUS_VALIDOS.includes(bruto)) {
+        console.error(`Status inválido '${bruto}'. Use um de: ${STATUS_VALIDOS.join(", ")}`);
         process.exit(1);
       }
-      await setStatus(key, raw, values.reason);
+      mostrarMudanca(await definirStatus(db, projectId, chave, bruto, values.reason), chave);
       break;
     }
 
     case "testing":
-      await setStatus(requireArg(rest[0], "key"), "TESTING");
+    case "validating": {
+      const chave = exigir(resto[0], "chave");
+      const alvo: WorkStatus = comando === "testing" ? "TESTING" : "VALIDATING";
+      mostrarMudanca(await definirStatus(db, projectId, chave, alvo), chave);
       break;
+    }
 
-    case "validating":
-      await setStatus(requireArg(rest[0], "key"), "VALIDATING");
+    case "block": {
+      const chave = exigir(resto[0], "chave");
+      const alvo: WorkStatus = values.operator ? "OPERATOR_REQUIRED" : "BLOCKED_EXTERNAL";
+      mostrarMudanca(await definirStatus(db, projectId, chave, alvo, values.reason), chave);
       break;
-
-    case "block":
-      await setStatus(
-        requireArg(rest[0], "key"),
-        values.operator ? "OPERATOR_REQUIRED" : "BLOCKED_EXTERNAL",
-        values.reason,
-      );
-      break;
+    }
 
     case "reopen": {
-      const key = requireArg(rest[0], "key");
-      await setStatus(key, "REOPENED", values.reason);
-      console.log("Overall progress will fall accordingly.");
+      const chave = exigir(resto[0], "chave");
+      mostrarMudanca(
+        await definirStatus(db, projectId, chave, "REOPENED", values.reason),
+        chave,
+      );
+      console.log("O progresso geral vai cair de acordo.");
       break;
     }
 
     case "complete": {
-      const key = requireArg(rest[0], "key");
-      const item = await findItem(key);
-
-      const gates = await db
-        .select()
-        .from(qualityGates)
-        .where(eq(qualityGates.workItemId, item.id));
-      const children = await db
-        .select()
-        .from(workItems)
-        .where(eq(workItems.parentId, item.id));
-
-      const reasons = blockersToCompletion(
-        {
-          id: item.id,
-          parentId: item.parentId,
-          status: item.status,
-          weight: item.weight,
-          gates: gates.map((gate) => ({ status: gate.status, weight: gate.weight })),
-        },
-        children.map((child) => ({
-          id: child.key,
-          parentId: child.parentId,
-          status: child.status,
-          weight: child.weight,
-        })),
-      );
-
-      if (reasons.length > 0) {
-        console.error(`Recusando concluir ${item.key} — ${item.title}:`);
-        for (const reason of reasons) console.error(`  · ${reason}`);
-        console.error(
-          "\nResolva isso primeiro. Marcar como concluído assim mesmo tornaria o " +
-            "percentual publicado uma mentira (mandato §57).",
-        );
-        process.exit(1);
-      }
-
-      await setStatus(key, "COMPLETED");
+      const chave = exigir(resto[0], "chave");
+      mostrarMudanca(await concluir(db, projectId, chave), chave);
       break;
     }
 
     case "gate": {
-      const key = requireArg(rest[0], "key");
-      const gateKey = requireArg(rest[1], "gateKey");
-      const item = await findItem(key);
+      const chave = exigir(resto[0], "chave");
+      const criterio = exigir(resto[1], "critério");
 
-      const status = values.pass
+      const alvo: GateStatus | null = values.pass
         ? "PASSED"
         : values.fail
           ? "FAILED"
           : values.na
             ? "NOT_APPLICABLE"
             : null;
-      if (!status) {
-        console.error("Specify one of --pass, --fail or --na.");
+
+      if (!alvo) {
+        console.error("Informe um de: --pass, --fail ou --na.");
         process.exit(1);
       }
 
-      const [gate] = await db
-        .select()
-        .from(qualityGates)
-        .where(
-          and(eq(qualityGates.workItemId, item.id), eq(qualityGates.key, gateKey)),
-        )
-        .limit(1);
-      if (!gate) {
-        console.error(`Gate '${gateKey}' not found on ${item.key}.`);
-        process.exit(1);
-      }
-
-      await db
-        .update(qualityGates)
-        .set({
-          status,
-          evidence: values.evidence ?? gate.evidence,
-          checkedAt: new Date(),
-        })
-        .where(eq(qualityGates.id, gate.id));
-
-      await logEvent(
-        `gate.${status.toLowerCase()}`,
-        `${item.key} — critério '${gate.title}': ${CRITERIO_PT[status] ?? status}`,
-        {
-          detail: values.evidence,
-          severity: status === "FAILED" ? "ERROR" : status === "PASSED" ? "SUCCESS" : "INFO",
-          workItemId: item.id,
-        },
+      const r = await definirCriterio(
+        db,
+        projectId,
+        chave,
+        criterio,
+        alvo,
+        values.evidence,
       );
-      console.log(`${item.key}/${gateKey}: ${gate.status} → ${status}`);
+      console.log(`${chave}/${criterio}: ${r.anterior} → ${r.atual}`);
       break;
     }
 
     case "exec": {
-      const itemId = values.item ? (await findItem(values.item)).id : undefined;
-      const patch = {
-        operation: values.operation ?? null,
+      const item = values.item ? await buscarItem(db, projectId, values.item) : undefined;
+      await definirExecucao(db, projectId, {
+        workItemId: item?.id,
+        operacao: values.operation ?? null,
         branch: values.branch ?? null,
-        commitSha: values.commit ?? null,
-        environment: values.env ?? null,
-        updatedAt: new Date(),
-        ...(itemId ? { currentWorkItemId: itemId } : {}),
-      };
-      await db
-        .insert(executionState)
-        .values({ projectId, ...patch })
-        .onConflictDoUpdate({ target: executionState.projectId, set: patch });
-      console.log("Execution state updated.");
+        commit: values.commit ?? null,
+        ambiente: values.env ?? null,
+      });
+      console.log("Execução atual atualizada.");
       break;
     }
 
     case "event": {
-      const itemId = values.item ? (await findItem(values.item)).id : undefined;
-      await logEvent(values.type ?? "note", requireArg(values.title, "--title"), {
-        detail: values.detail,
-        severity: (values.severity?.toUpperCase() as "INFO") ?? "INFO",
-        workItemId: itemId,
-      });
-      console.log("Event recorded.");
+      const item = values.item ? await buscarItem(db, projectId, values.item) : undefined;
+      await registrarEvento(
+        db,
+        projectId,
+        values.type ?? "nota",
+        exigir(values.title, "--title"),
+        {
+          detalhe: values.detail,
+          severidade: (values.severity?.toUpperCase() as "INFO") ?? "INFO",
+          workItemId: item?.id,
+        },
+      );
+      console.log("Evento registrado.");
       break;
     }
 
     case "deploy": {
+      const ambiente = exigir(values.env, "--env");
+      const alvo = values.target ?? "control-center";
       await db.insert(deployments).values({
         projectId,
-        environment: requireArg(values.env, "--env"),
+        environment: ambiente,
         provider: "vercel",
-        target: values.target ?? "control-center",
+        target: alvo,
         url: values.url ?? null,
         commitSha: values.commit ?? null,
         status: (values.status?.toUpperCase() as "READY") ?? "READY",
       });
-      await logEvent("deployment.created", `Deployed ${values.target ?? "control-center"} to ${values.env}`, {
-        detail: values.url,
-        severity: "SUCCESS",
-      });
-      console.log("Deployment recorded.");
+      await registrarEvento(
+        db,
+        projectId,
+        "deployment.created",
+        `Publicado ${alvo} em ${ambiente}`,
+        { detalhe: values.url, severidade: "SUCCESS" },
+      );
+      console.log("Publicação registrada.");
       break;
     }
 
     case "report": {
-      const items = await db
+      const itens = await db
         .select()
         .from(workItems)
         .where(eq(workItems.projectId, projectId));
-      const gates = await db.select().from(qualityGates);
-      const gatesByItem = new Map<string, { status: (typeof gates)[number]["status"]; weight: number }[]>();
-      for (const gate of gates) {
-        const bucket = gatesByItem.get(gate.workItemId);
-        const entry = { status: gate.status, weight: gate.weight };
-        if (bucket) bucket.push(entry);
-        else gatesByItem.set(gate.workItemId, [entry]);
+
+      const criterios = await db.select().from(qualityGates);
+      const porItem = new Map<string, { status: GateStatus; weight: number }[]>();
+      for (const c of criterios) {
+        const balde = porItem.get(c.workItemId);
+        const entrada = { status: c.status, weight: c.weight };
+        if (balde) balde.push(entrada);
+        else porItem.set(c.workItemId, [entrada]);
       }
 
-      const inputs: WorkItemInput[] = items.map((item) => ({
-        id: item.id,
-        parentId: item.parentId,
-        status: item.status,
-        weight: item.weight,
-        gates: gatesByItem.get(item.id),
+      const entradas: WorkItemInput[] = itens.map((i) => ({
+        id: i.id,
+        parentId: i.parentId,
+        status: i.status,
+        weight: i.weight,
+        gates: porItem.get(i.id),
       }));
 
+      const pct = String(toPercent(overallProgress(entradas))).replace(".", ",");
+      console.log(`\nSLATE — progresso geral: ${pct}%`);
       console.log(
-        `\nSLATE — progresso geral: ${String(toPercent(overallProgress(inputs))).replace(".", ",")}%`,
+        `${itens.length} itens de trabalho, ` +
+          `${itens.filter((i) => i.status === "COMPLETED").length} concluídos.\n`,
       );
-      console.log(`${items.length} itens de trabalho, ${gates.length} critérios de qualidade.\n`);
 
-      const recent = await db
+      const recentes = await db
         .select()
         .from(activityEvents)
         .where(eq(activityEvents.projectId, projectId))
         .orderBy(desc(activityEvents.createdAt))
         .limit(5);
-      if (recent.length > 0) {
-        console.log("Recent activity:");
-        for (const event of recent) console.log(`  · ${event.title}`);
+
+      if (recentes.length > 0) {
+        console.log("Atividade recente:");
+        for (const e of recentes) console.log(`  · ${e.title}`);
       }
       break;
     }
 
     default:
-      console.error(`Unknown command '${command}'.`);
-      console.log(USAGE);
+      console.error(`Comando desconhecido: '${comando}'.`);
+      console.log(USO);
       process.exit(1);
   }
 
   process.exit(0);
 }
 
-function requireArg(value: string | undefined, name: string): string {
-  if (!value) {
-    console.error(`Missing required argument: ${name}`);
+function exigir(valor: string | undefined, nome: string): string {
+  if (!valor) {
+    console.error(`Falta o argumento obrigatório: ${nome}`);
     process.exit(1);
   }
-  return value;
+  return valor;
 }
 
-main().catch((error) => {
-  console.error(error);
+main().catch((erro) => {
+  // As recusas são resultado esperado, não falha do programa: merecem uma
+  // mensagem útil em vez de um stack trace.
+  if (erro instanceof ConclusaoRecusada) {
+    console.error(`Recusando concluir ${erro.chave}:`);
+    for (const motivo of erro.motivos) console.error(`  · ${motivo}`);
+    console.error(
+      "\nResolva isso primeiro. Marcar como concluído assim mesmo tornaria o " +
+        "percentual publicado uma mentira (mandato §57).",
+    );
+    process.exit(1);
+  }
+
+  if (erro instanceof ItemNaoEncontrado) {
+    console.error(erro.message);
+    process.exit(1);
+  }
+
+  console.error(erro);
   process.exit(1);
 });
