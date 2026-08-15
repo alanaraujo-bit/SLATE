@@ -44,7 +44,12 @@ jobs:
         # Sem DATABASE_URL, as suítes que precisam de banco se pulam sozinhas
         # em vez de falhar — quem não tem acesso ao banco ainda consegue rodar
         # o resto.
-        run: pnpm --filter @slate/db --filter @slate/protocol --filter @slate/design-system test
+        run: >
+          pnpm --filter @slate/db
+          --filter @slate/protocol
+          --filter @slate/design-system
+          --filter @slate/control-center
+          test
 
       - name: Build do Centro de Controle
         run: pnpm --filter @slate/control-center exec next build

@@ -2,21 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Snapshot } from "@/lib/snapshot";
+import { avaliarConexao, type EstadoConexao } from "@/lib/estado-conexao";
 
-export type LinkState = "live" | "reconnecting" | "offline";
-
-/**
- * Tolerância antes de admitir que a conexão está com problema.
- *
- * O servidor manda um sinal de vida a cada 5s, então este valor precisa cobrir
- * mais de um sinal perdido — senão um engasgo da rede vira alarme. Também não
- * pode ser generoso demais: uma página que afirma estar ao vivo enquanto não
- * recebe nada é pior que uma que admite o problema.
- */
-const TOLERANCIA_MS = 12_000;
-
-/** A partir daqui não é mais engasgo: é queda. */
-const QUEDA_MS = 30_000;
+export type LinkState = EstadoConexao;
 
 /** De quanto em quanto tempo o silêncio é reavaliado. */
 const INTERVALO_VERIFICACAO_MS = 2_000;
@@ -30,21 +18,9 @@ export function useLiveSnapshot(initial: Snapshot) {
     let fonte: EventSource | null = null;
     let descartado = false;
 
-    /**
-     * Estado derivado do silêncio, e só dele.
-     *
-     * Uma versão anterior também consultava se o socket parecia aberto, e
-     * ignorava o silêncio enquanto parecesse. Isso deixava uma faixa em que a
-     * página seguia dizendo "ao vivo" sem receber nada há dez segundos — um
-     * socket aberto que não entrega é indistinguível de um quebrado para quem
-     * está olhando a tela.
-     */
-    const avaliar = () => {
-      const silencio = Date.now() - ultimaMensagem.current;
-      if (silencio > QUEDA_MS) setLink("offline");
-      else if (silencio > TOLERANCIA_MS) setLink("reconnecting");
-      else setLink("live");
-    };
+    // A regra vive em `lib/estado-conexao`, onde é verificada nos limites
+    // exatos sem depender de navegador.
+    const avaliar = () => setLink(avaliarConexao(Date.now() - ultimaMensagem.current));
 
     const registrarAtividade = () => {
       ultimaMensagem.current = Date.now();

@@ -165,41 +165,20 @@ test.describe("tempo real", () => {
     await context.setOffline(false);
   });
 
-  test("uma queda prolongada é informada ao operador", async ({ page, context }) => {
-    await page.goto("/");
-    await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live", {
-      timeout: 20_000,
-    });
-
-    await context.setOffline(true);
-
-    // Passada a tolerância, o silêncio precisa ser dito: uma página que parou
-    // de receber dados não pode continuar afirmando que está ao vivo.
-    await expect(page.locator(".link-state")).not.toHaveAttribute("data-state", "live", {
-      timeout: 25_000,
-    });
-
-    await context.setOffline(false);
-  });
-
-  test("volta ao ar sozinho quando a rede retorna", async ({ page, context }) => {
-    await page.goto("/");
-    await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live", {
-      timeout: 20_000,
-    });
-
-    await context.setOffline(true);
-    await expect(page.locator(".link-state")).not.toHaveAttribute("data-state", "live", {
-      timeout: 25_000,
-    });
-
-    // Recuperar sozinho é metade do requisito: avisar que caiu sem voltar a
-    // funcionar deixaria o operador recarregando a página à toa.
-    await context.setOffline(false);
-    await expect(page.locator(".link-state")).toHaveAttribute("data-state", "live", {
-      timeout: 25_000,
-    });
-  });
+  /*
+   * Os casos de queda prolongada e de recuperação viviam aqui e foram movidos
+   * para `lib/estado-conexao.test.ts`.
+   *
+   * O motivo não é que falhavam: é que não verificavam de forma confiável o
+   * que diziam verificar. `setOffline` nem sempre corta uma conexão SSE já
+   * aberta, então às vezes exercitavam a regra e às vezes exercitavam nada,
+   * falhando sem haver defeito. Como teste unitário a mesma regra é verificada
+   * nos limites exatos, incluindo casos que o navegador não conseguia produzir
+   * — silêncio negativo por relógio adiantado, e a garantia de que o estado
+   * nunca melhora sozinho enquanto nada chega.
+   *
+   * O que sobrou aqui é o que realmente precisa de navegador.
+   */
 
   test("o fluxo entrega um evento de atualização", async ({ page }) => {
     await page.goto("/");
