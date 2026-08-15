@@ -25,9 +25,15 @@ WORKDIR /repo
 ENV NODE_ENV=production
 ENV PORT=4500
 
+# Todo pacote do workspace que entra em tempo de execução precisa vir com o
+# próprio node_modules. O pnpm não achata as dependências: cada pacote resolve
+# as suas a partir da própria pasta, então esquecer uma resulta em
+# ERR_MODULE_NOT_FOUND só quando aquele caminho de código é exercitado.
 COPY --from=deps /repo/node_modules ./node_modules
 COPY --from=deps /repo/services/api/node_modules ./services/api/node_modules
 COPY --from=deps /repo/packages/db/node_modules ./packages/db/node_modules
+COPY --from=deps /repo/packages/identidade/node_modules ./packages/identidade/node_modules
+COPY --from=deps /repo/packages/protocol/node_modules ./packages/protocol/node_modules
 
 COPY pnpm-workspace.yaml package.json ./
 COPY services/api ./services/api
