@@ -1,0 +1,62 @@
+[package]
+name = "slate-agente"
+version = "0.1.0"
+description = "Agente do SLATE para Windows"
+authors = ["Aionixdev"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "slate_agente_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Cliente HTTP com armazenamento de cookies próprio do processo.
+#
+# O Agente autentica na conta como qualquer cliente, mas não é um navegador: o
+# cookie de sessão vive aqui, fora do alcance da interface. Isso evita toda a
+# discussão de origem e SameSite que existe do lado da PWA.
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "cookies",
+    "rustls-tls",
+] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+
+# Identidade do dispositivo.
+ed25519-dalek = { version = "2", features = ["rand_core", "pkcs8"] }
+rand = "0.8"
+base64 = "0.22"
+
+thiserror = "2"
+
+[target.'cfg(windows)'.dependencies]
+# DPAPI, para proteger a chave privada em repouso.
+#
+# A proteção fica atrelada à conta de usuário do Windows: copiar o arquivo para
+# outra máquina, ou abri-lo com outro usuário, não devolve a chave.
+windows = { version = "0.58", features = [
+    "Win32_Security_Cryptography",
+    "Win32_Foundation",
+] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+# Instalador pequeno importa num agente que fica sempre residente.
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
