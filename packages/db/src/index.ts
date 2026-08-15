@@ -17,7 +17,14 @@ let cached: Database | undefined;
  * quickly under Fluid Compute's instance reuse.
  */
 export function createDb(connectionString: string) {
-  const client = postgres(connectionString, {
+  /*
+   * O trim não é paranoia: é a correção de um erro que já cometi duas vezes.
+   * Gravar um segredo com `valor | comando` acrescenta uma quebra de linha, e
+   * o resultado é um `TypeError: Invalid URL` vindo de dentro do driver, que
+   * não diz nada sobre a causa. Custou um diagnóstico longo na primeira vez e
+   * uma execução vermelha de CI na segunda.
+   */
+  const client = postgres(connectionString.trim(), {
     // Railway's TCP proxy terminates TLS with its own chain; `require` keeps
     // the connection encrypted without demanding a locally-trusted CA.
     ssl: "require",
