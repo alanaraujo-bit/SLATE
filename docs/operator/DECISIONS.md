@@ -9,6 +9,27 @@ das decisões pequenas demais para virar um documento.
 
 ## 2026-08-15
 
+### D-010 — PWA na Vercel, API no Railway — **decisão do operador**
+
+A PWA é publicada na Vercel, ligada ao repositório, com versão nova a cada push
+na `main`. A API continua no Railway, onde já roda junto do Postgres.
+
+A divisão não é arbitrária. A PWA é conteúdo estático mais renderização, que é
+exatamente o que a Vercel distribui bem; a API é um processo de vida longa com
+conexão de banco, que é o que o Railway hospeda bem. E manter a API perto do
+banco evita uma volta pela internet a cada consulta.
+
+O que amarra os dois é o proxy: o navegador fala só com a Vercel, e ela repassa
+`/api` para o Railway. Isso mantém o cookie de sessão como primeira parte —
+sem isso, o WebKit não o devolveria, e a PWA não teria sessão no iPhone nem no
+iPad ([ADR-0005](../architecture/ADR-0005-contas-e-sessoes.md)).
+
+Consequência a lembrar: a API valida a origem por comparação exata, então
+**trocar o domínio da PWA exige atualizar `ORIGENS_PERMITIDAS`**. Isso já custou
+uma rodada — a API respondeu 403 até o domínio da Vercel entrar na lista. É o
+comportamento correto, e não um incômodo a ser removido: uma verificação
+tolerante aceitaria domínios que apenas se parecem com o certo.
+
 ### D-001 — Repositório único com workspaces do pnpm
 → [ADR-0001](../architecture/ADR-0001-arquitetura-do-sistema.md)
 
