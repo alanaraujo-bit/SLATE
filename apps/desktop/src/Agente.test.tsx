@@ -90,6 +90,53 @@ describe("tela principal do Agente", () => {
     expect(invocar.mock.calls.some(([comando]) => comando === "criar_convite_qr")).toBe(true);
   });
 
+  it("pergunta se o convite foi aceito enquanto o QR está na tela", async () => {
+    /*
+     * O defeito que este teste tranca não aparecia como erro em lugar nenhum.
+     *
+     * A consulta dependia do contador regressivo, que muda a cada segundo:
+     * o intervalo de dois segundos era refeito a cada um e nunca disparava.
+     * O Agente não chegava a perguntar nada. A janela seguia mostrando o QR
+     * depois de o celular já ter pareado — e, como esta consulta é o único
+     * momento em que o aparelho entra na raiz de confiança local, o celular
+     * também ficava eternamente "conectando": a oferta chegava de uma origem
+     * que o Agente não reconhecia.
+     *
+     * Por isso o teste avança o relógio bem além de dois segundos e cobra a
+     * consulta. Contar chamadas, e não olhar a tela, é o que o faz falhar com
+     * o código antigo.
+     */
+    vi.useFakeTimers();
+    try {
+      responder([]);
+      render(<Agente />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // Um segundo por vez, e cada avanço dentro do seu próprio `act`.
+      //
+      // Avançar seis segundos de uma vez esconde o defeito: os disparos saem
+      // em lote antes de o React reprocessar o estado, e o intervalo da
+      // consulta sobrevive ao que no navegador o mataria. É o contador
+      // regressivo — um tique por segundo, cada um com sua re-renderização —
+      // que refazia a inscrição antes dos dois segundos completarem.
+      for (let segundo = 0; segundo < 6; segundo++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1_000);
+        });
+      }
+
+      const consultas = invocar.mock.calls.filter(
+        ([comando]) => comando === "consultar_convite_qr",
+      );
+      expect(consultas.length).toBeGreaterThan(0);
+      expect(consultas[0]?.[1]).toEqual({ conviteId: "c1" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("mostra a presença de cada aparelho, que é o que se procura na lista", async () => {
     responder([celular(), celular({ id: "s2", nome: "Tablet", online: false })]);
     await montar();

@@ -465,10 +465,28 @@ function PareamentoQr({
     return () => window.clearInterval(timer);
   }, [convite]);
 
+  /*
+   * A consulta acompanha o convite, e **não** o contador.
+   *
+   * Com `restante` na lista de dependências, este efeito era desmontado e
+   * remontado a cada segundo — e um intervalo de dois segundos que é destruído
+   * a cada um nunca dispara. O Agente não chegava a perguntar se o convite
+   * tinha sido aceito: a janela seguia exibindo o QR depois do pareamento
+   * concluído no celular.
+   *
+   * O estrago passava disso. Esta consulta é o único momento em que o Agente
+   * grava o aparelho na raiz de confiança local; sem ela, o celular pareava na
+   * conta e continuava desconhecido aqui. A oferta WebRTC chegava de uma
+   * origem sem par confiável, o Agente respondia "encerrar", e o celular ficava
+   * em "conectando" para sempre — dois sintomas distantes, uma causa só.
+   *
+   * O prazo continua respeitado, só que conferido dentro do disparo.
+   */
   useEffect(() => {
-    if (!convite || restante === 0) return;
+    if (!convite) return;
     let consultando = false;
     const verificar = async () => {
+      if (new Date(convite.expiraEm).getTime() <= Date.now()) return;
       if (consultando) return;
       consultando = true;
       try {
@@ -492,9 +510,12 @@ function PareamentoQr({
         consultando = false;
       }
     };
+    // Uma consulta imediata: esperar dois segundos para a primeira pergunta
+    // atrasa à toa o caso mais comum, que é o convite já ter sido aceito.
+    void verificar();
     const timer = window.setInterval(() => void verificar(), 2_000);
     return () => window.clearInterval(timer);
-  }, [convite, restante, aoMudar]);
+  }, [convite, aoMudar]);
 
   if (sucesso) return <p className="sucesso" role="status">{sucesso}</p>;
 
