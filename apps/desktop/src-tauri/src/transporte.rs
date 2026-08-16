@@ -193,7 +193,10 @@ impl PeerConnectionEventHandler for EventosPar {
                                 "appVersion": VERSAO_APP,
                                 "role": "agent",
                                 "deviceId": dispositivo_id,
-                                "capabilities": ["action.execute", "action.media", "state.system", "state.media"]
+                                // `action.media.completo` é o que diz à PWA que
+                                // este Agente já tem faixa, parada e volume —
+                                // sem isso ela mostra só o reproduzir/pausar.
+                                "capabilities": ["action.execute", "action.media", "action.media.completo", "state.system", "state.media"]
                             }
                         });
                         if canal.send_text(&hello.to_string()).await.is_err() {

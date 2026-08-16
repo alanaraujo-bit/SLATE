@@ -1,44 +1,92 @@
 "use client";
 
 import { useState } from "react";
-import { Botao, Rotulo } from "@slate/design-system";
+import { Icone, Rotulo } from "@slate/design-system";
+import {
+  CONTROLES_MIDIA,
+  CONTROLES_VOLUME,
+  visiveis,
+  type Controle,
+} from "@/lib/controles";
 import type { ResultadoExecucaoAcao } from "@/lib/transporte-webrtc";
 
 export function ControlesBasicos({
   executar,
+  gradeCompleta = false,
 }: {
   executar: (actionId: string) => Promise<ResultadoExecucaoAcao>;
+  /** O Agente anunciou `action.media.completo` no handshake. */
+  gradeCompleta?: boolean;
 }) {
-  const [executando, setExecutando] = useState(false);
+  // Guarda qual botão está em voo, e não um booleano: com um booleano só, tocar
+  // no volume deixava a grade inteira em espera, e o painel travava a cada
+  // toque em vez de responder.
+  const [emVoo, setEmVoo] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ResultadoExecucaoAcao | null>(null);
 
-  const reproduzirPausar = async () => {
-    if (executando) return;
-    setExecutando(true);
+  const acionar = async (actionId: string) => {
+    if (emVoo) return;
+    setEmVoo(actionId);
     setResultado(null);
     try {
-      setResultado(await executar("midia.reproduzir-pausar"));
+      setResultado(await executar(actionId));
     } finally {
-      setExecutando(false);
+      setEmVoo(null);
     }
   };
 
+  const midia = visiveis(CONTROLES_MIDIA, gradeCompleta);
+  const volume = visiveis(CONTROLES_VOLUME, gradeCompleta);
+
+  const botao = (controle: Controle) => (
+    <button
+      key={controle.actionId}
+      type="button"
+      className={`tecla${controle.destaque ? " tecla--destaque" : ""}${
+        emVoo === controle.actionId ? " tecla--ocupada" : ""
+      }`}
+      // Desabilita só o botão em voo. Bloquear a grade inteira fazia o painel
+      // parecer travado no toque seguinte.
+      disabled={emVoo !== null && emVoo !== controle.actionId}
+      onClick={() => void acionar(controle.actionId)}
+    >
+      <Icone nome={controle.icone} aria-hidden />
+      <span>{controle.rotulo}</span>
+    </button>
+  );
+
   return (
-    <section className="controles-basicos" aria-label="Controles do computador">
-      <div>
-        <h2>Mídia</h2>
-        <Rotulo tamanho="xs" tom="sutil">
-          Funciona com o aplicativo de mídia ativo no Windows.
-        </Rotulo>
+    <section
+      // Com um Agente antigo só sobra o grupo de mídia, e a divisão em duas
+      // colunas do modo deitado deixaria metade da tela vazia.
+      className={`painel${volume.length === 0 ? " painel--coluna-unica" : ""}`}
+      aria-label="Controles do computador"
+    >
+      <div className="painel__grupo">
+        <div className="painel__cabecalho">
+          <h2>Mídia</h2>
+          <Rotulo tamanho="xs" tom="sutil">
+            Funciona com o aplicativo de mídia ativo no Windows.
+          </Rotulo>
+        </div>
+        <div className="grade-teclas">{midia.map(botao)}</div>
       </div>
-      <Botao
-        tom="acento"
-        tamanho="lg"
-        estado={executando ? "loading" : "idle"}
-        onClick={() => void reproduzirPausar()}
-      >
-        Reproduzir / pausar
-      </Botao>
+
+      {volume.length > 0 && (
+        <div className="painel__grupo">
+          <div className="painel__cabecalho">
+            <h2>Volume</h2>
+          </div>
+          <div className="grade-teclas">{volume.map(botao)}</div>
+        </div>
+      )}
+
+      {!gradeCompleta && (
+        <Rotulo tamanho="xs" tom="sutil">
+          Atualize o Agente no computador para liberar faixa, parada e volume.
+        </Rotulo>
+      )}
+
       {resultado && (
         <p
           className={

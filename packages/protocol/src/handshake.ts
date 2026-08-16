@@ -19,6 +19,15 @@ import { VERSAO_PROTOCOLO } from "./envelope";
 export const CAPACIDADES = [
   "action.execute",
   "action.media",
+  /**
+   * Faixa, parada e volume — tudo o que veio depois do reproduzir/pausar.
+   *
+   * Capacidade separada de `action.media` porque a PWA publica na hora e o
+   * Agente é um instalador: sem isto, um Agente 0.1.5 anunciaria `action.media`
+   * e receberia botões que ele responde com "ação não encontrada". A separação
+   * é o que faz a grade mostrar só o que o computador do outro lado sabe fazer.
+   */
+  "action.media.completo",
   "action.define",
   "state.system",
   "state.media",

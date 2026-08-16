@@ -5,9 +5,20 @@ use std::collections::{HashMap, HashSet};
 const VERSAO_PROTOCOLO: i64 = 1;
 const JANELA_TIMESTAMP_MS: i64 = 30_000;
 
+/// Ações que o Agente sabe executar.
+///
+/// A lista é fechada de propósito, e é o que sustenta a promessa do ADR-0004: o
+/// celular manda um identificador, nunca uma tecla, um comando ou um caminho.
+/// Nada que chegue pelo canal vira conteúdo executável deste lado.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Acao {
     ReproduzirPausar,
+    ProximaFaixa,
+    FaixaAnterior,
+    Parar,
+    AumentarVolume,
+    DiminuirVolume,
+    Mudo,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -96,6 +107,16 @@ pub fn receber(
 
     let acao = match envelope.p.action_id.as_str() {
         "midia.reproduzir-pausar" => Acao::ReproduzirPausar,
+        "midia.proxima" => Acao::ProximaFaixa,
+        "midia.anterior" => Acao::FaixaAnterior,
+        "midia.parar" => Acao::Parar,
+        // Volume entra sob `system.media` e não sob um escopo próprio: mexer no
+        // volume do que já está tocando é a mesma autoridade que pausar, e
+        // pedir um escopo novo obrigaria a reparear todo aparelho existente
+        // para ganhar um botão de volume.
+        "volume.aumentar" => Acao::AumentarVolume,
+        "volume.diminuir" => Acao::DiminuirVolume,
+        "volume.mudo" => Acao::Mudo,
         _ => {
             return RecepcaoAcao::Recusada {
                 id: envelope.id,
@@ -113,12 +134,20 @@ pub fn executar(acao: Acao) -> Result<(), &'static str> {
     #[cfg(windows)]
     {
         use windows::Win32::UI::Input::KeyboardAndMouse::{
-            keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VK_MEDIA_PLAY_PAUSE,
+            keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VK_MEDIA_NEXT_TRACK,
+            VK_MEDIA_PLAY_PAUSE, VK_MEDIA_PREV_TRACK, VK_MEDIA_STOP, VK_VOLUME_DOWN,
+            VK_VOLUME_MUTE, VK_VOLUME_UP,
         };
         let tecla = match acao {
             Acao::ReproduzirPausar => VK_MEDIA_PLAY_PAUSE.0 as u8,
+            Acao::ProximaFaixa => VK_MEDIA_NEXT_TRACK.0 as u8,
+            Acao::FaixaAnterior => VK_MEDIA_PREV_TRACK.0 as u8,
+            Acao::Parar => VK_MEDIA_STOP.0 as u8,
+            Acao::AumentarVolume => VK_VOLUME_UP.0 as u8,
+            Acao::DiminuirVolume => VK_VOLUME_DOWN.0 as u8,
+            Acao::Mudo => VK_VOLUME_MUTE.0 as u8,
         };
-        // A ação é deliberadamente limitada a uma tecla de mídia registrada;
+        // A ação é deliberadamente limitada a teclas de mídia registradas;
         // nenhum código, atalho ou conteúdo arbitrário chega ao Windows.
         unsafe {
             keybd_event(tecla, 0, KEYBD_EVENT_FLAGS(0), 0);
@@ -172,6 +201,72 @@ mod testes {
                 acao: Acao::ReproduzirPausar,
             }
         );
+    }
+
+    #[test]
+    fn toda_a_grade_de_midia_e_reconhecida() {
+        // A grade da PWA e a lista daqui precisam falar dos mesmos
+        // identificadores. Um botão que existe na tela e não existe aqui é um
+        // botão que responde "ação não encontrada" — pior do que não existir.
+        let esperadas = [
+            ("midia.reproduzir-pausar", Acao::ReproduzirPausar),
+            ("midia.proxima", Acao::ProximaFaixa),
+            ("midia.anterior", Acao::FaixaAnterior),
+            ("midia.parar", Acao::Parar),
+            ("volume.aumentar", Acao::AumentarVolume),
+            ("volume.diminuir", Acao::DiminuirVolume),
+            ("volume.mudo", Acao::Mudo),
+        ];
+
+        let par = par(&["action.execute", "system.media"]);
+        let mut estado = EstadoComandos::depois_do_hello();
+
+        for (indice, (identificador, esperada)) in esperadas.iter().enumerate() {
+            let seq = indice as i64 + 1;
+            assert_eq!(
+                receber(
+                    &pedido(&format!("id-{seq}"), seq, 10_000, identificador),
+                    &par,
+                    &mut estado,
+                    10_000,
+                ),
+                RecepcaoAcao::Aceita {
+                    id: format!("id-{seq}"),
+                    acao: *esperada,
+                },
+                "identificador não reconhecido: {identificador}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_grade_inteira_exige_escopo_de_midia() {
+        // Vale para as ações novas o mesmo que já valia para o pausar: sem
+        // `system.media` nenhuma delas passa. Um botão novo que escapasse da
+        // verificação seria uma ampliação silenciosa de poder.
+        for identificador in [
+            "midia.proxima",
+            "midia.anterior",
+            "midia.parar",
+            "volume.aumentar",
+            "volume.diminuir",
+            "volume.mudo",
+        ] {
+            let mut estado = EstadoComandos::depois_do_hello();
+            assert_eq!(
+                receber(
+                    &pedido("um", 1, 10_000, identificador),
+                    &par(&["action.execute"]),
+                    &mut estado,
+                    10_000,
+                ),
+                RecepcaoAcao::Recusada {
+                    id: "um".into(),
+                    motivo: "escopo_negado",
+                },
+                "escapou da verificação de escopo: {identificador}"
+            );
+        }
     }
 
     #[test]

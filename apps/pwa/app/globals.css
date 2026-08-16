@@ -444,10 +444,10 @@ button {
 /* Controles reais                                                         */
 /* ======================================================================= */
 
-.controles-basicos {
+.painel {
   width: 100%;
   display: grid;
-  gap: var(--s-space-3);
+  gap: var(--s-space-4);
   padding: var(--s-space-4);
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-lg);
@@ -455,9 +455,153 @@ button {
   text-align: left;
 }
 
-.controles-basicos h2 {
+.painel__grupo {
+  display: grid;
+  gap: var(--s-space-3);
+}
+
+.painel__cabecalho h2 {
   margin: 0 0 var(--s-space-1);
   font-size: var(--s-text-lg);
+}
+
+/*
+ * A grade se dimensiona pelo alvo de toque, não por um número de colunas.
+ *
+ * `auto-fit` com mínimo de 5.5rem deixa o próprio espaço disponível decidir
+ * quantas teclas cabem numa linha: três num celular em pé, seis ou mais
+ * deitado, sem uma media query por tamanho de aparelho. 5.5rem é o piso porque
+ * abaixo disso o rótulo quebra e a tecla deixa de ser legível de relance —
+ * que é a única forma como um painel de atalhos é lido.
+ */
+.grade-teclas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+  gap: var(--s-space-2);
+}
+
+.tecla {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-space-2);
+  /* 4.5rem = 72px: acima dos 44px mínimos de alvo de toque, com folga para o
+     dedo do polegar que segura o aparelho pela lateral. */
+  min-height: 4.5rem;
+  padding: var(--s-space-3) var(--s-space-2);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface);
+  color: var(--s-text);
+  font: inherit;
+  font-size: var(--s-text-xs);
+  line-height: var(--s-leading-tight);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background var(--s-duration-instant) var(--s-ease-out),
+    border-color var(--s-duration-instant) var(--s-ease-out),
+    transform var(--s-duration-instant) var(--s-ease-out);
+  /* Sem isto, tocar repetidamente numa tecla seleciona o rótulo e o Android
+     abre o menu de copiar por cima do painel. */
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.tecla:active {
+  transform: scale(0.97);
+  background: var(--s-surface-raised);
+}
+
+.tecla:focus-visible {
+  outline: 2px solid var(--s-accent);
+  outline-offset: 2px;
+}
+
+.tecla--destaque {
+  grid-column: span 2;
+  border-color: var(--s-accent);
+  color: var(--s-accent);
+}
+
+.tecla--ocupada {
+  border-color: var(--s-accent);
+}
+
+.tecla:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tecla svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/*
+ * Celular deitado.
+ *
+ * A altura é o recurso escasso — não a largura. O cabeçalho e o rodapé do
+ * aplicativo comem a tela inteira e sobra uma faixa para os controles, então
+ * aqui a régua é a altura da janela, e não `orientation: landscape`: um tablet
+ * deitado tem altura de sobra e não deve perder o respiro.
+ */
+@media (max-height: 30rem) {
+  .app__corpo {
+    padding: var(--s-space-3);
+    gap: var(--s-space-3);
+  }
+
+  /* Mídia e volume lado a lado, e não empilhados: é o que transforma duas
+     listas que saem pela borda de baixo num painel que cabe inteiro sem
+     rolagem. Deitado sobra largura exatamente na medida em que falta altura. */
+  .painel {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: var(--s-space-3);
+    padding: var(--s-space-3);
+  }
+
+  .painel__grupo {
+    gap: var(--s-space-2);
+  }
+
+  /* O aviso e o resultado voltam a ocupar a largura inteira: partidos ao meio
+     ficariam com duas ou três palavras por linha. */
+  .painel > :not(.painel__grupo) {
+    grid-column: 1 / -1;
+  }
+
+  .painel--coluna-unica {
+    grid-template-columns: 1fr;
+  }
+
+  .tecla {
+    min-height: 3.25rem;
+    padding: var(--s-space-2);
+    /* Ícone e rótulo na horizontal: deitado, empilhar os dois gasta a altura
+       que justamente não existe. */
+    flex-direction: row;
+    gap: var(--s-space-2);
+  }
+
+  .tecla svg {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  .painel__cabecalho h2 {
+    font-size: var(--s-text-md);
+    margin: 0;
+  }
+
+  /* De pé, o reproduzir/pausar ocupa duas colunas por ser o mais usado.
+     Deitado, sobra largura e ele volta a ser uma tecla como as outras. */
+  .tecla--destaque {
+    grid-column: auto;
+  }
 }
 
 .controle-resultado {

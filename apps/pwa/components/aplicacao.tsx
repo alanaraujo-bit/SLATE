@@ -41,6 +41,7 @@ export function Aplicacao() {
   /** Chave deste aparelho, para saber qual item da lista é ele mesmo. */
   const [chaveDestaSuperficie, setChaveDestaSuperficie] = useState<string | null>(null);
   const [agenteControlaMidia, setAgenteControlaMidia] = useState(false);
+  const [agenteTemGradeCompleta, setAgenteTemGradeCompleta] = useState(false);
   const [agentePrincipalId, setAgentePrincipalId] = useState<string | null>(null);
   const [removendoDispositivo, setRemovendoDispositivo] = useState<string | null>(null);
   const [tokenConvite, setTokenConvite] = useState<string | null>(null);
@@ -135,8 +136,10 @@ export function Aplicacao() {
         identidade,
         agente: decidido.agente.par,
         aoMudarEstado: setEstadoConexao,
-        aoNegociarCapacidades: (capacidades) =>
-          setAgenteControlaMidia(capacidades.includes("action.media")),
+        aoNegociarCapacidades: (capacidades) => {
+          setAgenteControlaMidia(capacidades.includes("action.media"));
+          setAgenteTemGradeCompleta(capacidades.includes("action.media.completo"));
+        },
       });
       transporteAtual.current = transporte;
       transporte.iniciar();
@@ -440,6 +443,7 @@ export function Aplicacao() {
               </p>
               {estadoConexao === "CONNECTED" && agenteControlaMidia && (
                 <ControlesBasicos
+                  gradeCompleta={agenteTemGradeCompleta}
                   executar={(actionId) =>
                     transporteAtual.current?.executarAcao(actionId) ??
                     Promise.resolve({
