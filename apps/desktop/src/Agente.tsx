@@ -195,7 +195,22 @@ function Pareamento({
   // Quem ainda não pareou nada precisa parear: essa é a tela. Quem já tem
   // aparelho não precisa de um QR Code na frente toda vez que abre o programa
   // — ele só aparece quando a pessoa pede outro aparelho.
-  const [parear, setParear] = useState(superficies.length === 0);
+  const [pediuParear, setPediuParear] = useState(false);
+
+  /**
+   * A tela de pareamento aparece por vontade da pessoa **ou** por não haver
+   * aparelho nenhum.
+   *
+   * A segunda metade é derivada da lista, e não guardada em estado, porque a
+   * lista muda enquanto a janela está aberta. Quando isto nascia de
+   * `useState(superficies.length === 0)`, remover o último aparelho deixava a
+   * tela sem saída: a lista ia a zero, o valor guardado continuava `false` — o
+   * programa tinha aberto com um aparelho — e o botão "Parear outro" só existia
+   * quando havia algum. Sobrava fechar e abrir o Agente para conseguir parear
+   * de novo.
+   */
+  const parear = pediuParear || superficies.length === 0;
+  const setParear = setPediuParear;
 
   const confirmar = async (evento: React.FormEvent) => {
     evento.preventDefault();

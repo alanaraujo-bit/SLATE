@@ -145,6 +145,54 @@ describe("tela principal do Agente", () => {
     expect(screen.getByText("desconectado")).toBeTruthy();
   });
 
+  it("remover o último aparelho abre o pareamento, sem precisar reabrir o Agente", async () => {
+    /*
+     * O beco sem saída que isto tranca: a tela dizia "Nenhum aparelho pareado
+     * ainda" e não oferecia nem QR nem código. O botão "Parear outro" só
+     * existia quando havia algum aparelho, e a decisão de mostrar o pareamento
+     * tinha sido tomada na montagem — quando ainda havia um. Restava fechar e
+     * abrir o programa.
+     */
+    let pareados: unknown[] = [celular()];
+    invocar.mockReset();
+    invocar.mockImplementation((comando: string) => {
+      if (comando === "situacao") {
+        return Promise.resolve({
+          conectado: true,
+          usuario: { id: "u1", email: "alan@exemplo.com", nome: null },
+          nomeComputador: "PHANTOMX",
+          chavePublica: "chave",
+          dispositivos: pareados,
+        });
+      }
+      if (comando === "remover_dispositivo") {
+        pareados = [];
+        return Promise.resolve(null);
+      }
+      if (comando === "criar_convite_qr") {
+        return Promise.resolve({
+          conviteId: "c1",
+          expiraEm: new Date(Date.now() + 120_000).toISOString(),
+          url: "https://slate.aionixdev.com/#convite=abc",
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await montar();
+    expect(invocar.mock.calls.some(([comando]) => comando === "criar_convite_qr")).toBe(false);
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Remover" }).click();
+    });
+
+    // Sem aparelho nenhum, a tela de parear precisa estar de pé — e o QR sai
+    // sozinho, como sai para quem abre o programa pela primeira vez.
+    expect(screen.getByText("Nenhum aparelho pareado ainda.")).toBeTruthy();
+    expect(invocar.mock.calls.some(([comando]) => comando === "criar_convite_qr")).toBe(true);
+    expect(screen.getByRole("button", { name: "Código" })).toBeTruthy();
+  });
+
   it("remover um aparelho pede a remoção pelo processo em Rust", async () => {
     responder([celular()]);
     await montar();
