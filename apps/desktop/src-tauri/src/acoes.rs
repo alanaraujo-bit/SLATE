@@ -1,3 +1,4 @@
+use crate::atalhos::{validar_caminho, AtalhosPersonalizados};
 use crate::pares::ParConfiavel;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
@@ -10,7 +11,7 @@ const JANELA_TIMESTAMP_MS: i64 = 30_000;
 /// A lista é fechada de propósito, e é o que sustenta a promessa do ADR-0004: o
 /// celular manda um identificador, nunca uma tecla, um comando ou um caminho.
 /// Nada que chegue pelo canal vira conteúdo executável deste lado.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Acao {
     ReproduzirPausar,
     ProximaFaixa,
@@ -21,6 +22,12 @@ pub enum Acao {
     Mudo,
     /// Abre um endereço da lista fixa abaixo. Nunca um endereço recebido.
     AbrirAtalho(Atalho),
+    /// Abre um programa cadastrado neste computador, identificado por id.
+    ///
+    /// O id é só uma chave de busca: o caminho vem da lista local, escrita pelo
+    /// seletor de arquivo do Windows. Nada do que chega pelo canal vira alvo de
+    /// execução — é a mesma promessa dos atalhos fixos, com a lista em disco.
+    AbrirPrograma(String),
 }
 
 /// Atalhos de abertura.
@@ -156,15 +163,21 @@ pub fn receber(
         "atalho.spotify" => Acao::AbrirAtalho(Atalho::Spotify),
         "atalho.disney" => Acao::AbrirAtalho(Atalho::Disney),
         "atalho.prime" => Acao::AbrirAtalho(Atalho::Prime),
-        _ => {
-            return RecepcaoAcao::Recusada {
-                id: envelope.id,
-                motivo: "nao_encontrada",
+        // `programa.<id>` é atalho cadastrado neste computador. O id só é
+        // aceito como chave de busca — quem existe de fato é decidido em
+        // `executar`, contra a lista em disco.
+        outro => match outro.strip_prefix("programa.") {
+            Some(id) if !id.is_empty() && id.len() <= 64 => Acao::AbrirPrograma(id.to_string()),
+            _ => {
+                return RecepcaoAcao::Recusada {
+                    id: envelope.id,
+                    motivo: "nao_encontrada",
+                }
             }
-        }
+        },
     };
 
-    if !par.tem_escopo(escopo_exigido(acao)) {
+    if !par.tem_escopo(escopo_exigido(&acao)) {
         return RecepcaoAcao::Recusada {
             id: envelope.id,
             motivo: "escopo_negado",
@@ -182,7 +195,7 @@ pub fn receber(
 /// Abrir um programa é uma autoridade diferente de mexer no que já está
 /// tocando, e por isso mora num escopo que o pareamento **não** concede: ele só
 /// existe se alguém marcou na interface do Agente, no próprio computador.
-pub fn escopo_exigido(acao: Acao) -> &'static str {
+pub fn escopo_exigido(acao: &Acao) -> &'static str {
     match acao {
         Acao::ReproduzirPausar
         | Acao::ProximaFaixa
@@ -191,16 +204,28 @@ pub fn escopo_exigido(acao: Acao) -> &'static str {
         | Acao::AumentarVolume
         | Acao::DiminuirVolume
         | Acao::Mudo => "system.media",
-        Acao::AbrirAtalho(_) => "system.process",
+        // Abrir site e abrir programa são a mesma autoridade: os dois criam
+        // processo. Separar em dois escopos daria duas caixas para marcar sem
+        // nenhum ganho de segurança.
+        Acao::AbrirAtalho(_) | Acao::AbrirPrograma(_) => "system.process",
     }
 }
 
-pub fn executar(acao: Acao) -> Result<(), &'static str> {
-    // Duas famílias com mecanismos diferentes: tecla de mídia é sinal ao
-    // aplicativo em foco, atalho é processo novo. Separar aqui, e não dentro de
-    // um `match` só, é o que faz o compilador cobrar um mecanismo explícito de
-    // quem acrescentar uma ação — em vez de deixá-la cair num braço genérico.
+pub fn executar(acao: Acao, cadastrados: &AtalhosPersonalizados) -> Result<(), &'static str> {
+    // Três famílias com mecanismos diferentes: tecla de mídia é sinal ao
+    // aplicativo em foco, atalho de site abre o navegador, atalho cadastrado
+    // executa um programa. Separar aqui, e não dentro de um `match` só, é o que
+    // faz o compilador cobrar um mecanismo explícito de quem acrescentar uma
+    // ação — em vez de deixá-la cair num braço genérico.
     match acao {
+        Acao::AbrirPrograma(id) => {
+            let atalho = cadastrados.buscar(&id).ok_or("esse atalho não existe mais")?;
+            // Confere de novo na hora de executar. O programa pode ter sido
+            // desinstalado ou movido desde o cadastro, e tentar abrir um
+            // caminho que sumiu daria um erro do Windows sem explicação.
+            validar_caminho(&atalho.caminho).map_err(|_| "o programa deste atalho não está mais no lugar")?;
+            abrir_programa(&atalho.caminho)
+        }
         Acao::AbrirAtalho(atalho) => abrir_endereco(atalho.url()),
         Acao::ReproduzirPausar
         | Acao::ProximaFaixa
@@ -228,7 +253,9 @@ fn apertar_tecla_de_midia(acao: Acao) -> Result<(), &'static str> {
             Acao::AumentarVolume => VK_VOLUME_UP.0 as u8,
             Acao::DiminuirVolume => VK_VOLUME_DOWN.0 as u8,
             Acao::Mudo => VK_VOLUME_MUTE.0 as u8,
-            Acao::AbrirAtalho(_) => return Err("atalho não é tecla de mídia"),
+            Acao::AbrirAtalho(_) | Acao::AbrirPrograma(_) => {
+                return Err("atalho não é tecla de mídia")
+            }
         };
         // A ação é deliberadamente limitada a teclas de mídia registradas;
         // nenhum código, atalho ou conteúdo arbitrário chega ao Windows.
@@ -244,6 +271,35 @@ fn apertar_tecla_de_midia(acao: Acao) -> Result<(), &'static str> {
         let _ = acao;
         Err("ação disponível apenas no Windows")
     }
+}
+
+/// Executa um programa cadastrado.
+///
+/// O caminho vem sempre da lista em disco, escrita pelo seletor de arquivo do
+/// Windows — nunca de uma mensagem. `Command::new` recebe o executável como
+/// argumento próprio, e não uma linha de comando montada por concatenação: sem
+/// isso, um nome de arquivo com aspas ou `&` viraria injeção de comando.
+///
+/// A pasta do próprio programa vira diretório de trabalho porque muitos jogos e
+/// aplicativos procuram os arquivos deles em caminho relativo e falham ao abrir
+/// de outro lugar.
+fn abrir_programa(caminho: &str) -> Result<(), &'static str> {
+    let mut comando = std::process::Command::new(caminho);
+    if let Some(pasta) = std::path::Path::new(caminho).parent() {
+        comando.current_dir(pasta);
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        comando.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    comando
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| "não foi possível abrir esse programa")
 }
 
 /// Abre um endereço no navegador padrão do Windows.
@@ -355,7 +411,7 @@ mod testes {
                 ),
                 RecepcaoAcao::Aceita {
                     id: format!("id-{seq}"),
-                    acao: *esperada,
+                    acao: esperada.clone(),
                 },
                 "identificador não reconhecido: {identificador}"
             );
@@ -464,6 +520,53 @@ mod testes {
     }
 
     #[test]
+    fn atalho_de_programa_exige_a_mesma_concessao_e_nunca_carrega_caminho() {
+        // O identificador é chave de busca, e só. Se algum dia alguém trocar
+        // isto por "o celular manda o caminho", este teste cai — e é para cair.
+        let mut estado = EstadoComandos::depois_do_hello();
+        assert_eq!(
+            receber(
+                &pedido("um", 1, 10_000, "programa.abc-123"),
+                &par_com_local(&["action.execute"], &["system.process"]),
+                &mut estado,
+                10_000,
+            ),
+            RecepcaoAcao::Aceita {
+                id: "um".into(),
+                acao: Acao::AbrirPrograma("abc-123".into()),
+            }
+        );
+
+        // Sem a concessão feita no computador, não passa.
+        let mut estado = EstadoComandos::depois_do_hello();
+        assert_eq!(
+            receber(
+                &pedido("um", 1, 10_000, "programa.abc-123"),
+                &par(&["action.execute", "system.media"]),
+                &mut estado,
+                10_000,
+            ),
+            RecepcaoAcao::Recusada {
+                id: "um".into(),
+                motivo: "escopo_negado",
+            }
+        );
+
+        // Um caminho disfarçado de identificador continua sendo identificador:
+        // ele nunca vira alvo, porque o alvo sai da lista em disco.
+        let mut estado = EstadoComandos::depois_do_hello();
+        assert!(matches!(
+            receber(
+                &pedido("dois", 1, 10_000, "programa."),
+                &par_com_local(&["action.execute"], &["system.process"]),
+                &mut estado,
+                10_000,
+            ),
+            RecepcaoAcao::Recusada { motivo: "nao_encontrada", .. }
+        ));
+    }
+
+    #[test]
     fn todo_atalho_aponta_para_https() {
         // A promessa do ADR-0004 depende de a lista ser confiável. Uma
         // constante trocada por `file://` num descuido viraria leitura de disco
@@ -503,9 +606,9 @@ mod testes {
 
     #[test]
     fn midia_e_atalho_exigem_escopos_diferentes() {
-        assert_eq!(escopo_exigido(Acao::ReproduzirPausar), "system.media");
+        assert_eq!(escopo_exigido(&Acao::ReproduzirPausar), "system.media");
         assert_eq!(
-            escopo_exigido(Acao::AbrirAtalho(Atalho::YouTube)),
+            escopo_exigido(&Acao::AbrirAtalho(Atalho::YouTube)),
             "system.process"
         );
     }

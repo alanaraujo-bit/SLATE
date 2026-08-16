@@ -65,6 +65,16 @@ base64 = "0.22"
 
 thiserror = "2"
 
+# Seletor de arquivo nativo. Escolher o executável é um ato do computador, não
+# do celular: é o que mantém a promessa do ADR-0004 de que nenhum caminho de
+# arquivo chega pelo canal.
+tauri-plugin-dialog = "2.7.2"
+
+# Codifica o ícone extraído do próprio `.exe`. Sem isto o atalho de um jogo
+# viraria um quadrado genérico, e é justamente o ícone que faz o painel parecer
+# um deck em vez de uma lista de texto.
+png = "0.18.1"
+
 [dev-dependencies]
 minisign-verify = "0.2.5"
 # `io-util` só é usado pela API de mentira que prova a sessão persistente.
@@ -79,6 +89,15 @@ windows = { version = "0.58", features = [
     "Win32_Security_Cryptography",
     "Win32_Foundation",
     "Win32_UI_Input_KeyboardAndMouse",
+    # Extração do ícone do executável: o Shell entrega o `HICON`, o GDI dá
+    # acesso aos pixels dele e `WindowsAndMessaging` traz `GetIconInfo` e o
+    # `DestroyIcon` que evita vazar handle a cada atalho cadastrado.
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    # `SHGetFileInfoW` recebe um `FILE_FLAGS_AND_ATTRIBUTES`, que mora aqui —
+    # sem esta feature a própria função não é exposta pelo crate.
+    "Win32_Storage_FileSystem",
 ] }
 
 [features]

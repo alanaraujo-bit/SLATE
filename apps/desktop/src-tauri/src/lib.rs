@@ -1,4 +1,6 @@
 mod acoes;
+mod atalhos;
+mod icone;
 mod api;
 mod identidade;
 mod pares;
@@ -6,6 +8,7 @@ mod transporte;
 
 use api::{ClienteApi, ConvitePareamentoQr, Dispositivo, SituacaoConviteQr, Usuario};
 use identidade::{mensagem_confirmacao_pareamento, mensagem_criacao_convite_qr, Identidade};
+use atalhos::{Atalho, AtalhosPersonalizados};
 use pares::ParesConfiaveis;
 use serde::Serialize;
 use std::sync::Arc;
@@ -24,6 +27,8 @@ struct Estado {
     /// Guarda o último erro de inicialização para a interface poder explicá-lo.
     falha_inicial: Mutex<Option<String>>,
     pares: Arc<ParesConfiaveis>,
+    /// Atalhos de programa cadastrados neste computador.
+    atalhos: Arc<AtalhosPersonalizados>,
     /// Mantém a tarefa residente viva durante todo o processo. Sair da conta
     /// não revoga este computador; a identidade do dispositivo continua sendo
     /// suficiente para ele voltar à sinalização após reiniciar o Windows.
@@ -213,6 +218,76 @@ async fn remover_dispositivo(estado: tauri::State<'_, Estado>, id: String) -> Re
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Atalhos de programa
+// ---------------------------------------------------------------------------
+//
+// Todos estes comandos existem só aqui, na janela do Agente. Não há equivalente
+// no canal com o celular, e a ausência é a decisão: `action.define` está em
+// `ESCOPOS_SOMENTE_NO_PC` desde o ADR-0004. Escolher qual executável um atalho
+// abre é ato de quem está na frente da máquina; o celular só manda o
+// identificador do que já foi cadastrado.
+
+/// Abre o seletor de arquivo do Windows e devolve o caminho escolhido.
+///
+/// O caminho nasce aqui, do diálogo nativo — nunca de texto digitado e nunca de
+/// mensagem recebida. É essa origem que sustenta a promessa de que nada
+/// arbitrário vira alvo de execução.
+#[tauri::command]
+async fn escolher_programa(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let (envio, recebimento) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Escolha o programa ou jogo")
+        .add_filter("Programas", &["exe", "lnk", "bat", "cmd", "url"])
+        .pick_file(move |escolhido| {
+            let _ = envio.send(escolhido);
+        });
+
+    let escolhido = recebimento.await.map_err(|_| "seleção cancelada".to_string())?;
+    Ok(escolhido
+        .and_then(|caminho| caminho.into_path().ok())
+        .map(|caminho| caminho.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+async fn listar_atalhos(estado: tauri::State<'_, Estado>) -> Result<Vec<Atalho>, String> {
+    Ok(estado.atalhos.listar())
+}
+
+#[tauri::command]
+async fn criar_atalho(
+    estado: tauri::State<'_, Estado>,
+    caminho: String,
+    nome: String,
+    cor: String,
+) -> Result<Atalho, String> {
+    estado
+        .atalhos
+        .criar(&caminho, &nome, &cor)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn remover_atalho(estado: tauri::State<'_, Estado>, id: String) -> Result<(), String> {
+    estado.atalhos.remover(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn renomear_atalho(
+    estado: tauri::State<'_, Estado>,
+    id: String,
+    nome: String,
+    cor: String,
+) -> Result<(), String> {
+    estado
+        .atalhos
+        .renomear(&id, &nome, &cor)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn falha_inicial(estado: tauri::State<'_, Estado>) -> Result<Option<String>, String> {
     Ok(estado.falha_inicial.lock().await.clone())
@@ -239,6 +314,7 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let pasta = app
@@ -257,6 +333,8 @@ pub fn run() {
 
             if let Some(identidade) = identidade {
                 let pares = Arc::new(ParesConfiaveis::carregar(&pasta).map_err(|e| e.to_string())?);
+                let atalhos =
+                    Arc::new(AtalhosPersonalizados::carregar(&pasta).map_err(|e| e.to_string())?);
                 // `com_sessao` e não `novo`: é o que faz o cookie de sessão
                 // sobreviver ao fechamento do Agente.
                 let api = ClienteApi::com_sessao(endereco_api(), &pasta);
@@ -264,6 +342,7 @@ pub fn run() {
                     api.clone(),
                     identidade.clone(),
                     pares.clone(),
+                    atalhos.clone(),
                 ));
                 app.manage(Estado {
                     identidade,
@@ -271,6 +350,7 @@ pub fn run() {
                     nome_computador: nome_do_computador(),
                     falha_inicial: Mutex::new(falha),
                     pares,
+                    atalhos,
                     _transporte: Mutex::new(Some(tarefa)),
                 });
             } else {
@@ -288,6 +368,11 @@ pub fn run() {
             consultar_convite_qr,
             remover_dispositivo,
             definir_atalhos_permitidos,
+            escolher_programa,
+            listar_atalhos,
+            criar_atalho,
+            remover_atalho,
+            renomear_atalho,
             falha_inicial
         ])
         .run(tauri::generate_context!())

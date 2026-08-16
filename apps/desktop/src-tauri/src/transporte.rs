@@ -1,4 +1,5 @@
 use crate::acoes::{self, EstadoComandos, RecepcaoAcao};
+use crate::atalhos::AtalhosPersonalizados;
 use crate::api::ClienteApi;
 use crate::identidade::{
     mensagem_desafio_sinalizacao, mensagem_fingerprint_dtls, normalizar_fingerprint_dtls,
@@ -133,6 +134,7 @@ struct EventosPar {
     sessao_id: String,
     dispositivo_id: String,
     pares: Arc<ParesConfiaveis>,
+    atalhos: Arc<AtalhosPersonalizados>,
 }
 
 #[async_trait]
@@ -163,6 +165,7 @@ impl PeerConnectionEventHandler for EventosPar {
         let destino = self.destino.clone();
         let dispositivo_id = self.dispositivo_id.clone();
         let pares = self.pares.clone();
+        let atalhos = self.atalhos.clone();
         tokio::spawn(async move {
             let Ok(rotulo) = canal.label().await else {
                 let _ = canal.close().await;
@@ -272,7 +275,7 @@ impl PeerConnectionEventHandler for EventosPar {
 
                                 proxima_sequencia_saida += 1;
                                 let inicio = Instant::now();
-                                let resultado = acoes::executar(acao);
+                                let resultado = acoes::executar(acao, &atalhos);
                                 let conclusao = json!({
                                     "v": VERSAO_PROTOCOLO,
                                     "id": uuid::Uuid::new_v4().to_string(),
@@ -302,10 +305,17 @@ impl PeerConnectionEventHandler for EventosPar {
     }
 }
 
-pub async fn executar(api: Arc<ClienteApi>, identidade: Identidade, pares: Arc<ParesConfiaveis>) {
+pub async fn executar(
+    api: Arc<ClienteApi>,
+    identidade: Identidade,
+    pares: Arc<ParesConfiaveis>,
+    atalhos: Arc<AtalhosPersonalizados>,
+) {
     let mut espera = Duration::from_secs(1);
     loop {
-        if let Err(erro) = executar_sessao(api.clone(), &identidade, pares.clone()).await {
+        if let Err(erro) =
+            executar_sessao(api.clone(), &identidade, pares.clone(), atalhos.clone()).await
+        {
             eprintln!("Transporte indisponível: {erro}");
         }
         tokio::time::sleep(espera).await;
@@ -317,6 +327,7 @@ async fn executar_sessao(
     api: Arc<ClienteApi>,
     identidade: &Identidade,
     pares: Arc<ParesConfiaveis>,
+    atalhos: Arc<AtalhosPersonalizados>,
 ) -> Result<(), ErroTransporte> {
     let desafio = api
         .pedir_desafio_sinalizacao(&identidade.chave_publica())
@@ -413,6 +424,7 @@ async fn executar_sessao(
                                 &desafio.dispositivo_id,
                                 &superficie,
                                 pares.clone(),
+                                atalhos.clone(),
                                 servidores_ice.clone(),
                                 &sessao_id,
                                 sdp,
@@ -522,6 +534,7 @@ async fn criar_resposta(
     dispositivo_id: &str,
     superficie: &ParConfiavel,
     pares: Arc<ParesConfiaveis>,
+    atalhos: Arc<AtalhosPersonalizados>,
     servidores_ice: Vec<RTCIceServer>,
     sessao_id: &str,
     sdp: String,
@@ -552,6 +565,7 @@ async fn criar_resposta(
             sessao_id: sessao_id.to_string(),
             dispositivo_id: dispositivo_id.to_string(),
             pares,
+            atalhos,
         }))
         .with_runtime(runtime)
         .with_udp_addrs(enderecos_udp())
