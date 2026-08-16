@@ -18,6 +18,7 @@ import type { EstadoConexao } from "@/lib/estados-conexao";
 import { decidirVinculo, type Vinculo } from "@/lib/vinculo";
 import { EstadoDaConexao } from "./estado-da-conexao";
 import { ControlesBasicos } from "./controles-basicos";
+import { Ajustes } from "./ajustes";
 import { ConvitePareamentoQr } from "./convite-pareamento-qr";
 import { FormularioConta } from "./formulario-conta";
 import { PainelPareamento } from "./painel-pareamento";
@@ -47,6 +48,8 @@ export function Aplicacao() {
   const [removendoDispositivo, setRemovendoDispositivo] = useState<string | null>(null);
   const [tokenConvite, setTokenConvite] = useState<string | null>(null);
   const [adicionandoComputador, setAdicionandoComputador] = useState(false);
+  /** Painel é a tela de uso; Ajustes é onde se mexe uma vez e esquece. */
+  const [tela, setTela] = useState<"painel" | "ajustes">("painel");
   const transporteAtual = useRef<TransporteWebRtc | null>(null);
 
   const carregar = useCallback(async () => {
@@ -357,113 +360,74 @@ export function Aplicacao() {
         )}
 
         {situacao === "logado" && !tokenConvite && vinculo?.tipo === "pronto" && !adicionandoComputador && (
-          <Superficie nivel="elevada" preenchida>
-            <div className="aviso">
-              <h1 className="aviso__titulo">Dispositivos da sua conta</h1>
+          <div className="area">
+            {/*
+              Duas telas, e não uma. O painel só vira painel quando tem a tela
+              inteira — deitado, a lista de aparelhos empurrava os controles
+              para fora da borda de baixo.
+            */}
+            <nav className="abas" aria-label="Seções">
+              <button
+                type="button"
+                className={`aba${tela === "painel" ? " aba--ativa" : ""}`}
+                aria-current={tela === "painel" ? "page" : undefined}
+                onClick={() => setTela("painel")}
+              >
+                Painel
+              </button>
+              <button
+                type="button"
+                className={`aba${tela === "ajustes" ? " aba--ativa" : ""}`}
+                aria-current={tela === "ajustes" ? "page" : undefined}
+                onClick={() => setTela("ajustes")}
+              >
+                Ajustes
+              </button>
+            </nav>
 
-              <ul className="dispositivos">
-                {dispositivos
-                  .filter(
-                    (d) =>
-                      d.situacao !== "revogado" &&
-                      (d.papel !== "agent" || d.id === agentePrincipalId),
-                  )
-                  .map((d) => (
-                  <li className="dispositivo dispositivo--gerenciavel" key={d.id}>
-                    <span>
-                      <span className="dispositivo__nome">
-                        {d.nome}
-                        {d.chavePublica === chaveDestaSuperficie && " (este aparelho)"}
-                      </span>
-                      <Rotulo tamanho="xs" tom="sutil">
-                        {d.papel === "agent" ? "Computador" : "Superfície"} ·{" "}
-                        {d.papel === "agent"
-                          ? d.online
-                            ? "conectado agora"
-                            : "desconectado"
-                          : d.situacao === "ativo"
-                            ? "ativo"
-                            : d.situacao}
-                      </Rotulo>
-                    </span>
-                    <Botao
-                      tamanho="sm"
-                      estado={removendoDispositivo === d.id ? "loading" : "idle"}
-                      onClick={() => void remover(d)}
-                    >
-                      Remover
-                    </Botao>
-                  </li>
-                ))}
-              </ul>
-
-              {/* A reconexão automática já tenta sozinha; este botão existe
-                  para quem acabou de ligar o computador e não quer esperar o
-                  próximo ciclo olhando para uma tela parada. */}
-              {estadoConexao !== "CONNECTED" && (
-                <Botao onClick={() => void reconectar()}>Reconectar agora</Botao>
-              )}
-
-              {instalacoesAntigas.length > 0 && (
-                <details className="instalacoes-antigas">
-                  <summary>
-                    {instalacoesAntigas.length === 1
-                      ? "1 instalação antiga"
-                      : `${instalacoesAntigas.length} instalações antigas`}
-                  </summary>
-                  <p className="instalacoes-antigas__explicacao">
-                    São identidades anteriores que estão desconectadas. O SLATE não as
-                    usa enquanto o computador atual estiver disponível.
-                  </p>
-                  <ul className="dispositivos">
-                    {instalacoesAntigas.map((d) => (
-                      <li className="dispositivo dispositivo--gerenciavel" key={d.id}>
-                        <span>
-                          <span className="dispositivo__nome">{d.nome}</span>
-                          <Rotulo tamanho="xs" tom="sutil">
-                            Desconectado
-                          </Rotulo>
-                        </span>
-                        <Botao
-                          tamanho="sm"
-                          estado={removendoDispositivo === d.id ? "loading" : "idle"}
-                          onClick={() => void remover(d)}
-                        >
-                          Remover
-                        </Botao>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              <Botao onClick={() => setAdicionandoComputador(true)}>
-                Conectar outro computador
-              </Botao>
-
-              <p className="aviso__texto">
-                {estadoConexao === "CONNECTED"
-                  ? agenteControlaMidia
-                    ? "Canal seguro ativo. Seus comandos vão direto para o computador."
-                    : "Canal seguro ativo. Atualize o Agente no computador para liberar os controles."
-                  : "Os controles permanecem indisponíveis enquanto o computador não estiver conectado."}
-              </p>
-              {estadoConexao === "CONNECTED" && agenteControlaMidia && (
-                <ControlesBasicos
-                  gradeCompleta={agenteTemGradeCompleta}
-                  atalhosLiberados={agenteLiberaAtalhos}
-                  executar={(actionId) =>
-                    transporteAtual.current?.executarAcao(actionId) ??
-                    Promise.resolve({
-                      ok: false,
-                      mensagem: "O computador não está conectado.",
-                    })
-                  }
-                />
-              )}
-            </div>
-          </Superficie>
+            {tela === "ajustes" ? (
+              <Ajustes
+                usuario={usuario}
+                dispositivos={dispositivos}
+                instalacoesAntigas={instalacoesAntigas}
+                chaveDestaSuperficie={chaveDestaSuperficie}
+                agentePrincipalId={agentePrincipalId}
+                estadoConexao={estadoConexao}
+                removendo={removendoDispositivo}
+                aoRemover={(d) => void remover(d)}
+                aoReconectar={() => void reconectar()}
+                aoAdicionarComputador={() => setAdicionandoComputador(true)}
+                aoSair={() => void sair()}
+              />
+            ) : estadoConexao === "CONNECTED" && agenteControlaMidia ? (
+              <ControlesBasicos
+                gradeCompleta={agenteTemGradeCompleta}
+                atalhosLiberados={agenteLiberaAtalhos}
+                executar={(actionId) =>
+                  transporteAtual.current?.executarAcao(actionId) ??
+                  Promise.resolve({
+                    ok: false,
+                    mensagem: "O computador não está conectado.",
+                  })
+                }
+              />
+            ) : (
+              // Sem canal não há painel. Dizer o motivo aqui evita a tela de
+              // botões que não fazem nada, que é pior do que não ter botões.
+              <div className="painel-indisponivel">
+                <Rotulo tom="atenuado">
+                  {estadoConexao === "CONNECTED"
+                    ? "Atualize o Agente no computador para liberar os controles."
+                    : "Os controles voltam assim que o computador reconectar."}
+                </Rotulo>
+                {estadoConexao !== "CONNECTED" && (
+                  <Botao onClick={() => void reconectar()}>Reconectar agora</Botao>
+                )}
+              </div>
+            )}
+          </div>
         )}
+
       </main>
 
       {usuario && (

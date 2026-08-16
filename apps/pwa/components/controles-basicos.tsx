@@ -70,7 +70,7 @@ export function ControlesBasicos({
       }`}
       aria-label="Controles do computador"
     >
-      <div className="painel__grupo">
+      <div className="painel__grupo painel__grupo--midia">
         <div className="painel__cabecalho">
           <h2>Mídia</h2>
           <Rotulo tamanho="xs" tom="sutil">
@@ -81,7 +81,7 @@ export function ControlesBasicos({
       </div>
 
       {volume.length > 0 && (
-        <div className="painel__grupo">
+        <div className="painel__grupo painel__grupo--volume">
           <div className="painel__cabecalho">
             <h2>Volume</h2>
           </div>
@@ -90,7 +90,7 @@ export function ControlesBasicos({
       )}
 
       {atalhosLiberados && (
-        <div className="painel__grupo">
+        <div className="painel__grupo painel__grupo--atalhos">
           <div className="painel__cabecalho">
             <h2>Abrir</h2>
             <Rotulo tamanho="xs" tom="sutil">

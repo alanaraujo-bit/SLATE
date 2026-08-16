@@ -439,40 +439,113 @@ button {
   display: grid;
   gap: var(--s-space-1);
 }
+/* ======================================================================= */
+/* Navegação entre telas                                                   */
+/* ======================================================================= */
+
+/*
+ * Painel e Ajustes são telas, não seções empilhadas.
+ *
+ * Antes tudo dividia o mesmo cartão: a lista de aparelhos empurrava os
+ * controles para fora da borda de baixo, e nenhuma das duas coisas ficava boa.
+ * A régua da separação é a frequência de uso — controle é o tempo todo, ajuste
+ * é uma vez e esquece.
+ */
+.area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: var(--s-space-4);
+  min-height: 0;
+}
+
+.abas {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface);
+}
+
+.aba {
+  padding: var(--s-space-2) var(--s-space-4);
+  border: 0;
+  border-radius: var(--s-radius-sm);
+  background: transparent;
+  color: var(--s-text-muted);
+  font: inherit;
+  font-size: var(--s-text-sm);
+  font-weight: var(--s-weight-medium);
+  cursor: pointer;
+  transition:
+    color var(--s-duration-instant) var(--s-ease-out),
+    background var(--s-duration-instant) var(--s-ease-out);
+}
+
+.aba:hover {
+  color: var(--s-text);
+}
+
+.aba--ativa {
+  background: var(--s-surface-raised);
+  color: var(--s-text);
+}
+
+.aba:focus-visible {
+  outline: 2px solid var(--s-accent);
+  outline-offset: 1px;
+}
 
 /* ======================================================================= */
-/* Controles reais                                                         */
+/* Painel de controle                                                      */
 /* ======================================================================= */
 
 .painel {
-  width: 100%;
-  display: grid;
-  gap: var(--s-space-4);
-  padding: var(--s-space-4);
-  border: 1px solid var(--s-border);
-  border-radius: var(--s-radius-lg);
-  background: var(--s-surface-raised);
-  text-align: left;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: var(--s-space-5);
+  min-height: 0;
 }
 
 .painel__grupo {
   display: grid;
   gap: var(--s-space-3);
+  align-content: start;
+}
+
+/*
+ * O cabeçalho do grupo é etiqueta de mesa de som, não título de artigo.
+ *
+ * Maiúsculas pequenas com espaçamento marcam a divisão sem competir com as
+ * teclas pela atenção — que era o efeito de um título grande. Quem olha o
+ * painel está procurando o botão, não lendo a seção.
+ */
+.painel__cabecalho {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-space-3);
+  padding-bottom: var(--s-space-1);
+  border-bottom: 1px solid var(--s-border);
 }
 
 .painel__cabecalho h2 {
-  margin: 0 0 var(--s-space-1);
-  font-size: var(--s-text-lg);
+  margin: 0;
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-caps);
+  text-transform: uppercase;
+  color: var(--s-text-muted);
 }
 
 /*
  * A grade se dimensiona pelo alvo de toque, não por um número de colunas.
  *
- * `auto-fit` com mínimo de 5.5rem deixa o próprio espaço disponível decidir
- * quantas teclas cabem numa linha: três num celular em pé, seis ou mais
- * deitado, sem uma media query por tamanho de aparelho. 5.5rem é o piso porque
- * abaixo disso o rótulo quebra e a tecla deixa de ser legível de relance —
- * que é a única forma como um painel de atalhos é lido.
+ * `auto-fit` com mínimo de 5.5rem deixa o espaço disponível decidir quantas
+ * teclas cabem numa linha: três num celular em pé, seis ou mais deitado, sem
+ * uma media query por tamanho de aparelho.
  */
 .grade-teclas {
   display: grid;
@@ -480,95 +553,276 @@ button {
   gap: var(--s-space-2);
 }
 
+/* ---- A tecla ---------------------------------------------------------- */
+
+/*
+ * Cada grupo recebe uma cor da paleta de controles.
+ *
+ * Os doze tons de `--s-control-*` existem no design system exatamente para
+ * isso e estavam sem uso — daí o painel parecer um formulário cinza. A cor
+ * entra no ícone e numa faixa fina, e não no fundo inteiro: fundo colorido em
+ * bloco cansa numa tela que fica aberta o tempo todo, e derruba o contraste do
+ * rótulo.
+ */
 .tecla {
+  --tom: var(--s-accent);
+
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--s-space-2);
   /* 4.5rem = 72px: acima dos 44px mínimos de alvo de toque, com folga para o
-     dedo do polegar que segura o aparelho pela lateral. */
+     polegar de quem segura o aparelho pela lateral. */
   min-height: 4.5rem;
   padding: var(--s-space-3) var(--s-space-2);
+  overflow: hidden;
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-md);
-  background: var(--s-surface);
+  background: var(--s-surface-raised);
   color: var(--s-text);
   font: inherit;
-  font-size: var(--s-text-xs);
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-medium);
   line-height: var(--s-leading-tight);
   text-align: center;
   cursor: pointer;
   transition:
-    background var(--s-duration-instant) var(--s-ease-out),
     border-color var(--s-duration-instant) var(--s-ease-out),
+    background var(--s-duration-instant) var(--s-ease-out),
     transform var(--s-duration-instant) var(--s-ease-out);
-  /* Sem isto, tocar repetidamente numa tecla seleciona o rótulo e o Android
-     abre o menu de copiar por cima do painel. */
+  /* Sem isto, tocar repetidamente seleciona o rótulo e o Android abre o menu
+     de copiar por cima do painel. */
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
-.tecla:active {
-  transform: scale(0.97);
-  background: var(--s-surface-raised);
-}
-
-.tecla:focus-visible {
-  outline: 2px solid var(--s-accent);
-  outline-offset: 2px;
-}
-
-.tecla--destaque {
-  grid-column: span 2;
-  border-color: var(--s-accent);
-  color: var(--s-accent);
-}
-
-.tecla--ocupada {
-  border-color: var(--s-accent);
-}
-
-.tecla:disabled {
-  opacity: 0.45;
-  cursor: default;
+/* A faixa superior dá identidade à tecla sem cansar a vista. */
+.tecla::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--tom);
+  opacity: 0.55;
+  transition: opacity var(--s-duration-instant) var(--s-ease-out);
 }
 
 .tecla svg {
   width: 1.5rem;
   height: 1.5rem;
+  color: var(--tom);
+}
+
+.tecla span {
+  color: var(--s-text-muted);
+}
+
+.tecla:hover {
+  border-color: var(--tom);
 }
 
 /*
- * Celular deitado.
+ * A resposta ao toque é local e imediata.
  *
- * A altura é o recurso escasso — não a largura. O cabeçalho e o rodapé do
- * aplicativo comem a tela inteira e sobra uma faixa para os controles, então
- * aqui a régua é a altura da janela, e não `orientation: landscape`: um tablet
- * deitado tem altura de sobra e não deve perder o respiro.
+ * Não espera confirmação do computador: numa superfície de controle, o atraso
+ * da rede entre o dedo e o retorno visual é o que faz parecer quebrado. A
+ * evidência de que funcionou é o computador reagir.
+ */
+.tecla:active {
+  transform: scale(0.96);
+  border-color: var(--tom);
+  background: color-mix(in srgb, var(--tom) 14%, var(--s-surface-raised));
+}
+
+.tecla:active::before {
+  opacity: 1;
+}
+
+.tecla:active span,
+.tecla:hover span {
+  color: var(--s-text);
+}
+
+.tecla:focus-visible {
+  outline: 2px solid var(--tom);
+  outline-offset: 2px;
+}
+
+/* A tecla mais usada ocupa duas colunas. */
+.tecla--destaque {
+  grid-column: span 2;
+}
+
+.tecla--destaque svg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+/* Cores por grupo. */
+.painel__grupo--midia .tecla {
+  --tom: var(--s-control-blue);
+}
+
+.painel__grupo--volume .tecla {
+  --tom: var(--s-control-teal);
+}
+
+.painel__grupo--atalhos .tecla {
+  --tom: var(--s-control-violet);
+}
+
+.controle-resultado {
+  margin: 0;
+  font-size: var(--s-text-sm);
+}
+
+.controle-resultado--erro {
+  color: var(--s-danger);
+}
+
+.painel-indisponivel {
+  display: grid;
+  justify-items: start;
+  gap: var(--s-space-3);
+  padding: var(--s-space-5);
+  border: 1px dashed var(--s-border);
+  border-radius: var(--s-radius-lg);
+}
+
+/* ======================================================================= */
+/* Ajustes                                                                 */
+/* ======================================================================= */
+
+.ajustes {
+  display: grid;
+  gap: var(--s-space-4);
+  align-content: start;
+}
+
+.ajustes__bloco {
+  display: grid;
+  gap: var(--s-space-3);
+  padding: var(--s-space-4);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-lg);
+  background: var(--s-surface-raised);
+}
+
+.ajustes__titulo {
+  margin: 0;
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-caps);
+  text-transform: uppercase;
+  color: var(--s-text-muted);
+}
+
+.ajustes__linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-space-3);
+  flex-wrap: wrap;
+}
+
+.aparelhos {
+  display: grid;
+  gap: var(--s-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aparelho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-space-3);
+  padding: var(--s-space-3);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface);
+}
+
+.aparelho__identidade {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.aparelho__nome {
+  display: flex;
+  align-items: center;
+  gap: var(--s-space-2);
+  font-weight: var(--s-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "este aparelho" é referência, não nome — precisa ler como anotação. */
+.aparelho__voce {
+  flex: none;
+  padding: 1px var(--s-space-2);
+  border-radius: var(--s-radius-full);
+  background: var(--s-accent-soft);
+  color: var(--s-accent);
+  font-size: var(--s-text-2xs);
+  font-style: normal;
+  letter-spacing: var(--s-tracking-wide);
+}
+
+/* ======================================================================= */
+/* Celular deitado                                                         */
+/* ======================================================================= */
+
+/*
+ * A régua é a altura da janela, e não `orientation: landscape`.
+ *
+ * Um tablet deitado tem altura de sobra e não deve perder o respiro; um
+ * celular deitado tem cerca de 360px e precisa de cada pixel. O que decide é
+ * quanto espaço vertical existe, não o nome da orientação.
  */
 @media (max-height: 30rem) {
-  .app__corpo {
-    padding: var(--s-space-3);
-    gap: var(--s-space-3);
+  /* Cabeçalho e rodapé somem: deitado eles comem a faixa que o painel precisa,
+     e a informação que carregam já está em Ajustes. */
+  .app__cabecalho,
+  .app__rodape {
+    display: none;
   }
 
-  /* Mídia e volume lado a lado, e não empilhados: é o que transforma duas
-     listas que saem pela borda de baixo num painel que cabe inteiro sem
-     rolagem. Deitado sobra largura exatamente na medida em que falta altura. */
-  .painel {
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
-    gap: var(--s-space-3);
+  .app__corpo {
     padding: var(--s-space-3);
+    gap: var(--s-space-2);
+  }
+
+  .abas {
+    align-self: stretch;
+  }
+
+  .aba {
+    flex: 1;
+    padding: var(--s-space-1) var(--s-space-3);
+  }
+
+  /* Mídia, volume e atalhos lado a lado: deitado sobra largura exatamente na
+     medida em que falta altura. Empilhados, saíam pela borda de baixo. */
+  .painel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    align-content: start;
+    gap: var(--s-space-3);
+    overflow-y: auto;
   }
 
   .painel__grupo {
     gap: var(--s-space-2);
   }
 
-  /* O aviso e o resultado voltam a ocupar a largura inteira: partidos ao meio
+  /* Aviso e mensagem de erro voltam à largura inteira: partidos ao meio
      ficariam com duas ou três palavras por linha. */
   .painel > :not(.painel__grupo) {
     grid-column: 1 / -1;
@@ -581,38 +835,22 @@ button {
   .tecla {
     min-height: 3.25rem;
     padding: var(--s-space-2);
-    /* Ícone e rótulo na horizontal: deitado, empilhar os dois gasta a altura
-       que justamente não existe. */
+    /* Ícone ao lado do rótulo: empilhar gasta a altura que não existe. */
     flex-direction: row;
     gap: var(--s-space-2);
+    text-align: left;
   }
 
-  .tecla svg {
+  .tecla svg,
+  .tecla--destaque svg {
     width: 1.125rem;
     height: 1.125rem;
+    flex: none;
   }
 
-  .painel__cabecalho h2 {
-    font-size: var(--s-text-md);
-    margin: 0;
-  }
-
-  /* De pé, o reproduzir/pausar ocupa duas colunas por ser o mais usado.
-     Deitado, sobra largura e ele volta a ser uma tecla como as outras. */
+  /* Deitado sobra largura, e a tecla de destaque volta a ser uma como as
+     outras — duas colunas aqui desalinhariam a grade sem ganho. */
   .tecla--destaque {
     grid-column: auto;
   }
-}
-
-.controle-resultado {
-  margin: 0;
-  font-size: var(--s-text-sm);
-}
-
-.controle-resultado--ok {
-  color: var(--s-success);
-}
-
-.controle-resultado--erro {
-  color: var(--s-danger);
 }
