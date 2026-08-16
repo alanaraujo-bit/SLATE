@@ -91,8 +91,16 @@ export function LeitorQr({
   return (
     <section className="leitor-qr" aria-label="Leitor de QR Code">
       <div className={ativo ? "leitor-qr__camera ativa" : "leitor-qr__camera"}>
-        <video ref={video} playsInline muted aria-label="Imagem da câmera" />
-        {!ativo && <span>A câmera só abre quando você autorizar.</span>}
+        {/*
+          `autoPlay` junto com `playsInline` e `muted`: é a combinação que os
+          navegadores de celular exigem para tocar sem toque na tela. Sem ela o
+          leitor abria a câmera, o indicador acendia e a imagem ficava parada no
+          primeiro quadro — preto.
+        */}
+        <video ref={video} autoPlay playsInline muted aria-label="Imagem da câmera" />
+        <span>
+          {iniciando ? "Abrindo a câmera…" : "A câmera só abre quando você autorizar."}
+        </span>
       </div>
       <Rotulo tamanho="sm" tom="atenuado">
         Aponte para o QR Code exibido no computador.

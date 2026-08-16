@@ -294,7 +294,7 @@ button {
   width: 100%;
   aspect-ratio: 1;
   display: grid;
-  place-items: center;
+  place-items: stretch;
   overflow: hidden;
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-lg);
@@ -303,12 +303,30 @@ button {
 }
 
 .leitor-qr__camera video {
+  /*
+   * O vídeo fica sempre no fluxo, ocupando a moldura inteira.
+   *
+   * Esconder com `display: none` até a câmera abrir era o que deixava a tela
+   * preta: um elemento sem caixa não é renderizado, o navegador não decodifica
+   * quadro nenhum nele e o leitor de QR, que mede a região de leitura pelo
+   * vídeo desenhado, media zero. `visibility: hidden` teria o mesmo efeito —
+   * por isso o aviso é que sai da frente, não a imagem.
+   */
+  grid-area: 1 / 1;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.leitor-qr__camera:not(.ativa) video {
+.leitor-qr__camera > span {
+  grid-area: 1 / 1;
+  align-self: center;
+  justify-self: center;
+  z-index: 1;
+  padding: 0 var(--s-space-4);
+}
+
+.leitor-qr__camera.ativa > span {
   display: none;
 }
 
