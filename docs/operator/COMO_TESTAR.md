@@ -9,16 +9,15 @@ O que já dá para experimentar, o que ainda não existe, e como rodar cada peç
 - Criar conta e entrar, pelo celular ou pelo computador.
 - Instalar a PWA na tela inicial do aparelho.
 - Abrir a aplicação sem internet — ela continua abrindo e diz que está sem rede.
-- Pedir o pareamento e receber o código de seis dígitos.
+- Parear o celular com o computador, das duas formas: código de seis dígitos
+  digitado no Agente, ou QR Code exibido no Agente e lido pelo celular.
+- Reproduzir/pausar a mídia do computador pelo celular, por WebRTC.
 
 ## O que ainda não existe
 
-- **Confirmar o pareamento.** Quem confirma é o SLATE rodando no computador, e
-  o Agente Desktop ainda está sendo construído. O código aparece no celular,
-  mas ainda não há onde digitá-lo.
-- **Controles.** Não há grade de botões, porque não há canal de comunicação com
-  o computador ainda. Uma tela de botões que não comandam nada seria promessa
-  disfarçada de produto.
+- **Grade de atalhos.** Existe um controle só, de mídia. A grade configurável
+  ainda está por vir — botões que não comandam nada seriam promessa disfarçada
+  de produto.
 
 Nada disso está escondido atrás de "em breve": a aplicação diz o que é verdade
 em cada tela.
@@ -62,34 +61,62 @@ em cada tela.
 
 ---
 
-## Testar na sua máquina
+## Testar na sua máquina, com a conta de verdade
 
-Os três processos são independentes e podem rodar ao mesmo tempo.
+Este é o ciclo curto: mudar o código, recarregar, ver no celular. Sem build,
+sem deploy, sem release nova do Agente.
 
 ```bash
 pnpm install
-
-# Painel de acompanhamento do projeto — http://localhost:4300
-pnpm roadmap:ui
+pnpm dev:local
 ```
 
-Para a PWA e a API localmente, cada uma precisa saber onde está o banco e a
-outra:
+**Uma vez, antes da primeira execução:**
+
+1. Cole a URL pública do Postgres em `services/api/.env.local`, na linha
+   `DATABASE_URL=`. Ela está no painel do Railway, no serviço do banco — use a
+   pública, não a `*.railway.internal`, que só resolve dentro da rede deles. O
+   arquivo é ignorado pelo git.
+2. Instale o `cloudflared`: `winget install --id Cloudflare.cloudflared`.
+
+O script confere as duas coisas antes de subir qualquer processo e imprime, no
+fim, o endereço HTTPS para abrir no celular e no navegador.
+
+### O Agente, sem gerar release
 
 ```bash
-# API — http://localhost:4500
-cd services/api
-DATABASE_URL="<url do Postgres>" PORT=4500 pnpm exec tsx src/main.ts
-
-# PWA — http://localhost:4400
-cd apps/pwa
-API_URL=http://localhost:4500 pnpm run build
-pnpm exec next start -p 4400
+cd apps/desktop
+SLATE_API_URL=http://localhost:4500 pnpm tauri dev
 ```
+
+A interface recarrega ao salvar; mudança no Rust recompila sozinha. Usa a mesma
+identidade e a mesma pasta de dados do SLATE instalado, então não aparece um
+computador duplicado na conta — mas feche o instalado antes, para os dois não
+disputarem a mesma sinalização.
+
+### Por que túnel, e não o endereço da máquina na rede local
+
+A câmera do leitor de QR e o service worker só existem em contexto seguro. Um
+`http://` num IP da rede não é contexto seguro, e no iPhone não há atalho para
+contornar isso — o Safari simplesmente não oferece a câmera.
+
+São **dois** túneis, um para a PWA e outro para a sinalização, porque são dois
+protocolos: a PWA fala HTTP na 4400 e repassa `/api` para a 4500 do lado do
+servidor, enquanto a sinalização é um WebSocket que sobe direto do navegador.
+
+> **O túnel é público enquanto o script roda.** O endereço é sorteado e
+> impossível de adivinhar, e a API continua exigindo login — mas ela está
+> ligada ao banco de **produção**. Feche com `Ctrl+C` quando terminar; os
+> endereços morrem junto.
 
 > A PWA fala com a API por `/api`, na própria origem. Isso não é organização:
 > um cookie de sessão apontando para outra origem não é enviado de volta pelo
 > WebKit, que é o motor de todo navegador no iPhone e no iPad.
+
+> A API confere a origem por igualdade exata, então o endereço sorteado do
+> túnel entra em `ORIGENS_PERMITIDAS` a cada execução — é o que o script faz
+> antes de subir a API. Afrouxar a conferência para aceitar qualquer
+> `trycloudflare.com` trocaria uma linha de script por um buraco permanente.
 
 ---
 

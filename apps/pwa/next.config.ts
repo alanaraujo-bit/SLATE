@@ -27,8 +27,24 @@ const origemSinalizacao = (() => {
   return url.origin;
 })();
 
+/**
+ * Hosts extras aceitos pelo servidor de desenvolvimento.
+ *
+ * O Next só atende requisições de desenvolvimento cujo `Host` é o dele. Quando
+ * a PWA é publicada por um túnel para chegar ao celular, o host é outro — e sem
+ * esta lista os recursos de `/_next` são recusados, com a página carregando
+ * pela metade. Vale apenas em desenvolvimento; em produção o campo é ignorado.
+ */
+const origensDeDesenvolvimento = (process.env.DEV_ORIGENS_EXTRAS ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 const config: NextConfig = {
   reactStrictMode: true,
+  ...(origensDeDesenvolvimento.length > 0
+    ? { allowedDevOrigins: origensDeDesenvolvimento }
+    : {}),
   transpilePackages: ["@slate/design-system", "@slate/identidade", "@slate/protocol"],
   output: "standalone",
   outputFileTracingRoot: raizWorkspace,

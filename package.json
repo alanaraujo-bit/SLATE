@@ -18,6 +18,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
+    "dev:local": "node scripts/dev-local.mjs",
     "roadmap": "pnpm --filter @slate/roadmap-cli exec tsx src/cli.ts",
     "roadmap:ui": "pnpm --filter @slate/control-center exec next dev -p 4300"
   },
