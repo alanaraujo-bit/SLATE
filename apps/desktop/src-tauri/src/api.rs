@@ -23,7 +23,11 @@ pub enum ErroApi {
     ChaveDeOutraConta,
     #[error("este aparelho foi removido da conta: peça um código novo no celular")]
     DispositivoRevogado,
-    #[error("esta chave já está registrada com outra função")]
+    // Dizer só "esta chave já está registrada com outra função" descrevia o
+    // banco de dados e não dava saída nenhuma a quem está na frente da tela. A
+    // saída existe e é no celular: pedir o pareamento de novo faz o aparelho
+    // chegar com uma identidade nova, que ninguém tem.
+    #[error("este aparelho tem um cadastro preso na conta: peça o pareamento de novo no celular")]
     ChaveJaRegistrada,
     #[error("nenhum pareamento em andamento")]
     NenhumPedido,
@@ -36,6 +40,10 @@ pub enum ErroApi {
     CodigoIncorreto { restantes: u32 },
     #[error("tentativas esgotadas: peça um código novo no celular")]
     Bloqueado,
+    /// Falha do lado do servidor, já registrada lá. Separado de `Inesperado`
+    /// porque a reação é diferente: aqui vale tentar de novo.
+    #[error("algo deu errado no servidor — tente de novo em instantes")]
+    ErroInterno,
     #[error("o servidor respondeu de forma inesperada ({0})")]
     Inesperado(u16),
 }
@@ -158,6 +166,7 @@ impl ClienteApi {
             Some("agente_invalido") => ErroApi::AgenteInvalido,
             Some("nenhum_pedido_ativo") => ErroApi::NenhumPedido,
             Some("bloqueado") => ErroApi::Bloqueado,
+            Some("erro_interno") => ErroApi::ErroInterno,
             Some("codigo_incorreto") => ErroApi::CodigoIncorreto {
                 restantes: corpo.tentativas_restantes.unwrap_or(0),
             },
@@ -428,6 +437,7 @@ mod testes {
             ErroApi::ChaveJaRegistrada,
             ErroApi::ChaveDeOutraConta,
             ErroApi::DispositivoRevogado,
+            ErroApi::ErroInterno,
         ];
 
         for erro in casos {

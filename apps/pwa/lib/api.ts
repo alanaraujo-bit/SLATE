@@ -64,7 +64,8 @@ const MENSAGENS: Record<string, string> = {
   nenhum_pedido_ativo: "Nenhum pareamento em andamento.",
   convite_invalido: "Este QR Code expirou ou já foi usado.",
   agente_invalido: "Este computador não está mais disponível para pareamento.",
-  chave_ja_registrada: "Este dispositivo já está registrado.",
+  chave_ja_registrada:
+    "Este aparelho já tem um cadastro preso nesta conta. Peça o pareamento de novo.",
   chave_de_outra_conta: "Este aparelho já está registrado em outra conta.",
   dispositivo_revogado:
     "Este aparelho foi removido da conta. Tente parear de novo.",

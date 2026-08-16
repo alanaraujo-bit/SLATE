@@ -179,6 +179,23 @@ export async function renovarIdentidade(): Promise<IdentidadeGuardada> {
   return obterOuCriarIdentidade(anterior?.nome);
 }
 
+/**
+ * Erros que condenam a chave deste aparelho, e não a tentativa.
+ *
+ * Os dois são becos sem saída: a linha revogada fica no banco para que a mesma
+ * chave nunca volte a valer, e uma chave presa a outra função também não é
+ * liberada. Insistir com ela repete a mesma recusa para sempre — a saída é
+ * chegar ao pareamento com uma identidade que ninguém conhece.
+ *
+ * `chave_de_outra_conta` fica de fora de propósito: ali o aparelho pertence a
+ * outra pessoa, e trocar de identidade para contornar isso seria escapar de
+ * uma barreira que existe por segurança.
+ */
+export const CHAVE_SEM_SAIDA: readonly string[] = [
+  "dispositivo_revogado",
+  "chave_ja_registrada",
+];
+
 /** Guarda a chave do computador recebida ao concluir a cerimônia física. */
 export async function guardarParConfiavel(par: ParConfiavel): Promise<void> {
   if (

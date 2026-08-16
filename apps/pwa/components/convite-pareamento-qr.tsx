@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Botao, Rotulo, Superficie } from "@slate/design-system";
 import { api, mensagemDoErro } from "@/lib/api";
 import {
+  CHAVE_SEM_SAIDA,
   guardarParConfiavel,
   obterOuCriarIdentidade,
   renovarIdentidade,
@@ -60,10 +61,10 @@ export function ConvitePareamentoQr({
 
       let resultado = await aceitarCom(identidade);
 
-      // Mesma saída do pareamento por código: chave revogada não volta a
-      // valer, então o aparelho chega com uma identidade nova em vez de
-      // insistir numa que o servidor já enterrou.
-      if (!resultado.ok && resultado.erro === "dispositivo_revogado") {
+      // Mesma saída do pareamento por código: chave que o servidor já enterrou
+      // não volta a valer, então o aparelho chega com uma identidade nova em
+      // vez de insistir numa recusa permanente.
+      if (!resultado.ok && CHAVE_SEM_SAIDA.includes(resultado.erro)) {
         resultado = await aceitarCom(await renovarIdentidade());
       }
 

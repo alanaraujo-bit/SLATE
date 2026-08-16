@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Botao, Rotulo, Superficie } from "@slate/design-system";
 import { api, mensagemDoErro } from "@/lib/api";
 import {
+  CHAVE_SEM_SAIDA,
   esquecerPedidoPareamento,
   guardarParConfiavel,
   guardarPedidoPareamento,
@@ -122,10 +123,11 @@ export function PainelPareamento({
 
       let resultado = await pedirCom(identidade);
 
-      // Chave revogada nunca mais é aceita, e o aparelho ficaria preso pedindo
+      // Uma chave que o servidor não aceita mais — revogada, ou registrada com
+      // outra função — nunca volta a valer, e o aparelho ficaria preso pedindo
       // um código que o computador sempre recusaria. Uma identidade nova custa
       // só o pareamento que a pessoa já está fazendo.
-      if (!resultado.ok && resultado.erro === "dispositivo_revogado") {
+      if (!resultado.ok && CHAVE_SEM_SAIDA.includes(resultado.erro)) {
         resultado = await pedirCom(await renovarIdentidade());
       }
 

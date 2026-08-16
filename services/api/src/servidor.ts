@@ -80,6 +80,25 @@ import { ErroAtualizacoes, ServicoAtualizacoesGitHub } from "./atualizacoes";
 
 type Variaveis = { sessao: ContextoSessao };
 
+/**
+ * A gravação falhou porque a chave já existe, e não por outro motivo?
+ *
+ * Distinguir importa: `catch` mudo transformava qualquer falha de escrita —
+ * conexão caída, tempo esgotado — na frase "esta chave já está registrada com
+ * outra função". Quem lia ia procurar um cadastro que não existia, e a
+ * mensagem ainda escondia a falha real de quem cuida do serviço.
+ *
+ * 23505 é a violação de índice único no Postgres; aqui só pode ser
+ * `dispositivos_chave_idx`, o índice sobre a chave pública.
+ */
+function ehChaveDuplicada(erro: unknown): boolean {
+  return (
+    typeof erro === "object" &&
+    erro !== null &&
+    (erro as { code?: unknown }).code === "23505"
+  );
+}
+
 export interface Dependencias {
   db: Database;
   config: Config;
@@ -417,8 +436,10 @@ export function criarServidor({
       });
 
       return c.json({ dispositivo: { id: dispositivo.id, nome: dispositivo.nome } }, 201);
-    } catch {
-      return c.json({ erro: "chave_ja_registrada" }, 409);
+    } catch (erro) {
+      if (ehChaveDuplicada(erro)) return c.json({ erro: "chave_ja_registrada" }, 409);
+      console.error("Falha ao registrar o Agente:", erro);
+      return c.json({ erro: "erro_interno" }, 500);
     }
   });
 
@@ -770,8 +791,10 @@ export function criarServidor({
           algoritmo: pedido.algoritmo,
           escopos: ESCOPOS_PADRAO.join(" "),
         });
-      } catch {
-        return c.json({ erro: "chave_ja_registrada" }, 409);
+      } catch (erro) {
+        if (ehChaveDuplicada(erro)) return c.json({ erro: "chave_ja_registrada" }, 409);
+        console.error("Falha ao registrar a superfície no pareamento:", erro);
+        return c.json({ erro: "erro_interno" }, 500);
       }
     }
 
