@@ -103,6 +103,81 @@ export const estadoMidia = z.object({
   volume: z.number().min(0).max(100).optional(),
 });
 
+/**
+ * Cores possíveis de um atalho, espelhando `--s-control-*` do design system.
+ *
+ * Lista fechada, e é o que permite a cor virar `var(--s-control-${cor})` sem
+ * revisão: uma cor livre vinda do canal seria conteúdo arbitrário entrando na
+ * folha de estilo. O outro lado desta lista é `CORES` em
+ * `apps/desktop/src-tauri/src/atalhos.rs`, e os dois precisam andar juntos.
+ */
+export const CORES_ATALHO = [
+  "red",
+  "orange",
+  "amber",
+  "yellow",
+  "lime",
+  "green",
+  "teal",
+  "cyan",
+  "blue",
+  "indigo",
+  "violet",
+  "pink",
+] as const;
+
+export type CorAtalho = (typeof CORES_ATALHO)[number];
+
+/**
+ * Um atalho de programa, como ele viaja até o celular.
+ *
+ * **Não existe campo de caminho, e a ausência é a funcionalidade.** O Agente
+ * guarda o caminho do executável em disco e traduz `programa.<id>` contra a
+ * lista local; o celular recebe o suficiente para desenhar a tecla e devolver o
+ * identificador. Acrescentar o caminho aqui entregaria a cada aparelho pareado
+ * o mapa do disco do computador — exatamente o que o ADR-0004 impede.
+ */
+export const atalhoDeDeck = z.object({
+  id: z.string().min(1).max(64),
+  nome: z.string().min(1).max(40),
+  cor: z.enum(CORES_ATALHO),
+  /**
+   * PNG do ícone do próprio executável, como data URI.
+   *
+   * O prefixo é exigido no schema porque este valor vai direto para o `src` de
+   * uma imagem: sem a checagem, um `data:text/html` ou um `javascript:` vindo
+   * de um Agente comprometido teria caminho até a renderização.
+   */
+  icone: z
+    .string()
+    .startsWith("data:image/png;base64,")
+    .max(24_000)
+    .optional(),
+});
+
+export type AtalhoDeDeck = z.infer<typeof atalhoDeDeck>;
+
+/**
+ * A lista de atalhos cadastrados no computador.
+ *
+ * Enviada pelo Agente logo depois do hello, e só a quem tem a concessão de
+ * abrir programas naquela máquina.
+ *
+ * **Vem em fatias porque um DataChannel tem teto de mensagem.** Cem atalhos com
+ * um PNG embutido em cada um passam com folga do que o SCTP entrega numa
+ * mensagem só, e o sintoma de estourar não é um erro legível: é o canal morrer.
+ * `parte`/`total` são opcionais porque a lista costuma caber numa mensagem — e
+ * porque campo novo em mensagem existente é sempre opcional (ADR-0003).
+ */
+export const deckEstado = z.object({
+  atalhos: z.array(atalhoDeDeck).max(100),
+  /** Fatia atual, começando em 1. Ausente quando a lista coube inteira. */
+  parte: z.number().int().positive().max(100).optional(),
+  total: z.number().int().positive().max(100).optional(),
+});
+
+export type DeckEstado = z.infer<typeof deckEstado>;
+
 export const contextoAlterado = z.object({
   /** Perfil que passou a valer. */
   profileId: z.string().min(1).max(128),
@@ -130,6 +205,7 @@ export const SCHEMAS = {
   "action.result": acaoResultado,
   "state.system": estadoSistema,
   "state.media": estadoMidia,
+  "deck.estado": deckEstado,
   "context.changed": contextoAlterado,
 } as const;
 
@@ -167,6 +243,10 @@ export const ESCOPO_EXIGIDO: Record<TipoConhecido, Escopo | null> = {
   "action.result": null,
   "state.system": "state.read",
   "state.media": "state.read",
+  // Ler o deck é `deck.read`, que o pareamento concede. Quem decide se os
+  // atalhos aparecem é a capacidade `action.atalhos`, anunciada por par — este
+  // escopo só diz que a lista pode ser recebida, não que ela pode ser aberta.
+  "deck.estado": "deck.read",
   "context.changed": "state.read",
 };
 

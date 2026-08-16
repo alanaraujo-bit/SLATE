@@ -91,13 +91,25 @@ type Variaveis = { sessao: ContextoSessao };
  *
  * 23505 é a violação de índice único no Postgres; aqui só pode ser
  * `dispositivos_chave_idx`, o índice sobre a chave pública.
+ *
+ * **O código vem embrulhado.** O Drizzle não deixa mais o `PostgresError`
+ * chegar cru: ele o envolve num `DrizzleQueryError` e pendura o original em
+ * `cause`. Olhando só o topo, esta função respondia `false` para a duplicidade
+ * que ela existe para reconhecer — e o Agente recebia 500 no lugar do 409 que
+ * ele já sabe tratar como "este computador já está registrado". O sintoma era
+ * não conseguir entrar na conta a partir da segunda execução.
+ *
+ * Por isso a cadeia de `cause` é percorrida, e não só o primeiro nível: quem
+ * embrulha o erro é uma dependência, e ela pode ganhar outra camada numa
+ * atualização sem avisar ninguém.
  */
-function ehChaveDuplicada(erro: unknown): boolean {
-  return (
-    typeof erro === "object" &&
-    erro !== null &&
-    (erro as { code?: unknown }).code === "23505"
-  );
+export function ehChaveDuplicada(erro: unknown): boolean {
+  for (let atual = erro, saltos = 0; atual && saltos < 5; saltos++) {
+    if (typeof atual !== "object") return false;
+    if ((atual as { code?: unknown }).code === "23505") return true;
+    atual = (atual as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 export interface Dependencias {

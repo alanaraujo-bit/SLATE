@@ -187,7 +187,13 @@ const wssSinalizacao = `${urlSinalizacao.replace(/^https:/, "wss:")}/sinalizacao
 
 // ---- API ------------------------------------------------------------------
 
-executar("api", "pnpm exec tsx src/main.ts", {
+/*
+ * `tsx watch`, e não `tsx`: a API era o único pedaço que não recarregava.
+ * Mexer nela obrigava a derrubar tudo e subir de novo — e como os túneis
+ * sorteiam endereço a cada abertura, o preço de uma linha mudada na API era
+ * parear o celular outra vez. O Agente e a PWA já se recarregavam sozinhos.
+ */
+executar("api", "pnpm exec tsx watch src/main.ts", {
   cwd: resolve(RAIZ, "services/api"),
   env: {
     ...process.env,

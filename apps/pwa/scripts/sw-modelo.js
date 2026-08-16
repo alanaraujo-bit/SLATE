@@ -13,6 +13,22 @@
  */
 
 const VERSAO = "slate-v1";
+
+/**
+ * Este service worker foi gerado para o servidor de desenvolvimento?
+ *
+ * Substituído por `gerar-sw.mjs`. Existe porque a premissa que sustenta o
+ * cache de ativos — **URL com hash no nome nunca muda de conteúdo** — vale no
+ * build de produção e é falsa no `next dev`: ali os chunks se chamam
+ * `/_next/static/chunks/app/page.js`, sem hash, e o conteúdo muda a cada
+ * recompilação.
+ *
+ * O estrago é silencioso e caro de diagnosticar: a casca vem nova da rede, os
+ * chunks vêm velhos do cache, o React nunca hidrata e a tela fica em
+ * "Carregando…" para sempre — sem nenhum pedido chegando ao servidor, que é
+ * justamente o rastro que faria alguém procurar o defeito no lugar certo.
+ */
+const DESENVOLVIMENTO = false;
 const CACHE_CASCA = `${VERSAO}-casca`;
 const CACHE_ATIVOS = `${VERSAO}-ativos`;
 
@@ -56,6 +72,13 @@ function nuncaCachear(url) {
 }
 
 function ehAtivoEstatico(url) {
+  // Em desenvolvimento nada de código é guardado: sem hash na URL, cache-first
+  // entrega o pacote da compilação anterior junto com a casca nova. Ícones e
+  // fontes continuam fora disso porque não participam do grafo do aplicativo.
+  if (DESENVOLVIMENTO && (url.pathname.startsWith("/_next/") || /\.(?:css|js)$/.test(url.pathname))) {
+    return false;
+  }
+
   return (
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icons/") ||

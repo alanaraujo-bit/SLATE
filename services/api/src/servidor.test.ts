@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { createDb, type Database } from "@slate/db";
 import { usuarios } from "@slate/db/schema-contas";
 import { ESCOPOS_PADRAO } from "@slate/protocol";
-import { criarServidor } from "./servidor";
+import { criarServidor, ehChaveDuplicada } from "./servidor";
 import { NOME_COOKIE } from "./sessao";
 import type { Config } from "./config";
 import {
@@ -27,6 +27,41 @@ const URL_BANCO = process.env.DATABASE_URL;
 const suite = URL_BANCO ? describe : describe.skip;
 
 const ORIGEM = "http://localhost:4400";
+
+/*
+ * Sem banco de propósito: o que quebrou aqui foi o *formato* do erro, e não o
+ * comportamento do Postgres. Um teste que precisasse de `DATABASE_URL` se
+ * pularia justamente onde a regressão passou.
+ */
+describe("reconhecimento de chave duplicada", () => {
+  it("enxerga o código do Postgres embrulhado pelo Drizzle", () => {
+    // O Drizzle deixou de entregar o `PostgresError` cru: ele o embrulha e
+    // pendura o original em `cause`. Enquanto esta função olhava só o topo, o
+    // Agente recebia 500 no lugar do 409 que ele trata como "já registrado" —
+    // e ninguém conseguia entrar na conta a partir da segunda execução.
+    const original = Object.assign(new Error("duplicate key"), { code: "23505" });
+    const embrulhado = Object.assign(new Error("Failed query"), { cause: original });
+
+    expect(ehChaveDuplicada(original)).toBe(true);
+    expect(ehChaveDuplicada(embrulhado)).toBe(true);
+    expect(ehChaveDuplicada({ cause: { cause: original } })).toBe(true);
+  });
+
+  it("não confunde outra falha de escrita com duplicidade", () => {
+    // Confundir aqui devolveria "esta chave já está registrada" para uma
+    // conexão caída, e quem lesse iria procurar um cadastro que não existe.
+    expect(ehChaveDuplicada(new Error("conexão encerrada"))).toBe(false);
+    expect(ehChaveDuplicada({ code: "23503" })).toBe(false);
+    expect(ehChaveDuplicada(null)).toBe(false);
+    expect(ehChaveDuplicada(undefined)).toBe(false);
+  });
+
+  it("não entra em laço com uma cadeia de causas circular", () => {
+    const a: { cause?: unknown } = {};
+    a.cause = a;
+    expect(ehChaveDuplicada(a)).toBe(false);
+  });
+});
 
 suite("API de contas", () => {
   let db: Database;

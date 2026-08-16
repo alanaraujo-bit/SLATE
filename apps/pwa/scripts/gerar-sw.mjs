@@ -31,16 +31,26 @@ const modelo = readFileSync(resolve(aqui, "sw-modelo.js"), "utf8");
  * cache velho de pé.
  */
 const impressao = createHash("sha256").update(modelo).digest("hex").slice(0, 8);
-const versao = `slate-${impressao}-${Date.now().toString(36)}`;
 
-const saida = modelo.replace(
-  /const VERSAO = "[^"]*";/,
-  `const VERSAO = ${JSON.stringify(versao)};`,
-);
+/*
+ * O service worker de desenvolvimento é outro, e precisa ser.
+ *
+ * O cache de ativos assume URL com hash no nome — verdade no build, mentira no
+ * `next dev`, onde `page.js` continua `page.js` a cada recompilação. Guardar
+ * ali serve o pacote antigo junto com a casca nova, e a aplicação fica presa
+ * carregando. O marcador entra na versão para que trocar de modo troque o
+ * arquivo, e o navegador reinstale em vez de manter o anterior de pé.
+ */
+const desenvolvimento = process.argv.includes("--dev");
+const versao = `slate-${impressao}-${desenvolvimento ? "dev-" : ""}${Date.now().toString(36)}`;
 
-if (saida === modelo) {
+const saida = modelo
+  .replace(/const VERSAO = "[^"]*";/, `const VERSAO = ${JSON.stringify(versao)};`)
+  .replace(/const DESENVOLVIMENTO = false;/, `const DESENVOLVIMENTO = ${desenvolvimento};`);
+
+if (saida === modelo || !saida.includes(`const DESENVOLVIMENTO = ${desenvolvimento};`)) {
   console.error(
-    "Não encontrei a declaração de VERSAO no modelo. " +
+    "Não encontrei as declarações de VERSAO e DESENVOLVIMENTO no modelo. " +
       "Sem substituição, o cache não seria invalidado entre builds.",
   );
   process.exit(1);

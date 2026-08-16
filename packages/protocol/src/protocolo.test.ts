@@ -9,6 +9,7 @@ import {
 } from "./envelope";
 import { CAPACIDADES, negociar, type Hello } from "./handshake";
 import {
+  CORES_ATALHO,
   ESCOPOS_PADRAO,
   ESCOPOS_SOMENTE_NO_PC,
   autoriza,
@@ -197,6 +198,64 @@ describe("validação de conteúdo", () => {
   it("aceita estado de sistema sem GPU", () => {
     // Ausente é diferente de zero: zero fingiria uma leitura que não existe.
     expect(validarConteudo("state.system", { cpu: 10, memoria: 20 }).ok).toBe(true);
+  });
+});
+
+describe("deck de atalhos", () => {
+  const atalho = (over: Record<string, unknown> = {}) => ({
+    id: "8a1f",
+    nome: "Elden Ring",
+    cor: "violet",
+    ...over,
+  });
+
+  it("aceita a lista sem ícone e com ícone PNG", () => {
+    // Um programa sem ícone extraível continua sendo um atalho válido: recusar
+    // a lista inteira por causa do desenho trocaria a funcionalidade por nada.
+    expect(validarConteudo("deck.estado", { atalhos: [atalho()] }).ok).toBe(true);
+    expect(
+      validarConteudo("deck.estado", {
+        atalhos: [atalho({ icone: "data:image/png;base64,iVBORw0KGgo=" })],
+      }).ok,
+    ).toBe(true);
+  });
+
+  it("recusa um ícone que não seja PNG embutido", () => {
+    // Este valor vai direto para o `src` de uma imagem. Sem a checagem do
+    // prefixo, um Agente comprometido teria caminho até a renderização.
+    for (const icone of [
+      "javascript:alert(1)",
+      "data:text/html;base64,PHNjcmlwdD4=",
+      "https://exemplo.invalido/icone.png",
+    ]) {
+      expect(validarConteudo("deck.estado", { atalhos: [atalho({ icone })] }).ok).toBe(
+        false,
+      );
+    }
+  });
+
+  it("recusa cor fora da lista fechada", () => {
+    // A cor vira `var(--s-control-<cor>)`. Aceitar texto livre aqui seria
+    // deixar o canal escrever na folha de estilo.
+    expect(validarConteudo("deck.estado", { atalhos: [atalho({ cor: "rosa" })] }).ok).toBe(
+      false,
+    );
+    for (const cor of CORES_ATALHO) {
+      expect(validarConteudo("deck.estado", { atalhos: [atalho({ cor })] }).ok).toBe(true);
+    }
+  });
+
+  it("aceita a lista em fatias", () => {
+    // Cem atalhos com um PNG em cada um não cabem numa mensagem de
+    // DataChannel, e estourar o teto não dá erro legível: mata o canal.
+    expect(
+      validarConteudo("deck.estado", { atalhos: [atalho()], parte: 2, total: 3 }).ok,
+    ).toBe(true);
+  });
+
+  it("ler o deck é escopo do pareamento; abrir programa não", () => {
+    expect(autoriza("deck.estado", ESCOPOS_PADRAO)).toBe(true);
+    expect(ESCOPOS_PADRAO).not.toContain("system.process");
   });
 });
 

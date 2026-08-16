@@ -14,6 +14,29 @@ export function extrairTokenConviteQr(valor: string, origem: string): string | n
   }
 }
 
+/**
+ * É um convite do SLATE, só que de outro endereço?
+ *
+ * Serve para escolher a mensagem, e **nada mais** — a recusa continua igual, e
+ * `extrairTokenConviteQr` segue sendo a única palavra sobre aceitar ou não. Ler
+ * convite de outra origem é o que essa checagem existe para impedir.
+ *
+ * O que se ganha é a pessoa saber o que fazer. Dizer "não é um QR Code do
+ * SLATE" para um QR que é do SLATE manda procurar defeito onde não há: o
+ * endereço do computador é que está diferente do endereço aberto aqui. Em
+ * desenvolvimento isso acontece toda vez que o túnel sorteia endereço novo.
+ */
+export function ehConviteDeOutroEndereco(valor: string, origem: string): boolean {
+  try {
+    const url = new URL(valor);
+    if (url.origin === origem) return false;
+    const token = new URLSearchParams(url.hash.slice(1)).get("convite");
+    return !!token && token.length >= 32 && token.length <= 256;
+  } catch {
+    return false;
+  }
+}
+
 export function LeitorQr({
   aoLer,
   aoCancelar,
@@ -30,7 +53,11 @@ export function LeitorQr({
   const concluir = (conteudo: string) => {
     const token = extrairTokenConviteQr(conteudo, window.location.origin);
     if (!token) {
-      setErro("Este não é um QR Code de pareamento do SLATE.");
+      setErro(
+        ehConviteDeOutroEndereco(conteudo, window.location.origin)
+          ? "Este QR Code é do SLATE, mas de outro endereço. Abra o SLATE no mesmo endereço que o computador está mostrando e leia de novo."
+          : "Este não é um QR Code de pareamento do SLATE.",
+      );
       return;
     }
     scanner.current?.stop();

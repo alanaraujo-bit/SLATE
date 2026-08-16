@@ -1,5 +1,5 @@
 use crate::acoes::{self, EstadoComandos, RecepcaoAcao};
-use crate::atalhos::AtalhosPersonalizados;
+use crate::atalhos::{Atalho, AtalhosPersonalizados};
 use crate::api::ClienteApi;
 use crate::identidade::{
     mensagem_desafio_sinalizacao, mensagem_fingerprint_dtls, normalizar_fingerprint_dtls,
@@ -9,7 +9,7 @@ use crate::pares::{ParConfiavel, ParesConfiaveis};
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use local_ip_address::list_afinet_netifas;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -115,6 +115,76 @@ enum MensagemServidor {
     Outro,
 }
 
+/// Teto por mensagem de deck, em bytes.
+///
+/// Um DataChannel não entrega mensagem de qualquer tamanho, e estourar o limite
+/// do SCTP não devolve erro legível: derruba o canal. 48 KiB fica com folga
+/// abaixo do que qualquer navegador aceita numa mensagem só.
+const LIMITE_MENSAGEM_DECK: usize = 48 * 1024;
+
+/// Um atalho como ele viaja até o celular.
+///
+/// **Struct separada de `Atalho` de propósito.** `Atalho` tem `caminho`, e
+/// serializar aquele struct direto entregaria a cada aparelho pareado o mapa do
+/// disco deste computador. A promessa do ADR-0004 é que o caminho nunca
+/// atravessa o canal — em nenhuma das duas direções.
+#[derive(Serialize)]
+struct AtalhoNoCanal<'a> {
+    id: &'a str,
+    nome: &'a str,
+    cor: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    icone: Option<&'a str>,
+}
+
+/// Monta os conteúdos de `deck.estado`, já fatiados para caberem no canal.
+///
+/// Sempre devolve ao menos uma mensagem: lista vazia precisa chegar do mesmo
+/// jeito, senão o celular continuaria mostrando os atalhos de um cadastro que
+/// já não existe.
+fn mensagens_do_deck(atalhos: &[Atalho]) -> Vec<Value> {
+    let mut fatias: Vec<Vec<Value>> = vec![Vec::new()];
+    let mut tamanho = 0usize;
+
+    for atalho in atalhos {
+        let item = serde_json::to_value(AtalhoNoCanal {
+            id: &atalho.id,
+            nome: &atalho.nome,
+            cor: &atalho.cor,
+            icone: atalho.icone.as_deref(),
+        })
+        .unwrap_or(Value::Null);
+        let peso = item.to_string().len();
+
+        // Um item sozinho maior que o teto ainda vai numa mensagem própria: é o
+        // melhor possível, e recusá-lo tiraria o atalho da grade sem explicar.
+        let atual = fatias.last_mut().expect("sempre há uma fatia");
+        if !atual.is_empty() && tamanho + peso > LIMITE_MENSAGEM_DECK {
+            fatias.push(vec![item]);
+            tamanho = peso;
+        } else {
+            atual.push(item);
+            tamanho += peso;
+        }
+    }
+
+    let total = fatias.len();
+    fatias
+        .into_iter()
+        .enumerate()
+        .map(|(indice, itens)| {
+            let mut conteudo = json!({ "atalhos": itens });
+            // `parte`/`total` só aparecem quando há mais de uma: a lista comum
+            // cabe inteira, e anunciar fatia de uma fatia só seria ruído.
+            if total > 1 {
+                conteudo["parte"] = json!(indice + 1);
+                conteudo["total"] = json!(total);
+            }
+            conteudo
+        })
+        .collect()
+}
+
 enum SaidaSinalizacao {
     Candidato {
         destino: String,
@@ -197,11 +267,12 @@ impl PeerConnectionEventHandler for EventosPar {
                             "state.system",
                             "state.media",
                         ];
-                        if pares
+                        let pode_abrir_programas = pares
                             .buscar(&destino)
-                            .is_some_and(|par| par.tem_escopo("system.process"))
-                        {
+                            .is_some_and(|par| par.tem_escopo("system.process"));
+                        if pode_abrir_programas {
                             capacidades.push("action.atalhos");
+                            capacidades.push("deck.sync");
                         }
                         let hello = json!({
                             "v": VERSAO_PROTOCOLO,
@@ -220,6 +291,37 @@ impl PeerConnectionEventHandler for EventosPar {
                         });
                         if canal.send_text(&hello.to_string()).await.is_err() {
                             break;
+                        }
+
+                        // O deck vai atrás do hello, e só a quem pode abrir
+                        // programas: para os demais a lista não é secreta, mas
+                        // seria uma grade de teclas que respondem "escopo
+                        // negado" — pior do que não ter as teclas.
+                        //
+                        // É um envio por conexão. Cadastrar um atalho com o
+                        // celular ligado aparece na reconexão seguinte, que é a
+                        // mesma granularidade já aceita para a permissão.
+                        if pode_abrir_programas {
+                            let mut falhou = false;
+                            for conteudo in mensagens_do_deck(&atalhos.listar()) {
+                                let mensagem = json!({
+                                    "v": VERSAO_PROTOCOLO,
+                                    "id": uuid::Uuid::new_v4().to_string(),
+                                    "t": "evt",
+                                    "k": "deck.estado",
+                                    "ts": agora_ms(),
+                                    "seq": proxima_sequencia_saida,
+                                    "p": conteudo
+                                });
+                                proxima_sequencia_saida += 1;
+                                if canal.send_text(&mensagem.to_string()).await.is_err() {
+                                    falhou = true;
+                                    break;
+                                }
+                            }
+                            if falhou {
+                                break;
+                            }
                         }
                     }
                     DataChannelEvent::OnMessage(mensagem) if aberto => {
@@ -257,6 +359,10 @@ impl PeerConnectionEventHandler for EventosPar {
                                         "rejectedReason": motivo
                                     }
                                 });
+                                // Incrementa mesmo sendo recusa: duas recusas
+                                // seguidas com a mesma sequência fariam a
+                                // segunda ser descartada como repetida.
+                                proxima_sequencia_saida += 1;
                                 let _ = canal.send_text(&resposta.to_string()).await;
                             }
                             RecepcaoAcao::Aceita { id, acao } => {
@@ -682,6 +788,70 @@ fn agora_ms() -> i64 {
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    fn atalho_de_teste(id: &str, icone: Option<String>) -> Atalho {
+        Atalho {
+            id: id.to_string(),
+            nome: format!("Jogo {id}"),
+            caminho: r"C:\Users\alguem\Games\segredo\jogo.exe".to_string(),
+            cor: "violet".to_string(),
+            icone,
+        }
+    }
+
+    #[test]
+    fn o_deck_enviado_nunca_carrega_o_caminho_do_executavel() {
+        // O par deste teste do lado da execução é
+        // `atalho_de_programa_exige_a_mesma_concessao_e_nunca_carrega_caminho`,
+        // que tranca a direção de entrada. Esta é a de saída, e ela não tinha
+        // guarda nenhuma: `Atalho` deriva `Serialize` com o campo `caminho`
+        // público, então serializar a lista direto entregaria a cada aparelho
+        // pareado o mapa do disco deste computador.
+        let mensagens = mensagens_do_deck(&[atalho_de_teste("a", None)]);
+        let bruto = mensagens[0].to_string();
+        assert!(!bruto.contains("caminho"), "o campo vazou: {bruto}");
+        assert!(!bruto.contains("jogo.exe"), "o caminho vazou: {bruto}");
+        assert!(!bruto.to_lowercase().contains("users"), "o caminho vazou: {bruto}");
+        assert_eq!(mensagens[0]["atalhos"][0]["id"], "a");
+        assert_eq!(mensagens[0]["atalhos"][0]["nome"], "Jogo a");
+    }
+
+    #[test]
+    fn a_lista_vazia_ainda_vira_uma_mensagem() {
+        // Sem ela, remover o último atalho deixaria a grade do celular exibindo
+        // um cadastro que já não existe até alguém recarregar.
+        let mensagens = mensagens_do_deck(&[]);
+        assert_eq!(mensagens.len(), 1);
+        assert_eq!(mensagens[0]["atalhos"].as_array().unwrap().len(), 0);
+        assert!(mensagens[0].get("parte").is_none(), "fatia de uma só é ruído");
+    }
+
+    #[test]
+    fn uma_lista_grande_e_partida_em_mensagens_que_cabem_no_canal() {
+        // O limite do DataChannel não devolve erro: estourar mata o canal. Com
+        // cem atalhos e um PNG em cada um, uma mensagem só passa do teto — e o
+        // sintoma seria o painel inteiro parar de conectar, não os atalhos
+        // faltarem.
+        let icone = format!("data:image/png;base64,{}", "A".repeat(8_000));
+        let atalhos: Vec<Atalho> = (0..40)
+            .map(|n| atalho_de_teste(&n.to_string(), Some(icone.clone())))
+            .collect();
+
+        let mensagens = mensagens_do_deck(&atalhos);
+        assert!(mensagens.len() > 1, "não fatiou nada");
+
+        let mut vistos = 0;
+        for (indice, mensagem) in mensagens.iter().enumerate() {
+            assert!(
+                mensagem.to_string().len() <= LIMITE_MENSAGEM_DECK + 8_200,
+                "fatia acima do teto"
+            );
+            assert_eq!(mensagem["parte"], json!(indice + 1));
+            assert_eq!(mensagem["total"], json!(mensagens.len()));
+            vistos += mensagem["atalhos"].as_array().unwrap().len();
+        }
+        assert_eq!(vistos, 40, "algum atalho se perdeu no fatiamento");
+    }
 
     #[test]
     fn extrai_e_normaliza_fingerprint_do_sdp() {

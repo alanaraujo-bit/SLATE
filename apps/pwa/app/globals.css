@@ -330,6 +330,30 @@ button {
   display: none;
 }
 
+/*
+ * O alvo laranja, centralizado na moldura.
+ *
+ * Quem desenha isso é o `qr-scanner`, por conta própria: ele calcula a posição
+ * a partir do vídeo e escreve em estilo embutido, e o resultado no celular
+ * ficava baixo demais — a pessoa mirava num quadro que não estava no meio.
+ *
+ * Fixar aqui só é honesto porque a moldura é quadrada e o vídeo é `cover`
+ * centralizado: nesse arranjo, o pedaço visível da imagem é exatamente o
+ * recorte quadrado do meio, e a região que a biblioteca lê de fato é o quadrado
+ * central de dois terços do menor lado. Ou seja, o quadrado central de dois
+ * terços desta caixa é onde a leitura acontece — o desenho passa a dizer a
+ * verdade, em vez de apontar para outro lugar.
+ *
+ * Se a moldura deixar de ser quadrada (`aspect-ratio: 1` acima) ou o vídeo
+ * deixar de ser `cover`, esta regra volta a mentir e precisa sair.
+ */
+.leitor-qr__camera .scan-region-highlight {
+  inset: 50% auto auto 50% !important;
+  width: 66.6% !important;
+  height: 66.6% !important;
+  translate: -50% -50%;
+}
+
 .botao-arquivo {
   min-height: var(--s-touch-min);
   display: grid;
