@@ -9,6 +9,12 @@ não está óbvio no código e que custaria tempo redescobrir.
 
 ---
 
+> **Retomando o trabalho?** Leia antes o [RETOMAR.md](./RETOMAR.md): ele conta
+> o estado do momento — o que está pela metade, o que já custou tempo e o que o
+> operador ainda espera receber.
+
+---
+
 ## 1. O que existe e funciona
 
 | Peça | Onde | Situação |
