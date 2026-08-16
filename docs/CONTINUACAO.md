@@ -113,6 +113,7 @@ Cada uma destas foi descoberta do jeito difícil.
 | Service worker com versão fixa | Aplicação abre versão antiga offline | `sw.js` é gerado no build; ver `apps/pwa/scripts/gerar-sw.mjs` |
 | Email do autor do commit | Deploy fica `Blocked` na Vercel | Usar o endereço `noreply` do GitHub |
 | `vercel ls` esconde deploys `Blocked` | "Nenhum deploy disparou" quando disparou | Conferir no painel, não só na CLI |
+| `cookie_store(true)` do reqwest é **só memória** | Agente pede e-mail e senha a cada abertura, com cookie de 30 dias válido | `cookie_provider` com armazenamento gravado em disco; ver `apps/desktop/src-tauri/src/api.rs` |
 
 ### Duas lições que se repetiram
 
@@ -226,6 +227,18 @@ consulta a release com um token servidor-servidor, valida o manifesto e entrega
 um redirecionamento temporário apenas para o artefato daquela release. Perder a
 chave privada de atualização impede publicar versões aceitas pelos Agentes já
 instalados: mantenha um backup cifrado antes da primeira release.
+
+### A sessão do Agente sobrevive ao fechamento
+
+O `cookie_store(true)` do reqwest guarda cookies só em memória. O cookie de
+sessão vale trinta dias e nenhum deles sobrevivia ao fechamento do processo —
+um Agente que inicia com o Windows pedia e-mail e senha a cada reinício.
+
+Agora o armazenamento é gravado em `sessao.bin`, na mesma pasta e sob o mesmo
+DPAPI da chave privada: o cookie é credencial ao portador, tão útil a quem o
+roube quanto a senha. Sair apaga o arquivo, e não só a memória. Um arquivo
+ilegível — corrompido, ou protegido por outra conta do Windows — vale o mesmo
+que não ter sessão: pede login, não impede o Agente de abrir.
 
 ## 8. Pendências do operador
 

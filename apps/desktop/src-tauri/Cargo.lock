@@ -3947,6 +3947,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "reqwest_cookie_store"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e75bc88d954b228850d19e3685cedb38c030a17da34aa01c307f95d6e33de34"
+dependencies = [
+ "bytes",
+ "cookie_store",
+ "reqwest 0.12.28",
+ "url",
+]
+
+[[package]]
 name = "rfc6979"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4848,6 +4860,7 @@ version = "0.1.5"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
+ "cookie_store",
  "ed25519-dalek",
  "futures-util",
  "local-ip-address",
@@ -4855,6 +4868,7 @@ dependencies = [
  "p256",
  "rand 0.8.7",
  "reqwest 0.12.28",
+ "reqwest_cookie_store",
  "serde",
  "serde_json",
  "tauri",

@@ -33,6 +33,18 @@ reqwest = { version = "0.12", default-features = false, features = [
     "cookies",
     "rustls-tls",
 ] }
+
+# O armazenamento de cookies embutido no reqwest só existe em memória: fechar o
+# Agente apagava a sessão e obrigava a entrar de novo a cada abertura. Estes
+# dois pacotes expõem o mesmo armazenamento em forma serializável, que o
+# `api.rs` grava em disco protegido por DPAPI.
+#
+# A versão está presa em 0.9 de propósito: a 0.10 implementa o trait de cookies
+# do reqwest 0.13, e com o reqwest 0.12 daqui o `cookie_provider` não compila.
+# Subir uma exige subir a outra.
+reqwest_cookie_store = "0.9"
+cookie_store = { version = "0.22", features = ["serde_json"] }
+
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
 
 # Transporte em tempo real. `webrtc` fornece a pilha completa (ICE, TURN,
@@ -55,6 +67,8 @@ thiserror = "2"
 
 [dev-dependencies]
 minisign-verify = "0.2.5"
+# `io-util` só é usado pela API de mentira que prova a sessão persistente.
+tokio = { version = "1", features = ["io-util"] }
 
 [target.'cfg(windows)'.dependencies]
 # DPAPI, para proteger a chave privada em repouso.

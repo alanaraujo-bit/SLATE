@@ -223,7 +223,9 @@ pub fn run() {
 
             if let Some(identidade) = identidade {
                 let pares = Arc::new(ParesConfiaveis::carregar(&pasta).map_err(|e| e.to_string())?);
-                let api = ClienteApi::novo(endereco_api());
+                // `com_sessao` e não `novo`: é o que faz o cookie de sessão
+                // sobreviver ao fechamento do Agente.
+                let api = ClienteApi::com_sessao(endereco_api(), &pasta);
                 let tarefa = tauri::async_runtime::spawn(transporte::executar(
                     api.clone(),
                     identidade.clone(),

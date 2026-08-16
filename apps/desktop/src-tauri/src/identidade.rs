@@ -152,9 +152,14 @@ pub fn verificar_assinatura(
 // ---------------------------------------------------------------------------
 // Proteção em repouso
 // ---------------------------------------------------------------------------
+//
+// `proteger` e `desproteger` são públicos porque a chave privada não é o único
+// segredo que o Agente guarda em disco: o cookie de sessão vale tanto quanto a
+// senha contra a API, e gravá-lo em texto claro ao lado de uma identidade
+// protegida seria proteger a fechadura e deixar a chave no capacho.
 
 #[cfg(windows)]
-fn proteger(dados: &[u8]) -> Result<Vec<u8>, ErroIdentidade> {
+pub fn proteger(dados: &[u8]) -> Result<Vec<u8>, ErroIdentidade> {
     use windows::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
 
     let mut entrada = CRYPT_INTEGER_BLOB {
@@ -177,7 +182,7 @@ fn proteger(dados: &[u8]) -> Result<Vec<u8>, ErroIdentidade> {
 }
 
 #[cfg(windows)]
-fn desproteger(dados: &[u8]) -> Result<Vec<u8>, ErroIdentidade> {
+pub fn desproteger(dados: &[u8]) -> Result<Vec<u8>, ErroIdentidade> {
     use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
 
     let mut entrada = CRYPT_INTEGER_BLOB {
@@ -209,12 +214,12 @@ fn desproteger(dados: &[u8]) -> Result<Vec<u8>, ErroIdentidade> {
  * pendência.
  */
 #[cfg(not(windows))]
-fn proteger(dados: &[u8]) -> Result<Vec<u8>, ErroIdentidade> {
+pub fn proteger(dados: &[u8]) -> Result<Vec<u8>, ErroIdentidade> {
     Ok(dados.to_vec())
 }
 
 #[cfg(not(windows))]
-fn desproteger(dados: &[u8]) -> Result<Vec<u8>, ErroIdentidade> {
+pub fn desproteger(dados: &[u8]) -> Result<Vec<u8>, ErroIdentidade> {
     Ok(dados.to_vec())
 }
 
