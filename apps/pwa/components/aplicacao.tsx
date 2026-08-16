@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Botao, Rotulo, Superficie } from "@slate/design-system";
+import type { AtalhoDeDeck } from "@slate/protocol";
 import {
   api,
   EVENTO_SEM_CONEXAO,
@@ -44,6 +45,8 @@ export function Aplicacao() {
   const [agenteControlaMidia, setAgenteControlaMidia] = useState(false);
   const [agenteTemGradeCompleta, setAgenteTemGradeCompleta] = useState(false);
   const [agenteLiberaAtalhos, setAgenteLiberaAtalhos] = useState(false);
+  /** Atalhos de programa que aquele computador enviou nesta sessão. */
+  const [programas, setProgramas] = useState<readonly AtalhoDeDeck[]>([]);
   const [agentePrincipalId, setAgentePrincipalId] = useState<string | null>(null);
   const [removendoDispositivo, setRemovendoDispositivo] = useState<string | null>(null);
   const [tokenConvite, setTokenConvite] = useState<string | null>(null);
@@ -145,6 +148,7 @@ export function Aplicacao() {
           setAgenteTemGradeCompleta(capacidades.includes("action.media.completo"));
           setAgenteLiberaAtalhos(capacidades.includes("action.atalhos"));
         },
+        aoReceberDeck: setProgramas,
       });
       transporteAtual.current = transporte;
       transporte.iniciar();
@@ -159,6 +163,7 @@ export function Aplicacao() {
       setAgenteControlaMidia(false);
       setAgenteTemGradeCompleta(false);
       setAgenteLiberaAtalhos(false);
+      setProgramas([]);
       if (transporteAtual.current === transporte) transporteAtual.current = null;
     };
   }, [situacao, dispositivos, tentativa]);

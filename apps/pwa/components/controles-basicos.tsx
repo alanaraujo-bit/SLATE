@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { Icone, Rotulo } from "@slate/design-system";
+import type { AtalhoDeDeck } from "@slate/protocol";
 import {
   CONTROLES_ATALHOS,
   CONTROLES_MIDIA,
   CONTROLES_VOLUME,
+  acaoDoPrograma,
   visiveis,
   type Controle,
 } from "@/lib/controles";
@@ -15,8 +17,16 @@ export function ControlesBasicos({
   executar,
   gradeCompleta = false,
   atalhosLiberados = false,
+  programas = [],
 }: {
   executar: (actionId: string) => Promise<ResultadoExecucaoAcao>;
+  /**
+   * Atalhos de programa cadastrados naquele computador, como ele os enviou.
+   *
+   * Vazio é o normal: só chega lista para quem tem a permissão, e só depois de
+   * alguém cadastrar programas na janela do Agente.
+   */
+  programas?: readonly AtalhoDeDeck[];
   /** O Agente anunciou `action.media.completo` no handshake. */
   gradeCompleta?: boolean;
   /**
@@ -61,6 +71,34 @@ export function ControlesBasicos({
     </button>
   );
 
+  /*
+   * A tecla de um programa cadastrado.
+   *
+   * Separada da tecla comum de propósito: o ícone aqui é uma imagem que veio
+   * do outro computador, e não um nome do design system. Alargar `Controle`
+   * para caber os dois faria toda tecla carregar um campo que quase nenhuma
+   * usa — e o schema já garante que o valor é um PNG embutido.
+   *
+   * A cor vira `--tom`, a mesma variável que o CSS já usa em `.tecla`.
+   */
+  const teclaDePrograma = (programa: AtalhoDeDeck) => (
+    <button
+      key={programa.id}
+      type="button"
+      className="tecla tecla--programa"
+      style={{ "--tom": `var(--s-control-${programa.cor})` } as React.CSSProperties}
+      onClick={() => acionar(acaoDoPrograma(programa.id))}
+    >
+      {programa.icone ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="tecla__icone" src={programa.icone} alt="" aria-hidden />
+      ) : (
+        <Icone nome="Monitor" aria-hidden />
+      )}
+      <span>{programa.nome}</span>
+    </button>
+  );
+
   return (
     <section
       // Com um Agente antigo só sobra o grupo de mídia, e a divisão em duas
@@ -98,6 +136,18 @@ export function ControlesBasicos({
             </Rotulo>
           </div>
           <div className="grade-teclas">{CONTROLES_ATALHOS.map(botao)}</div>
+        </div>
+      )}
+
+      {atalhosLiberados && programas.length > 0 && (
+        <div className="painel__grupo painel__grupo--programas">
+          <div className="painel__cabecalho">
+            <h2>Programas</h2>
+            <Rotulo tamanho="xs" tom="sutil">
+              Cadastrados na janela do SLATE naquele computador.
+            </Rotulo>
+          </div>
+          <div className="grade-teclas">{programas.map(teclaDePrograma)}</div>
         </div>
       )}
 

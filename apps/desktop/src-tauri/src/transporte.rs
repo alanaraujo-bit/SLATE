@@ -115,6 +115,89 @@ enum MensagemServidor {
     Outro,
 }
 
+/// Anuncia o que este par pode fazer, e o deck que ele pode abrir.
+///
+/// Chamada na abertura do canal **e** de novo quando a permissão daquele
+/// aparelho muda na janela. Reenviar o hello é o que faz a grade do celular
+/// ganhar e perder os atalhos na hora: a PWA renegocia as capacidades a cada
+/// hello que recebe, sem precisar reconectar.
+///
+/// Devolve `false` quando o canal já não aceita escrita — o chamador encerra.
+async fn anunciar_sessao(
+    canal: &Arc<dyn DataChannel>,
+    pares: &ParesConfiaveis,
+    atalhos: &AtalhosPersonalizados,
+    destino: &str,
+    dispositivo_id: &str,
+    proxima_sequencia: &mut i64,
+) -> bool {
+    // As capacidades são montadas por par, e não uma vez para o Agente
+    // inteiro: `action.atalhos` só é anunciada a quem recebeu a concessão
+    // nesta máquina. Dois celulares no mesmo computador recebem helos
+    // diferentes.
+    let mut capacidades = vec![
+        "action.execute",
+        "action.media",
+        "action.media.completo",
+        "state.system",
+        "state.media",
+    ];
+    let pode_abrir_programas = pares
+        .buscar(destino)
+        .is_some_and(|par| par.tem_escopo("system.process"));
+    if pode_abrir_programas {
+        capacidades.push("action.atalhos");
+        capacidades.push("deck.sync");
+    }
+
+    let sequencia_do_hello = *proxima_sequencia;
+    *proxima_sequencia += 1;
+    let hello = json!({
+        "v": VERSAO_PROTOCOLO,
+        "id": uuid::Uuid::new_v4().to_string(),
+        "t": "evt",
+        "k": "session.hello",
+        "ts": agora_ms(),
+        "seq": sequencia_do_hello,
+        "p": {
+            "protocolVersion": VERSAO_PROTOCOLO,
+            "appVersion": VERSAO_APP,
+            "role": "agent",
+            "deviceId": dispositivo_id,
+            "capabilities": capacidades
+        }
+    });
+    if canal.send_text(&hello.to_string()).await.is_err() {
+        return false;
+    }
+
+    // O deck vai atrás do hello, e só a quem pode abrir programas: para os
+    // demais seria uma grade de teclas que respondem "escopo negado", pior do
+    // que não ter as teclas.
+    //
+    // Quando a permissão é retirada, o hello sozinho já esvazia a grade do
+    // outro lado — a capacidade some, e com ela o grupo inteiro.
+    if pode_abrir_programas {
+        for conteudo in mensagens_do_deck(&atalhos.listar()) {
+            let mensagem = json!({
+                "v": VERSAO_PROTOCOLO,
+                "id": uuid::Uuid::new_v4().to_string(),
+                "t": "evt",
+                "k": "deck.estado",
+                "ts": agora_ms(),
+                "seq": *proxima_sequencia,
+                "p": conteudo
+            });
+            *proxima_sequencia += 1;
+            if canal.send_text(&mensagem.to_string()).await.is_err() {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
 /// Teto por mensagem de deck, em bytes.
 ///
 /// Um DataChannel não entrega mensagem de qualquer tamanho, e estourar o limite
@@ -197,6 +280,24 @@ enum SaidaSinalizacao {
     },
 }
 
+/**
+ * Avisa as sessões abertas que a permissão de um aparelho mudou.
+ *
+ * Sem isto, marcar a caixa na janela só valia na conexão seguinte: as
+ * capacidades são anunciadas no hello, e o hello já tinha ido embora. Na
+ * prática a pessoa marcava, nada acontecia, e a saída era fechar e abrir o
+ * aplicativo no celular — que é a definição de um sistema que parece quebrado
+ * mesmo funcionando.
+ *
+ * `broadcast` porque pode haver vários aparelhos ligados ao mesmo tempo, e
+ * cada canal precisa ver o aviso para decidir se é sobre ele.
+ */
+pub type AvisoDePermissao = tokio::sync::broadcast::Sender<String>;
+
+pub fn canal_de_avisos() -> AvisoDePermissao {
+    tokio::sync::broadcast::channel(16).0
+}
+
 #[derive(Clone)]
 struct EventosPar {
     saida: mpsc::UnboundedSender<SaidaSinalizacao>,
@@ -205,6 +306,7 @@ struct EventosPar {
     dispositivo_id: String,
     pares: Arc<ParesConfiaveis>,
     atalhos: Arc<AtalhosPersonalizados>,
+    avisos: AvisoDePermissao,
 }
 
 #[async_trait]
@@ -236,6 +338,7 @@ impl PeerConnectionEventHandler for EventosPar {
         let dispositivo_id = self.dispositivo_id.clone();
         let pares = self.pares.clone();
         let atalhos = self.atalhos.clone();
+        let mut avisos = self.avisos.subscribe();
         tokio::spawn(async move {
             let Ok(rotulo) = canal.label().await else {
                 let _ = canal.close().await;
@@ -250,78 +353,58 @@ impl PeerConnectionEventHandler for EventosPar {
             let mut hello_recebido = false;
             let mut comandos = EstadoComandos::depois_do_hello();
             let mut proxima_sequencia_saida = 1_i64;
-            while let Some(evento) = canal.poll().await {
-                match evento {
-                    DataChannelEvent::OnOpen if !aberto => {
-                        aberto = true;
-                        // As capacidades são montadas por par, e não uma vez
-                        // para o Agente inteiro: `action.atalhos` só é
-                        // anunciada a quem recebeu a concessão nesta máquina.
-                        // É isso que faz o painel do celular mostrar os atalhos
-                        // no instante em que a permissão é marcada — e escondê-
-                        // los quando é desmarcada — sem consultar a conta.
-                        let mut capacidades = vec![
-                            "action.execute",
-                            "action.media",
-                            "action.media.completo",
-                            "state.system",
-                            "state.media",
-                        ];
-                        let pode_abrir_programas = pares
-                            .buscar(&destino)
-                            .is_some_and(|par| par.tem_escopo("system.process"));
-                        if pode_abrir_programas {
-                            capacidades.push("action.atalhos");
-                            capacidades.push("deck.sync");
-                        }
-                        let hello = json!({
-                            "v": VERSAO_PROTOCOLO,
-                            "id": uuid::Uuid::new_v4().to_string(),
-                            "t": "evt",
-                            "k": "session.hello",
-                            "ts": agora_ms(),
-                            "seq": 0,
-                            "p": {
-                                "protocolVersion": VERSAO_PROTOCOLO,
-                                "appVersion": VERSAO_APP,
-                                "role": "agent",
-                                "deviceId": dispositivo_id,
-                                "capabilities": capacidades
-                            }
-                        });
-                        if canal.send_text(&hello.to_string()).await.is_err() {
-                            break;
-                        }
-
-                        // O deck vai atrás do hello, e só a quem pode abrir
-                        // programas: para os demais a lista não é secreta, mas
-                        // seria uma grade de teclas que respondem "escopo
-                        // negado" — pior do que não ter as teclas.
-                        //
-                        // É um envio por conexão. Cadastrar um atalho com o
-                        // celular ligado aparece na reconexão seguinte, que é a
-                        // mesma granularidade já aceita para a permissão.
-                        if pode_abrir_programas {
-                            let mut falhou = false;
-                            for conteudo in mensagens_do_deck(&atalhos.listar()) {
-                                let mensagem = json!({
-                                    "v": VERSAO_PROTOCOLO,
-                                    "id": uuid::Uuid::new_v4().to_string(),
-                                    "t": "evt",
-                                    "k": "deck.estado",
-                                    "ts": agora_ms(),
-                                    "seq": proxima_sequencia_saida,
-                                    "p": conteudo
-                                });
-                                proxima_sequencia_saida += 1;
-                                if canal.send_text(&mensagem.to_string()).await.is_err() {
-                                    falhou = true;
+            loop {
+                // O canal e os avisos da janela são ouvidos juntos: marcar a
+                // permissão precisa alcançar uma sessão que já está aberta, e
+                // não só a próxima.
+                let evento = tokio::select! {
+                    evento = canal.poll() => match evento {
+                        Some(evento) => evento,
+                        None => break,
+                    },
+                    aviso = avisos.recv() => {
+                        use tokio::sync::broadcast::error::RecvError;
+                        match aviso {
+                            // Só reanuncia para o aparelho que mudou: os
+                            // outros canais recebem o mesmo aviso e ignoram.
+                            Ok(id) if aberto && id == destino => {
+                                if !anunciar_sessao(
+                                    &canal,
+                                    &pares,
+                                    &atalhos,
+                                    &destino,
+                                    &dispositivo_id,
+                                    &mut proxima_sequencia_saida,
+                                )
+                                .await
+                                {
                                     break;
                                 }
                             }
-                            if falhou {
-                                break;
-                            }
+                            // Avisos perdidos por lentidão não são perda real:
+                            // o que importa é o estado atual, e o próximo
+                            // anúncio já o carrega inteiro.
+                            Ok(_) | Err(RecvError::Lagged(_)) => {}
+                            Err(RecvError::Closed) => break,
+                        }
+                        continue;
+                    }
+                };
+
+                match evento {
+                    DataChannelEvent::OnOpen if !aberto => {
+                        aberto = true;
+                        if !anunciar_sessao(
+                            &canal,
+                            &pares,
+                            &atalhos,
+                            &destino,
+                            &dispositivo_id,
+                            &mut proxima_sequencia_saida,
+                        )
+                        .await
+                        {
+                            break;
                         }
                     }
                     DataChannelEvent::OnMessage(mensagem) if aberto => {
@@ -382,6 +465,19 @@ impl PeerConnectionEventHandler for EventosPar {
                                 proxima_sequencia_saida += 1;
                                 let inicio = Instant::now();
                                 let resultado = acoes::executar(acao, &atalhos);
+                                // A chave `error` é omitida quando deu certo, em
+                                // vez de ir como `null`: ausente é o que o
+                                // schema descreve, e `null` já custou toda
+                                // resposta de sucesso ser descartada do outro
+                                // lado.
+                                let mut conteudo = json!({
+                                    "executionId": id,
+                                    "ok": resultado.is_ok(),
+                                    "durationMs": inicio.elapsed().as_millis() as i64,
+                                });
+                                if let Err(motivo) = resultado {
+                                    conteudo["error"] = json!(motivo);
+                                }
                                 let conclusao = json!({
                                     "v": VERSAO_PROTOCOLO,
                                     "id": uuid::Uuid::new_v4().to_string(),
@@ -389,12 +485,7 @@ impl PeerConnectionEventHandler for EventosPar {
                                     "k": "action.result",
                                     "ts": agora_ms(),
                                     "seq": proxima_sequencia_saida,
-                                    "p": {
-                                        "executionId": id,
-                                        "ok": resultado.is_ok(),
-                                        "durationMs": inicio.elapsed().as_millis() as i64,
-                                        "error": resultado.err()
-                                    }
+                                    "p": conteudo
                                 });
                                 proxima_sequencia_saida += 1;
                                 if canal.send_text(&conclusao.to_string()).await.is_err() {
@@ -416,11 +507,18 @@ pub async fn executar(
     identidade: Identidade,
     pares: Arc<ParesConfiaveis>,
     atalhos: Arc<AtalhosPersonalizados>,
+    avisos: AvisoDePermissao,
 ) {
     let mut espera = Duration::from_secs(1);
     loop {
-        if let Err(erro) =
-            executar_sessao(api.clone(), &identidade, pares.clone(), atalhos.clone()).await
+        if let Err(erro) = executar_sessao(
+            api.clone(),
+            &identidade,
+            pares.clone(),
+            atalhos.clone(),
+            avisos.clone(),
+        )
+        .await
         {
             eprintln!("Transporte indisponível: {erro}");
         }
@@ -434,6 +532,7 @@ async fn executar_sessao(
     identidade: &Identidade,
     pares: Arc<ParesConfiaveis>,
     atalhos: Arc<AtalhosPersonalizados>,
+    avisos: AvisoDePermissao,
 ) -> Result<(), ErroTransporte> {
     let desafio = api
         .pedir_desafio_sinalizacao(&identidade.chave_publica())
@@ -531,6 +630,7 @@ async fn executar_sessao(
                                 &superficie,
                                 pares.clone(),
                                 atalhos.clone(),
+                                avisos.clone(),
                                 servidores_ice.clone(),
                                 &sessao_id,
                                 sdp,
@@ -641,6 +741,7 @@ async fn criar_resposta(
     superficie: &ParConfiavel,
     pares: Arc<ParesConfiaveis>,
     atalhos: Arc<AtalhosPersonalizados>,
+    avisos: AvisoDePermissao,
     servidores_ice: Vec<RTCIceServer>,
     sessao_id: &str,
     sdp: String,
@@ -672,6 +773,7 @@ async fn criar_resposta(
             dispositivo_id: dispositivo_id.to_string(),
             pares,
             atalhos,
+            avisos,
         }))
         .with_runtime(runtime)
         .with_udp_addrs(enderecos_udp())

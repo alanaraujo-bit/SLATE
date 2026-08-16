@@ -191,6 +191,26 @@ describe("validação de conteúdo", () => {
     expect(r.ok).toBe(true);
   });
 
+  it("aceita resultado de sucesso com erro nulo, e não só ausente", () => {
+    /*
+     * O defeito que isto tranca era invisível e diário: o Agente serializava a
+     * ausência de erro como `null`, o schema exigia ausente, e **toda ação
+     * bem-sucedida** era descartada na validação. O comando funcionava no
+     * computador e, dez segundos depois, a tela dizia "o computador não
+     * respondeu a tempo". Só as falhas chegavam, porque nelas o campo é texto.
+     */
+    const base = { executionId: "e1", ok: true, durationMs: 12 };
+    expect(validarConteudo("action.result", base).ok).toBe(true);
+    expect(validarConteudo("action.result", { ...base, error: null }).ok).toBe(true);
+    expect(validarConteudo("action.result", { ...base, error: undefined }).ok).toBe(true);
+    // Falha continua carregando o motivo legível.
+    expect(
+      validarConteudo("action.result", { ...base, ok: false, error: "sumiu" }).ok,
+    ).toBe(true);
+    // E o campo continua sendo texto: número ali seria conteúdo inesperado.
+    expect(validarConteudo("action.result", { ...base, error: 7 }).ok).toBe(false);
+  });
+
   it("recusa percentual de CPU fora da faixa", () => {
     expect(validarConteudo("state.system", { cpu: 150, memoria: 10 }).ok).toBe(false);
   });

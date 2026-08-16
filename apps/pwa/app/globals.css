@@ -644,6 +644,21 @@ button {
   color: var(--s-text-muted);
 }
 
+/*
+ * O ícone de um programa é a arte do próprio executável, extraída do `.exe`
+ * pelo Agente e recebida como PNG embutido. Fica no mesmo tamanho do ícone
+ * desenhado das outras teclas, para a grade não ganhar dois pesos.
+ *
+ * `pixelated` porque a origem é 32×32: numa tela densa, a suavização de um
+ * ícone pequeno esticado borra justamente o desenho que identifica o jogo.
+ */
+.tecla__icone {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
 .tecla:hover {
   border-color: var(--tom);
 }

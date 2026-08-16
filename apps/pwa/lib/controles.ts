@@ -138,6 +138,17 @@ export const CONTROLES_ATALHOS: readonly Controle[] = [
   },
 ];
 
+/**
+ * O identificador de ação de um atalho de programa.
+ *
+ * O celular manda `programa.<id>` e nada mais. O caminho do executável fica no
+ * computador, e é lá que o identificador vira alvo — a lista em disco é a
+ * única tradução possível (ADR-0004). Daqui nunca sai um caminho.
+ */
+export function acaoDoPrograma(id: string): string {
+  return `programa.${id}`;
+}
+
 /** As teclas visíveis, dado o que o Agente do outro lado sabe fazer. */
 export function visiveis(
   lista: readonly Controle[],

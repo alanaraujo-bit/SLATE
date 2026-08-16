@@ -79,8 +79,19 @@ export const acaoResultado = z.object({
   /**
    * Motivo legível quando falha. Nunca carrega saída bruta de shell: isso
    * vazaria conteúdo do PC para a tela sem necessidade (ADR-0004).
+   *
+   * `nullish`, e não `optional`: um Agente que serializa a ausência de erro
+   * como `null` — em vez de omitir a chave — é indistinguível de sucesso, e
+   * recusar a mensagem por causa disso deixava **toda ação bem-sucedida** sem
+   * resposta. A pessoa via o comando funcionar no computador e, dez segundos
+   * depois, "o computador não respondeu a tempo".
+   *
+   * Tolerar aqui é o certo mesmo depois de o Agente parar de mandar `null`: a
+   * PWA se publica na hora e o Agente é um instalador que pode ficar meses
+   * atrás. Ser rígido no que se envia e generoso no que se aceita é o que
+   * mantém as duas pontas funcionando fora de sincronia.
    */
-  error: z.string().max(500).optional(),
+  error: z.string().max(500).nullish(),
 });
 
 // ---------------------------------------------------------------------------

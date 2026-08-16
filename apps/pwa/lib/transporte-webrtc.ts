@@ -10,7 +10,9 @@ import {
   acaoExecutarResposta,
   acaoResultado,
   criarEnvelope,
+  deckEstado,
   hello,
+  type AtalhoDeDeck,
   mensagemServidorSinalizacao,
   negociar,
   novoEstadoSessao,
@@ -36,6 +38,15 @@ export interface OpcoesTransporteWebRtc {
   agente: ParConfiavel;
   aoMudarEstado: (estado: EstadoConexao) => void;
   aoNegociarCapacidades?: (capacidades: readonly string[]) => void;
+  /**
+   * A lista de atalhos de programa cadastrados naquele computador.
+   *
+   * Chamada com a lista inteira, uma vez, quando a última fatia chega — e com
+   * lista vazia quando o canal cai, junto com as capacidades. Deck de um
+   * computador não pode sobreviver à conexão que o trouxe: ele viraria uma
+   * grade de teclas de outra máquina, ou de uma permissão já retirada.
+   */
+  aoReceberDeck?: (atalhos: readonly AtalhoDeDeck[]) => void;
   /** Usado pelo teste de relay; produção deixa o ICE escolher o melhor caminho. */
   politicaIce?: RTCIceTransportPolicy;
 }
@@ -68,6 +79,8 @@ export class TransporteWebRtc {
   private reiniciandoIce = false;
   private candidatosPendentes: RTCIceCandidateInit[] = [];
   private estadoRecepcao = novoEstadoSessao();
+  /** Fatias de `deck.estado` recebidas até agora, nesta sessão. */
+  private deckParcial: AtalhoDeDeck[] = [];
   private pendentes = new Map<
     string,
     { resolver: (resultado: ResultadoExecucaoAcao) => void; limite: ReturnType<typeof setTimeout> }
@@ -497,6 +510,36 @@ export class TransporteWebRtc {
       return;
     }
 
+    if (envelope.valor.k === "deck.estado") {
+      const estado = deckEstado.safeParse(conteudo.valor);
+      if (!estado.success) return;
+
+      /*
+       * A lista vem em fatias porque um DataChannel tem teto de mensagem, e o
+       * deck carrega um PNG por atalho. Sem `parte`, coube inteira.
+       *
+       * Aplicar fatia por fatia faria a grade crescer na frente da pessoa a
+       * cada pedaço que chega; e uma fatia perdida deixaria um deck pela
+       * metade parecendo completo. Por isso só a última publica, e só quando a
+       * contagem fecha.
+       */
+      const { atalhos, parte, total } = estado.data;
+      if (parte === undefined || total === undefined) {
+        this.deckParcial = [];
+        this.opcoes.aoReceberDeck?.(atalhos);
+        return;
+      }
+
+      if (parte === 1) this.deckParcial = [];
+      this.deckParcial = [...this.deckParcial, ...atalhos];
+      if (parte === total) {
+        const completo = this.deckParcial;
+        this.deckParcial = [];
+        this.opcoes.aoReceberDeck?.(completo);
+      }
+      return;
+    }
+
     if (envelope.valor.k !== "session.hello") return;
     const remoto = hello.safeParse(conteudo.valor);
     if (!remoto.success || remoto.data.role !== "agent" || remoto.data.deviceId !== this.opcoes.agente.id) {
@@ -547,6 +590,10 @@ export class TransporteWebRtc {
 
   private fecharCanais(): void {
     this.opcoes.aoNegociarCapacidades?.([]);
+    // O deck cai junto com as capacidades, e pelo mesmo motivo: ele descreve
+    // aquele computador, naquela sessão, sob aquela permissão.
+    this.deckParcial = [];
+    this.opcoes.aoReceberDeck?.([]);
     for (const [id] of this.pendentes) {
       this.concluirPendente(id, {
         ok: false,

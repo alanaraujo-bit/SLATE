@@ -29,6 +29,13 @@ struct Estado {
     pares: Arc<ParesConfiaveis>,
     /// Atalhos de programa cadastrados neste computador.
     atalhos: Arc<AtalhosPersonalizados>,
+    /// Avisa as sessões abertas que a permissão de um aparelho mudou.
+    ///
+    /// Sem ele, marcar a caixa só valia na conexão seguinte — as capacidades
+    /// são anunciadas no hello, e o hello já tinha ido embora. Quem marcava
+    /// via a tela do celular não mudar e concluía, com razão, que não tinha
+    /// funcionado.
+    avisos_de_permissao: transporte::AvisoDePermissao,
     /// Mantém a tarefa residente viva durante todo o processo. Sair da conta
     /// não revoga este computador; a identidade do dispositivo continua sendo
     /// suficiente para ele voltar à sinalização após reiniciar o Windows.
@@ -96,7 +103,13 @@ async fn definir_atalhos_permitidos(
     estado
         .pares
         .definir_escopo_local(&id, "system.process", permitido)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // Reanuncia para o aparelho que mudou, se ele estiver conectado agora. Um
+    // erro aqui significa apenas que ninguém está ouvindo — nenhuma sessão
+    // aberta —, e a permissão já está gravada de qualquer forma.
+    let _ = estado.avisos_de_permissao.send(id);
+    Ok(())
 }
 
 #[tauri::command]
@@ -338,11 +351,13 @@ pub fn run() {
                 // `com_sessao` e não `novo`: é o que faz o cookie de sessão
                 // sobreviver ao fechamento do Agente.
                 let api = ClienteApi::com_sessao(endereco_api(), &pasta);
+                let avisos_de_permissao = transporte::canal_de_avisos();
                 let tarefa = tauri::async_runtime::spawn(transporte::executar(
                     api.clone(),
                     identidade.clone(),
                     pares.clone(),
                     atalhos.clone(),
+                    avisos_de_permissao.clone(),
                 ));
                 app.manage(Estado {
                     identidade,
@@ -351,6 +366,7 @@ pub fn run() {
                     falha_inicial: Mutex::new(falha),
                     pares,
                     atalhos,
+                    avisos_de_permissao,
                     _transporte: Mutex::new(Some(tarefa)),
                 });
             } else {
