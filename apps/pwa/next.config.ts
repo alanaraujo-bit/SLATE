@@ -92,6 +92,22 @@ const config: NextConfig = {
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob:",
             "font-src 'self'",
+            /*
+             * O leitor de QR decodifica num Worker criado a partir de `blob:`
+             * (`qr-scanner` faz `new Worker(URL.createObjectURL(...))`).
+             *
+             * Sem esta linha, `worker-src` recai para `child-src` e daí para
+             * `script-src`, que não aceita `blob:` — e o navegador recusa o
+             * worker. O sintoma foi cruel: no iPhone a câmera abria, a imagem
+             * aparecia e o QR nunca era lido, sem erro nenhum, porque a falha
+             * acontece dentro de uma promessa interna da biblioteca. No
+             * Android nada disso aparecia: lá existe `BarcodeDetector` nativo
+             * e o worker nem chega a ser criado.
+             *
+             * Declarar `worker-src` à parte mantém `script-src` fechado: quem
+             * ganha `blob:` é só o worker, não o carregamento de script.
+             */
+            "worker-src 'self' blob:",
             // O HTTP continua na própria origem pelo proxy. O upgrade WSS vai
             // direto ao processo persistente no Railway; liberar a origem
             // exata preserva a CSP contra exfiltração para qualquer outro WSS.

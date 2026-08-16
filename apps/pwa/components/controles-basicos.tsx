@@ -25,21 +25,23 @@ export function ControlesBasicos({
    */
   atalhosLiberados?: boolean;
 }) {
-  // Guarda qual botão está em voo, e não um booleano: com um booleano só, tocar
-  // no volume deixava a grade inteira em espera, e o painel travava a cada
-  // toque em vez de responder.
-  const [emVoo, setEmVoo] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<ResultadoExecucaoAcao | null>(null);
+  /**
+   * Só o erro vira texto na tela.
+   *
+   * Antes a grade esperava a resposta antes de aceitar o toque seguinte, e
+   * volume ficava impraticável: cada aperto exigia uma ida e volta inteira até
+   * o computador. Num painel de atalhos isso é defeito, não cautela — apertar
+   * cinco vezes precisa mandar cinco comandos.
+   *
+   * O transporte já aceita pedidos simultâneos (cada um tem id próprio e é
+   * resolvido pelo mapa de pendentes), então não havia nada a proteger. Agora
+   * o toque dispara e pronto. A confirmação de que funcionou é o computador
+   * reagir; anunciar "deu certo" a cada toque só empilharia ruído.
+   */
+  const [erro, setErro] = useState<string | null>(null);
 
-  const acionar = async (actionId: string) => {
-    if (emVoo) return;
-    setEmVoo(actionId);
-    setResultado(null);
-    try {
-      setResultado(await executar(actionId));
-    } finally {
-      setEmVoo(null);
-    }
+  const acionar = (actionId: string) => {
+    void executar(actionId).then((r) => setErro(r.ok ? null : r.mensagem));
   };
 
   const midia = visiveis(CONTROLES_MIDIA, gradeCompleta);
@@ -49,13 +51,10 @@ export function ControlesBasicos({
     <button
       key={controle.actionId}
       type="button"
-      className={`tecla${controle.destaque ? " tecla--destaque" : ""}${
-        emVoo === controle.actionId ? " tecla--ocupada" : ""
-      }`}
-      // Desabilita só o botão em voo. Bloquear a grade inteira fazia o painel
-      // parecer travado no toque seguinte.
-      disabled={emVoo !== null && emVoo !== controle.actionId}
-      onClick={() => void acionar(controle.actionId)}
+      className={`tecla${controle.destaque ? " tecla--destaque" : ""}`}
+      // Sem `disabled`: nenhuma tecla espera outra. O retorno ao dedo é o
+      // `:active` do CSS, que é imediato e não depende da rede.
+      onClick={() => acionar(controle.actionId)}
     >
       <Icone nome={controle.icone} aria-hidden />
       <span>{controle.rotulo}</span>
@@ -116,16 +115,9 @@ export function ControlesBasicos({
         </Rotulo>
       )}
 
-      {resultado && (
-        <p
-          className={
-            resultado.ok
-              ? "controle-resultado controle-resultado--ok"
-              : "controle-resultado controle-resultado--erro"
-          }
-          role={resultado.ok ? "status" : "alert"}
-        >
-          {resultado.mensagem}
+      {erro && (
+        <p className="controle-resultado controle-resultado--erro" role="alert">
+          {erro}
         </p>
       )}
     </section>

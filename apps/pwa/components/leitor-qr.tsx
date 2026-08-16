@@ -56,11 +56,25 @@ export function LeitorQr({
       );
       scanner.current = leitor;
       await leitor.start();
+
+      /*
+       * Confere que o decodificador existe, e não só que a câmera abriu.
+       *
+       * São duas coisas diferentes, e confundi-las custou caro: a câmera subia
+       * normalmente enquanto o Worker de decodificação era recusado pela CSP,
+       * e o resultado era uma imagem ao vivo que nunca lia nada — sem erro,
+       * porque a falha mora numa promessa interna da biblioteca. Melhor dizer
+       * que não dá para ler do que deixar a pessoa mirando o QR para sempre.
+       */
+      await QrScanner.createQrEngine();
+
       setAtivo(true);
     } catch {
       setErro(
-        "Não foi possível abrir a câmera. Autorize o acesso ou escolha uma foto do QR Code.",
+        "Não foi possível ler pela câmera neste aparelho. Escolha uma foto do QR Code ou use o código de 6 dígitos.",
       );
+      scanner.current?.destroy();
+      scanner.current = null;
     } finally {
       setIniciando(false);
     }
