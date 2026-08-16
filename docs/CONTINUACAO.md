@@ -35,9 +35,12 @@ banco com a validação de integração e ponta a ponta.
   repetição e escopos, executa `VK_MEDIA_PLAY_PAUSE` no Windows e devolve o
   resultado. Sequências, condições, atrasos, variáveis e as demais ações ainda
   não existem.
-- **Grade configurável de controles.** A PWA mostra apenas o controle de mídia
-  comprovadamente funcional. Editor de decks e demais controles continuam
-  ausentes em vez de aparecerem como botões sem efeito.
+- **Grade configurável de controles.** A grade existe e é fixa: mídia (pausar,
+  faixa, parar), volume e seis atalhos de abertura. **Editor de decks não
+  existe** — a lista de teclas está no código, em `apps/pwa/lib/controles.ts` e
+  em `apps/desktop/src-tauri/src/acoes.rs`, e acrescentar uma tecla é editar os
+  dois lados e publicar. Nada aparece na tela sem funcionar do outro lado: cada
+  grupo é liberado por capacidade negociada no handshake.
 - **Publicação automática do Agente.** O código, o instalador e o workflow
   existem, mas a primeira release ainda depende das AÇÕES-008 e 009. Até isso
   acontecer, a interface informa a indisponibilidade real em vez de prometer uma
@@ -91,6 +94,37 @@ do Node. A sessão é opaca — um valor aleatório cujo hash fica no banco.
 Decisão do operador. Uma página de acompanhamento que exige publicação para
 refletir uma mudança derrota o próprio propósito, e a ferramenta é temporária.
 O banco continua na nuvem.
+
+### Abrir programa é permissão local, e não existe rota de API para ela
+
+Parece lacuna. É a decisão.
+
+O pareamento concede `ESCOPOS_PADRAO`, que tem `system.media` e **não** tem
+`system.process`. Para o celular abrir YouTube, Twitch e afins, alguém marca a
+caixa na janela do Agente, naquele computador. Não há `PATCH /dispositivos/:id`
+e não deve haver: o ADR-0004 diz que um dispositivo jamais amplia os próprios
+poderes, e uma rota de conceder escopo pela conta é exatamente isso com outro
+nome. A conta pode **revogar** um aparelho; conceder poder novo, nunca.
+
+Três consequências que não são óbvias:
+
+- **A concessão mora em `pares.rs`, não no banco.** `acoes.rs` verifica
+  `par.escopos`, que vem da raiz de confiança local — a coluna `escopos` da API
+  nunca é consultada na execução. Guardar no servidor criaria uma segunda fonte
+  de verdade que ninguém lê.
+- **Ela fica em `escoposLocais`, campo separado de `escopos`.** `guardar_confirmado`
+  reconstrói o par a partir do `Dispositivo` da nuvem: somados num campo só, a
+  permissão seria apagada na reconfirmação seguinte, e o sintoma — funciona
+  agora, some depois — é dos caros. O teste
+  `a_concessao_local_sobrevive_a_reconfirmacao_do_pareamento` tranca isso.
+- **A capacidade `action.atalhos` é anunciada por par**, no hello, e só a quem
+  tem a concessão. É assim que o painel do celular ganha e perde os atalhos sem
+  consultar a conta. Dois celulares no mesmo computador recebem helos diferentes.
+
+Ponta solta conhecida: a lista de aparelhos na PWA mostra os escopos do
+servidor, que subestimam o que o aparelho faz de fato. É inconsistência de
+exibição, não de segurança. A correção é o Agente **reportar** as concessões
+para cima — nunca o servidor concedê-las para baixo.
 
 ### O algoritmo de assinatura é negociado, não fixo
 

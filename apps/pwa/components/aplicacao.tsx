@@ -42,6 +42,7 @@ export function Aplicacao() {
   const [chaveDestaSuperficie, setChaveDestaSuperficie] = useState<string | null>(null);
   const [agenteControlaMidia, setAgenteControlaMidia] = useState(false);
   const [agenteTemGradeCompleta, setAgenteTemGradeCompleta] = useState(false);
+  const [agenteLiberaAtalhos, setAgenteLiberaAtalhos] = useState(false);
   const [agentePrincipalId, setAgentePrincipalId] = useState<string | null>(null);
   const [removendoDispositivo, setRemovendoDispositivo] = useState<string | null>(null);
   const [tokenConvite, setTokenConvite] = useState<string | null>(null);
@@ -139,6 +140,7 @@ export function Aplicacao() {
         aoNegociarCapacidades: (capacidades) => {
           setAgenteControlaMidia(capacidades.includes("action.media"));
           setAgenteTemGradeCompleta(capacidades.includes("action.media.completo"));
+          setAgenteLiberaAtalhos(capacidades.includes("action.atalhos"));
         },
       });
       transporteAtual.current = transporte;
@@ -148,7 +150,12 @@ export function Aplicacao() {
     return () => {
       cancelado = true;
       transporte?.parar();
+      // As três capacidades caem juntas. Deixar as duas novas de pé faria a
+      // grade reaparecer inteira ao reconectar num computador que talvez já
+      // não conceda os atalhos — permissão retirada precisa sumir da tela.
       setAgenteControlaMidia(false);
+      setAgenteTemGradeCompleta(false);
+      setAgenteLiberaAtalhos(false);
       if (transporteAtual.current === transporte) transporteAtual.current = null;
     };
   }, [situacao, dispositivos, tentativa]);
@@ -444,6 +451,7 @@ export function Aplicacao() {
               {estadoConexao === "CONNECTED" && agenteControlaMidia && (
                 <ControlesBasicos
                   gradeCompleta={agenteTemGradeCompleta}
+                  atalhosLiberados={agenteLiberaAtalhos}
                   executar={(actionId) =>
                     transporteAtual.current?.executarAcao(actionId) ??
                     Promise.resolve({

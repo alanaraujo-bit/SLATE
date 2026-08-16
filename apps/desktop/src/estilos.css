@@ -325,6 +325,30 @@ p {
   color: var(--s-accent);
 }
 
+/* A permissão de abrir programas fica na linha do aparelho, e não numa tela de
+   configuração separada: quem lê "Celular do Alan" precisa ver ali mesmo o que
+   aquele aparelho pode fazer. Uma permissão escondida atrás de um menu é uma
+   permissão que ninguém revisa. */
+.permissao {
+  display: flex;
+  align-items: center;
+  gap: var(--s-space-2);
+  margin-top: 2px;
+  font-size: var(--s-text-xs);
+  color: var(--s-text-muted);
+  cursor: pointer;
+  /* O rótulo é longo e a linha é estreita: sem isto ele empurra o botão
+     "Remover" para fora da janela de 460px. */
+  white-space: normal;
+}
+
+.permissao input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--s-accent);
+  cursor: pointer;
+}
+
 /* ---- Preferências ----------------------------------------------------- */
 
 .inicio-automatico {

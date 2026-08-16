@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONTROLES_ATALHOS,
   CONTROLES_MIDIA,
   CONTROLES_VOLUME,
   visiveis,
   type Controle,
 } from "./controles";
 
-const TODOS: readonly Controle[] = [...CONTROLES_MIDIA, ...CONTROLES_VOLUME];
+const TODOS: readonly Controle[] = [
+  ...CONTROLES_MIDIA,
+  ...CONTROLES_VOLUME,
+  ...CONTROLES_ATALHOS,
+];
 
 describe("grade de controles", () => {
   it("manda exatamente os identificadores que o Agente reconhece", () => {
@@ -23,8 +28,24 @@ describe("grade de controles", () => {
         "volume.aumentar",
         "volume.diminuir",
         "volume.mudo",
+        "atalho.youtube",
+        "atalho.twitch",
+        "atalho.netflix",
+        "atalho.prime",
+        "atalho.disney",
+        "atalho.spotify",
       ].sort(),
     );
+  });
+
+  it("todo atalho é um identificador, nunca um endereço", () => {
+    // A promessa do ADR-0004 mora aqui: se um dia alguém pensar em mandar a URL
+    // pelo canal para "facilitar", este teste cai. O endereço é constante de
+    // compilação no Agente, e daqui vai só o nome da ação.
+    for (const atalho of CONTROLES_ATALHOS) {
+      expect(atalho.actionId).toMatch(/^atalho\.[a-z]+$/);
+      expect(JSON.stringify(atalho)).not.toMatch(/https?:\/\//);
+    }
   });
 
   it("não repete identificador entre os grupos", () => {

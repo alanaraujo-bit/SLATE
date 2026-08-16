@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Icone, Rotulo } from "@slate/design-system";
 import {
+  CONTROLES_ATALHOS,
   CONTROLES_MIDIA,
   CONTROLES_VOLUME,
   visiveis,
@@ -13,10 +14,16 @@ import type { ResultadoExecucaoAcao } from "@/lib/transporte-webrtc";
 export function ControlesBasicos({
   executar,
   gradeCompleta = false,
+  atalhosLiberados = false,
 }: {
   executar: (actionId: string) => Promise<ResultadoExecucaoAcao>;
   /** O Agente anunciou `action.media.completo` no handshake. */
   gradeCompleta?: boolean;
+  /**
+   * O Agente anunciou `action.atalhos` — ou seja, este aparelho recebeu a
+   * permissão de abrir programas naquele computador, marcada lá.
+   */
+  atalhosLiberados?: boolean;
 }) {
   // Guarda qual botão está em voo, e não um booleano: com um booleano só, tocar
   // no volume deixava a grade inteira em espera, e o painel travava a cada
@@ -59,7 +66,9 @@ export function ControlesBasicos({
     <section
       // Com um Agente antigo só sobra o grupo de mídia, e a divisão em duas
       // colunas do modo deitado deixaria metade da tela vazia.
-      className={`painel${volume.length === 0 ? " painel--coluna-unica" : ""}`}
+      className={`painel${
+        volume.length === 0 && !atalhosLiberados ? " painel--coluna-unica" : ""
+      }`}
       aria-label="Controles do computador"
     >
       <div className="painel__grupo">
@@ -81,9 +90,29 @@ export function ControlesBasicos({
         </div>
       )}
 
+      {atalhosLiberados && (
+        <div className="painel__grupo">
+          <div className="painel__cabecalho">
+            <h2>Abrir</h2>
+            <Rotulo tamanho="xs" tom="sutil">
+              Abre no navegador padrão do computador.
+            </Rotulo>
+          </div>
+          <div className="grade-teclas">{CONTROLES_ATALHOS.map(botao)}</div>
+        </div>
+      )}
+
       {!gradeCompleta && (
         <Rotulo tamanho="xs" tom="sutil">
           Atualize o Agente no computador para liberar faixa, parada e volume.
+        </Rotulo>
+      )}
+
+      {gradeCompleta && !atalhosLiberados && (
+        <Rotulo tamanho="xs" tom="sutil">
+          Para abrir programas, autorize este aparelho na janela do SLATE no
+          computador. A permissão é dada lá de propósito: nenhum aparelho amplia
+          os próprios poderes à distância.
         </Rotulo>
       )}
 

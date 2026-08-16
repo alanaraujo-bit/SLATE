@@ -24,6 +24,8 @@ interface Situacao {
   nomeComputador: string;
   chavePublica: string;
   dispositivos: Dispositivo[];
+  /** IDs autorizados a abrir programas neste computador. */
+  atalhosPermitidos?: string[];
 }
 
 interface ConviteQr {
@@ -184,6 +186,7 @@ function Pareamento({
   const [enviando, setEnviando] = useState(false);
   const [modo, setModo] = useState<"qr" | "codigo">("qr");
   const [removendo, setRemovendo] = useState<string | null>(null);
+  const [alterandoAtalhos, setAlterandoAtalhos] = useState<string | null>(null);
 
   const superficies = situacao.dispositivos.filter(
     (d) => d.papel === "surface" && d.situacao !== "revogado",
@@ -218,6 +221,39 @@ function Pareamento({
   const sair = async () => {
     await invoke("sair");
     aoMudar();
+  };
+
+  const permitidos = new Set(situacao.atalhosPermitidos ?? []);
+
+  /**
+   * Autoriza um aparelho a abrir programas neste computador.
+   *
+   * Esta permissão não vem da conta e não pode vir: o pareamento concede
+   * mídia, e abrir programa é outra autoridade. Quem marca aqui está na frente
+   * da máquina, que é a prova que o ADR-0004 exige. Vale para este computador
+   * só — o mesmo celular continua sem o poder nos outros.
+   */
+  const alternarAtalhos = async (dispositivo: Dispositivo) => {
+    const conceder = !permitidos.has(dispositivo.id);
+    setErro(null);
+    setSucesso(null);
+    setAlterandoAtalhos(dispositivo.id);
+    try {
+      await invoke("definir_atalhos_permitidos", {
+        id: dispositivo.id,
+        permitido: conceder,
+      });
+      setSucesso(
+        conceder
+          ? `${dispositivo.nome} agora pode abrir programas neste computador.`
+          : `${dispositivo.nome} não abre mais programas neste computador.`,
+      );
+      aoMudar();
+    } catch (e) {
+      setErro(String(e));
+    } finally {
+      setAlterandoAtalhos(null);
+    }
   };
 
   const remover = async (dispositivo: Dispositivo) => {
@@ -268,6 +304,15 @@ function Pareamento({
                   <span className={d.online ? "etiqueta ativa" : "etiqueta"}>
                     {d.online ? "conectado agora" : "desconectado"}
                   </span>
+                  <label className="permissao">
+                    <input
+                      type="checkbox"
+                      checked={permitidos.has(d.id)}
+                      disabled={alterandoAtalhos === d.id}
+                      onChange={() => void alternarAtalhos(d)}
+                    />
+                    <span>Pode abrir programas neste computador</span>
+                  </label>
                 </span>
                 <button
                   type="button"

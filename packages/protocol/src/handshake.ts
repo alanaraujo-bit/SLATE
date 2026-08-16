@@ -28,6 +28,16 @@ export const CAPACIDADES = [
    * é o que faz a grade mostrar só o que o computador do outro lado sabe fazer.
    */
   "action.media.completo",
+  /**
+   * Atalhos de abertura.
+   *
+   * Anunciada **por par**, e só para quem recebeu a permissão marcada na
+   * interface do Agente. Não é uma propriedade da versão do Agente como as
+   * outras: dois celulares ligados ao mesmo computador podem receber helos
+   * diferentes, e é isso que faz a permissão aparecer e sumir na tela do
+   * celular sem consultar a conta.
+   */
+  "action.atalhos",
   "action.define",
   "state.system",
   "state.media",

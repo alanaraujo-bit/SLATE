@@ -15,7 +15,14 @@ export interface Controle {
   actionId: string;
   rotulo: string;
   /** Nome do ícone no design system. */
-  icone: "Anterior" | "Play" | "Proximo" | "Volume" | "Mudo" | "Parar";
+  icone:
+    | "Anterior"
+    | "Play"
+    | "Proximo"
+    | "Volume"
+    | "Mudo"
+    | "Parar"
+    | "Monitor";
   /**
    * Só aparece quando o Agente anunciou `action.media.completo`.
    *
@@ -73,6 +80,61 @@ export const CONTROLES_VOLUME: readonly Controle[] = [
     rotulo: "Parar",
     icone: "Parar",
     exigeGradeCompleta: true,
+  },
+];
+
+/**
+ * Atalhos de abertura.
+ *
+ * Só aparecem quando o Agente anuncia `action.atalhos`, o que ele faz por par e
+ * apenas para quem recebeu a permissão marcada na interface do computador. O
+ * pareamento **não** concede isso: abrir programa é autoridade diferente de
+ * mexer no que já está tocando, e quem concede precisa estar na frente da
+ * máquina (ADR-0004).
+ *
+ * O endereço de cada atalho é constante de compilação no Agente. Daqui vai só o
+ * identificador — nunca uma URL.
+ *
+ * `exigeGradeCompleta` é `false` em todos porque o grupo inteiro é liberado de
+ * uma vez por `action.atalhos`; marcar `true` sugeriria um filtro por tecla que
+ * não existe neste caminho.
+ */
+export const CONTROLES_ATALHOS: readonly Controle[] = [
+  {
+    actionId: "atalho.youtube",
+    rotulo: "YouTube",
+    icone: "Monitor",
+    exigeGradeCompleta: false,
+  },
+  {
+    actionId: "atalho.twitch",
+    rotulo: "Twitch",
+    icone: "Monitor",
+    exigeGradeCompleta: false,
+  },
+  {
+    actionId: "atalho.netflix",
+    rotulo: "Netflix",
+    icone: "Monitor",
+    exigeGradeCompleta: false,
+  },
+  {
+    actionId: "atalho.prime",
+    rotulo: "Prime Video",
+    icone: "Monitor",
+    exigeGradeCompleta: false,
+  },
+  {
+    actionId: "atalho.disney",
+    rotulo: "Disney+",
+    icone: "Monitor",
+    exigeGradeCompleta: false,
+  },
+  {
+    actionId: "atalho.spotify",
+    rotulo: "Spotify",
+    icone: "Monitor",
+    exigeGradeCompleta: false,
   },
 ];
 

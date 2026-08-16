@@ -39,6 +39,12 @@ struct Situacao {
     #[serde(rename = "chavePublica")]
     chave_publica: String,
     dispositivos: Vec<Dispositivo>,
+    /// IDs dos aparelhos autorizados a abrir programas neste computador.
+    ///
+    /// Vem da raiz de confiança local, e não da conta: é a única fonte, porque
+    /// é aqui que a permissão é concedida e é aqui que ela é verificada.
+    #[serde(rename = "atalhosPermitidos")]
+    atalhos_permitidos: Vec<String>,
 }
 
 #[tauri::command]
@@ -57,7 +63,35 @@ async fn situacao(estado: tauri::State<'_, Estado>) -> Result<Situacao, String> 
         nome_computador: estado.nome_computador.clone(),
         chave_publica: estado.identidade.chave_publica(),
         dispositivos,
+        atalhos_permitidos: estado
+            .pares
+            .listar()
+            .into_iter()
+            .filter(|par| par.tem_escopo("system.process"))
+            .map(|par| par.id)
+            .collect(),
     })
+}
+
+/// Autoriza — ou desautoriza — um aparelho a abrir programas neste computador.
+///
+/// Não existe rota equivalente na API, e isso é a decisão, não uma lacuna. O
+/// ADR-0004 diz que um dispositivo jamais amplia os próprios poderes: quem
+/// concede está fisicamente na frente deste computador. A conta pode revogar um
+/// aparelho; conceder poder novo, nunca.
+///
+/// O efeito é imediato: `action.atalhos` é anunciada por par no handshake, então
+/// o painel do celular ganha ou perde os atalhos na reconexão seguinte.
+#[tauri::command]
+async fn definir_atalhos_permitidos(
+    estado: tauri::State<'_, Estado>,
+    id: String,
+    permitido: bool,
+) -> Result<(), String> {
+    estado
+        .pares
+        .definir_escopo_local(&id, "system.process", permitido)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -253,6 +287,7 @@ pub fn run() {
             criar_convite_qr,
             consultar_convite_qr,
             remover_dispositivo,
+            definir_atalhos_permitidos,
             falha_inicial
         ])
         .run(tauri::generate_context!())

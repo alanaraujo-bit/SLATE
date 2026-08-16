@@ -181,6 +181,25 @@ impl PeerConnectionEventHandler for EventosPar {
                 match evento {
                     DataChannelEvent::OnOpen if !aberto => {
                         aberto = true;
+                        // As capacidades são montadas por par, e não uma vez
+                        // para o Agente inteiro: `action.atalhos` só é
+                        // anunciada a quem recebeu a concessão nesta máquina.
+                        // É isso que faz o painel do celular mostrar os atalhos
+                        // no instante em que a permissão é marcada — e escondê-
+                        // los quando é desmarcada — sem consultar a conta.
+                        let mut capacidades = vec![
+                            "action.execute",
+                            "action.media",
+                            "action.media.completo",
+                            "state.system",
+                            "state.media",
+                        ];
+                        if pares
+                            .buscar(&destino)
+                            .is_some_and(|par| par.tem_escopo("system.process"))
+                        {
+                            capacidades.push("action.atalhos");
+                        }
                         let hello = json!({
                             "v": VERSAO_PROTOCOLO,
                             "id": uuid::Uuid::new_v4().to_string(),
@@ -193,10 +212,7 @@ impl PeerConnectionEventHandler for EventosPar {
                                 "appVersion": VERSAO_APP,
                                 "role": "agent",
                                 "deviceId": dispositivo_id,
-                                // `action.media.completo` é o que diz à PWA que
-                                // este Agente já tem faixa, parada e volume —
-                                // sem isso ela mostra só o reproduzir/pausar.
-                                "capabilities": ["action.execute", "action.media", "action.media.completo", "state.system", "state.media"]
+                                "capabilities": capacidades
                             }
                         });
                         if canal.send_text(&hello.to_string()).await.is_err() {

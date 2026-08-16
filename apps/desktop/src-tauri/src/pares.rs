@@ -14,7 +14,28 @@ pub struct ParConfiavel {
     #[serde(rename = "chavePublica")]
     pub chave_publica: String,
     pub algoritmo: String,
+    /// Escopos que vieram da conta, no pareamento.
     pub escopos: Vec<String>,
+    /// Escopos concedidos **aqui**, na interface do Agente.
+    ///
+    /// Campo separado, e não somado a `escopos`, por dois motivos. O primeiro é
+    /// que `guardar_confirmado` reconstrói o par a partir do `Dispositivo` da
+    /// nuvem: somados, um grant local seria apagado na primeira reconfirmação,
+    /// e o sintoma — permissão que funciona e some minutos depois — é dos que
+    /// custam um dia para achar. O segundo é que separar deixa legível, no
+    /// próprio arquivo, o que a conta concedeu e o que esta máquina concedeu.
+    ///
+    /// A direção nunca se inverte: a nuvem não escreve aqui.
+    #[serde(default, rename = "escoposLocais")]
+    pub escopos_locais: Vec<String>,
+}
+
+impl ParConfiavel {
+    /// O que este par pode de fato, somando conta e concessão local.
+    pub fn tem_escopo(&self, escopo: &str) -> bool {
+        self.escopos.iter().any(|e| e == escopo)
+            || self.escopos_locais.iter().any(|e| e == escopo)
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -74,6 +95,8 @@ impl ParesConfiaveis {
             return Err(ErroPares::DispositivoInvalido);
         }
 
+        let mut pares = self.pares.write().map_err(|_| ErroPares::Concorrencia)?;
+
         let novo = ParConfiavel {
             id: dispositivo.id.clone(),
             nome: dispositivo.nome.clone(),
@@ -81,9 +104,15 @@ impl ParesConfiaveis {
             chave_publica: dispositivo.chave_publica.clone(),
             algoritmo: dispositivo.algoritmo.clone(),
             escopos: dispositivo.escopos.clone(),
+            // Preserva o que foi concedido nesta máquina. Sem esta linha, uma
+            // reconfirmação de pareamento apagaria a permissão de atalhos sem
+            // ninguém ter pedido isso.
+            escopos_locais: pares
+                .get(&dispositivo.id)
+                .map(|antigo| antigo.escopos_locais.clone())
+                .unwrap_or_default(),
         };
 
-        let mut pares = self.pares.write().map_err(|_| ErroPares::Concorrencia)?;
         let mut candidato = pares.clone();
         candidato.insert(novo.id.clone(), novo);
         gravar_arquivo(&self.caminho, &candidato)?;
@@ -93,6 +122,52 @@ impl ParesConfiaveis {
 
     pub fn buscar(&self, id: &str) -> Option<ParConfiavel> {
         self.pares.read().ok()?.get(id).cloned()
+    }
+
+    /// Concede ou retira um escopo **nesta máquina**, para um par já confiável.
+    ///
+    /// É o caminho que o ADR-0004 exige para poder que a conta não dá de saída:
+    /// quem concede está na frente do computador, e um aparelho jamais amplia
+    /// os próprios poderes. Não existe rota de API equivalente de propósito —
+    /// a nuvem pode revogar, nunca conceder.
+    pub fn definir_escopo_local(
+        &self,
+        id: &str,
+        escopo: &str,
+        conceder: bool,
+    ) -> Result<(), ErroPares> {
+        let mut pares = self.pares.write().map_err(|_| ErroPares::Concorrencia)?;
+        let mut candidato = pares.clone();
+        let Some(par) = candidato.get_mut(id) else {
+            // Conceder poder a quem não é par confiável criaria a entrada pela
+            // porta dos fundos, que é exatamente o que `remover_revogados`
+            // existe para impedir.
+            return Err(ErroPares::DispositivoInvalido);
+        };
+
+        let ja_tem = par.escopos_locais.iter().any(|e| e == escopo);
+        if conceder == ja_tem {
+            return Ok(());
+        }
+        if conceder {
+            par.escopos_locais.push(escopo.to_string());
+            par.escopos_locais.sort();
+        } else {
+            par.escopos_locais.retain(|e| e != escopo);
+        }
+
+        gravar_arquivo(&self.caminho, &candidato)?;
+        *pares = candidato;
+        Ok(())
+    }
+
+    pub fn listar(&self) -> Vec<ParConfiavel> {
+        let Ok(pares) = self.pares.read() else {
+            return Vec::new();
+        };
+        let mut lista = pares.values().cloned().collect::<Vec<_>>();
+        lista.sort_by(|a, b| a.id.cmp(&b.id));
+        lista
     }
 
     /// Aplica somente remoções. A nuvem não pode criar uma raiz de confiança.
@@ -220,6 +295,77 @@ mod testes {
         );
         assert!(pares.buscar("surface-1").is_none());
         assert!(pares.buscar("inventado").is_none());
+        let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    #[test]
+    fn a_concessao_local_sobrevive_a_reconfirmacao_do_pareamento() {
+        // A armadilha que este teste tranca: `guardar_confirmado` reconstrói o
+        // par a partir do `Dispositivo` da nuvem, e a nuvem não conhece
+        // `system.process`. Sem a preservação explícita, autorizar os atalhos
+        // funcionaria e a permissão sumiria na reconfirmação seguinte — um
+        // defeito que aparece minutos depois da ação que o causou.
+        let pasta = pasta("grant-sobrevive");
+        let pares = ParesConfiaveis::carregar(&pasta).unwrap();
+        pares.guardar_confirmado(&superficie("surface-1")).unwrap();
+        pares
+            .definir_escopo_local("surface-1", "system.process", true)
+            .unwrap();
+
+        // Chega de novo a lista da conta, que continua sem `system.process`.
+        pares.guardar_confirmado(&superficie("surface-1")).unwrap();
+
+        assert!(pares.buscar("surface-1").unwrap().tem_escopo("system.process"));
+
+        // E sobrevive também ao fechamento do Agente.
+        let reaberto = ParesConfiaveis::carregar(&pasta).unwrap();
+        assert!(reaberto.buscar("surface-1").unwrap().tem_escopo("system.process"));
+        let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    #[test]
+    fn a_concessao_local_pode_ser_retirada() {
+        let pasta = pasta("grant-retirado");
+        let pares = ParesConfiaveis::carregar(&pasta).unwrap();
+        pares.guardar_confirmado(&superficie("surface-1")).unwrap();
+
+        pares
+            .definir_escopo_local("surface-1", "system.process", true)
+            .unwrap();
+        pares
+            .definir_escopo_local("surface-1", "system.process", false)
+            .unwrap();
+
+        assert!(!pares.buscar("surface-1").unwrap().tem_escopo("system.process"));
+        let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    #[test]
+    fn nao_concede_poder_a_quem_nao_e_par_confiavel() {
+        // Conceder criando a entrada seria a porta dos fundos que
+        // `remover_revogados` existe para fechar.
+        let pasta = pasta("grant-desconhecido");
+        let pares = ParesConfiaveis::carregar(&pasta).unwrap();
+
+        assert!(pares
+            .definir_escopo_local("inventado", "system.process", true)
+            .is_err());
+        assert!(pares.buscar("inventado").is_none());
+        let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    #[test]
+    fn a_conta_nao_escreve_na_concessao_local() {
+        // A nuvem manda `escopos`; `escoposLocais` é só desta máquina. Se um
+        // dia a API passar a devolver `system.process`, isso entra como escopo
+        // de conta — nunca como concessão local.
+        let pasta = pasta("direcao");
+        let pares = ParesConfiaveis::carregar(&pasta).unwrap();
+        let mut dispositivo = superficie("surface-1");
+        dispositivo.escopos = vec!["state.read".into(), "system.process".into()];
+        pares.guardar_confirmado(&dispositivo).unwrap();
+
+        assert!(pares.buscar("surface-1").unwrap().escopos_locais.is_empty());
         let _ = std::fs::remove_dir_all(pasta);
     }
 }
