@@ -1,6 +1,6 @@
 [package]
 name = "slate-agente"
-version = "0.1.5"
+version = "0.1.6"
 description = "Agente do SLATE para Windows"
 authors = ["Aionixdev"]
 edition = "2021"
