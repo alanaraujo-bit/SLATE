@@ -666,6 +666,23 @@ export function criarServidor({
     if (superficie) {
       const motivo = motivoChaveIndisponivel(superficie, sessao.usuarioId);
       if (motivo) return c.json({ erro: motivo }, 409);
+
+      // Mesmo aparelho voltando: reativa a linha, como faz a confirmação por
+      // código.
+      //
+      // Sem isto o pareamento por QR terminava dizendo `pareado: true` e
+      // deixava a superfície revogada — e a PWA, que só considera aparelho
+      // ativo, mandava ler o QR de novo. A cada leitura, o mesmo fim: o
+      // convite era aceito, nada mudava, e não havia como sair.
+      //
+      // `motivoChaveIndisponivel` deixa revogado passar de propósito (ver a
+      // explicação lá em cima); quem precisa concluir o trabalho é aqui.
+      if (superficie.situacao !== "ativo") {
+        superficie = await reativarDispositivo(db, superficie.id, {
+          nome: nome.trim().slice(0, 100) || superficie.nome,
+          escopos: ESCOPOS_PADRAO.join(" "),
+        });
+      }
     } else {
       superficie = await criarDispositivo(db, {
         usuarioId: sessao.usuarioId,

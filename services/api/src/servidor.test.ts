@@ -625,6 +625,67 @@ suite("API de contas", () => {
       expect((await aceitar()).status).toBe(404);
     }, 15_000);
 
+    it("o QR também reativa um aparelho removido, e não só o código", async () => {
+      /*
+       * O laço que este teste tranca, e que só aparece no aparelho de verdade:
+       * a leitura do QR mostrava o computador certo, a pessoa aprovava, a API
+       * respondia `pareado: true` — e a tela pedia o QR de novo, sem fim.
+       *
+       * A superfície continuava revogada. `motivoChaveIndisponivel` deixa
+       * revogado passar de propósito, e quem concluía o trabalho era a
+       * confirmação por código, com `reativarDispositivo`. O caminho do QR
+       * nasceu depois e não recebeu a mesma reativação, então ele aceitava o
+       * convite e deixava o aparelho inativo — e a PWA, que só considera
+       * aparelho ativo, mandava parear outra vez.
+       */
+      const { cookie } = await cadastrar(emailUnico("qr-revogado"));
+      const agente = await registrarAgente(cookie);
+      const celular = await gerarIdentidade();
+
+      const listarSuperficies = async () =>
+        (
+          await (
+            await app.request("/dispositivos", { headers: { Cookie: cookie, Origin: ORIGEM } })
+          ).json()
+        ).dispositivos.filter((d: { papel: string }) => d.papel === "surface");
+
+      /** Lê o QR com a chave que este aparelho guardou — sempre a mesma. */
+      const parearPorQr = async (nome: string) => {
+        const convite = await (await criarConviteQr(cookie, agente)).json();
+        const token = new URLSearchParams(new URL(convite.url).hash.slice(1)).get("convite");
+        return app.request("/pareamento/convites/aceitar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
+          body: JSON.stringify({
+            token,
+            chavePublica: celular.chavePublicaExportada,
+            algoritmo: celular.algoritmo,
+            nome,
+          }),
+        });
+      };
+
+      expect((await parearPorQr("iPhone")).status).toBe(200);
+      const [primeira] = await listarSuperficies();
+
+      await app.request(`/dispositivos/${primeira.id}`, {
+        method: "DELETE",
+        headers: { Cookie: cookie, Origin: ORIGEM },
+      });
+
+      expect((await parearPorQr("iPhone de volta")).status).toBe(200);
+
+      const superficies = await listarSuperficies();
+
+      // Ativo: é o que a PWA exige para sair da tela de pareamento. Enquanto
+      // ficava revogado, `pareado: true` era uma resposta que não pareava.
+      expect(superficies).toHaveLength(1);
+      expect(superficies[0].situacao).toBe("ativo");
+      // Mesma linha: reparear não pode encher a conta de cópias do aparelho.
+      expect(superficies[0].id).toBe(primeira.id);
+      expect(superficies[0].escopos).toEqual([...ESCOPOS_PADRAO]);
+    }, 20_000);
+
     it("uma conta diferente não consegue visualizar o QR", async () => {
       const dono = await cadastrar(emailUnico("qr-dono"));
       const estranho = await cadastrar(emailUnico("qr-estranho"));
