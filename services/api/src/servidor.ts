@@ -61,6 +61,7 @@ import {
   registrarTentativa,
   registrarTentativaPareamento,
   resolverSessao,
+  reativarDispositivo,
   revogarDispositivo,
   type ContextoSessao,
 } from "./repositorio";
@@ -460,20 +461,24 @@ export function criarServidor({
   /**
    * Por que uma chave já cadastrada não serve para este pareamento.
    *
-   * Os três motivos pedem reações diferentes de quem chama, e por isso não
-   * podem sair com o mesmo código: chave de outra conta é impasse; superfície
-   * revogada se resolve no próprio aparelho, gerando identidade nova; papel
-   * trocado é conflito de cadastro. Devolver tudo como "chave_ja_registrada"
-   * deixava o aparelho preso num beco sem saída, e ainda dizia no Agente que o
-   * problema era com o computador.
+   * Restaram dois impedimentos, e os dois são de verdade: chave de outra conta
+   * é impasse — contornar seria escapar de uma barreira que existe por
+   * segurança —, e papel trocado é conflito de cadastro.
+   *
+   * **Revogado saiu desta lista de propósito.** Recusar aqui não protegia
+   * nada: reparear exige sessão na conta e a cerimônia física no computador,
+   * que é a mesma prova de um pareamento novo, e o aparelho só precisava
+   * trocar de chave para obter o mesmo acesso. Na prática o que a recusa
+   * produzia era um beco sem saída — o celular reusa a chave que guardou, e
+   * "peça o pareamento de novo" devolvia a mesma recusa para sempre. Agora a
+   * confirmação reativa a linha existente; ver `reativarDispositivo`.
    */
   function motivoChaveIndisponivel(
     dispositivo: { usuarioId: string; papel: string; situacao: string },
     usuarioId: string,
-  ): "chave_de_outra_conta" | "chave_ja_registrada" | "dispositivo_revogado" | null {
+  ): "chave_de_outra_conta" | "chave_ja_registrada" | null {
     if (dispositivo.usuarioId !== usuarioId) return "chave_de_outra_conta";
     if (dispositivo.papel !== "surface") return "chave_ja_registrada";
-    if (dispositivo.situacao !== "ativo") return "dispositivo_revogado";
     return null;
   }
 
@@ -777,10 +782,21 @@ export function criarServidor({
     );
     if (dispositivo) {
       // Permite repetir a cerimônia física para recuperar a cópia local da
-      // chave do Agente (por exemplo, após limpar os dados da PWA). Isso não
-      // ressuscita dispositivo revogado nem move chave entre contas.
+      // chave do Agente (por exemplo, após limpar os dados da PWA). Não move
+      // chave entre contas.
       const motivo = motivoChaveIndisponivel(dispositivo, sessao.usuarioId);
       if (motivo) return c.json({ erro: motivo }, 409);
+
+      // Mesmo aparelho voltando: reaproveita a linha em vez de criar outra. É
+      // o que impede a conta de encher de cópias do mesmo celular a cada
+      // repareamento — e o que faz um aparelho revogado voltar a funcionar sem
+      // precisar trocar de identidade.
+      if (dispositivo.situacao !== "ativo") {
+        dispositivo = await reativarDispositivo(db, dispositivo.id, {
+          nome: pedido.nomeSolicitante,
+          escopos: ESCOPOS_PADRAO.join(" "),
+        });
+      }
     } else {
       try {
         dispositivo = await criarDispositivo(db, {

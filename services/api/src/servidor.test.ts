@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createDb, type Database } from "@slate/db";
 import { usuarios } from "@slate/db/schema-contas";
+import { ESCOPOS_PADRAO } from "@slate/protocol";
 import { criarServidor } from "./servidor";
 import { NOME_COOKIE } from "./sessao";
 import type { Config } from "./config";
@@ -642,10 +643,12 @@ suite("API de contas", () => {
       return { chavePublica, id: (await resposta.json()).dispositivo.id as string };
     };
 
-    it("a chave de um aparelho removido é recusada já no pedido", async () => {
-      // A linha revogada fica no banco de propósito, então essa chave nunca
-      // mais vale. Recusar só na confirmação fazia o celular exibir um código
-      // que o computador sempre negaria — e negaria falando do computador.
+    it("um aparelho removido volta pela mesma linha, sem virar cópia", async () => {
+      // O beco sem saída que este teste tranca: recusar a chave revogada não
+      // protegia nada — reparear exige a mesma cerimônia física de um
+      // pareamento novo — e prendia o aparelho, porque o celular reusa a chave
+      // que guardou e "peça o pareamento de novo" devolvia a mesma recusa
+      // para sempre.
       const { cookie } = await cadastrar(emailUnico("revogado"));
       const agente = await registrarAgente(cookie);
       const celular = await parearCelular(cookie, agente);
@@ -655,10 +658,32 @@ suite("API de contas", () => {
         headers: { Cookie: cookie, Origin: ORIGEM },
       });
 
-      const { resposta, corpo } = await pedirPareamento(cookie, celular.chavePublica);
-      expect(resposta.status).toBe(409);
-      expect(corpo.erro).toBe("dispositivo_revogado");
-    }, 15_000);
+      // Repareia com a MESMA chave, sem trocar de identidade.
+      const { corpo: pedido } = await pedirPareamento(cookie, celular.chavePublica);
+      const resposta = await app.request("/pareamento/confirmar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
+        body: JSON.stringify(await provaDoAgente(pedido.codigo, agente)),
+      });
+      expect(resposta.status).toBe(200);
+
+      const devolvido = (await resposta.json()).dispositivo;
+      expect(devolvido.situacao).toBe("ativo");
+      // Mesma linha, e não uma nova: é o que impede a conta de acumular cópias
+      // do mesmo celular a cada repareamento.
+      expect(devolvido.id).toBe(celular.id);
+
+      const lista = await app.request("/dispositivos", {
+        headers: { Cookie: cookie, Origin: ORIGEM },
+      });
+      const superficies = (await lista.json()).dispositivos.filter(
+        (d: { papel: string }) => d.papel === "surface",
+      );
+      expect(superficies).toHaveLength(1);
+      // Escopos voltam ao padrão: revogar foi retirada deliberada de
+      // confiança, e o que fora concedido além disso não volta sozinho.
+      expect(superficies[0].escopos).toEqual([...ESCOPOS_PADRAO]);
+    }, 20_000);
 
     it("a chave de outra conta é recusada com motivo próprio", async () => {
       // Motivo diferente porque a saída é outra: identidade nova resolve o

@@ -256,6 +256,40 @@ export async function criarDispositivo(
  * A linha não é apagada: manter o registro revogado é o que impede a mesma
  * chave de ser cadastrada de novo, já que o índice único continua valendo.
  */
+/**
+ * Devolve um dispositivo revogado à conta, na mesma linha.
+ *
+ * Não é uma brecha na revogação: chegar aqui exige a cerimônia física
+ * completa — sessão na conta, código gerado no aparelho e digitado por alguém
+ * na frente do computador. É a mesma prova que autoriza um pareamento novo, e
+ * recusá-la aqui não protegia nada: o aparelho só precisava trocar de chave
+ * para conseguir o mesmo acesso, com passos a mais.
+ *
+ * Reaproveitar a linha, em vez de criar outra, é o que impede a conta de
+ * acumular cópias do mesmo aparelho a cada repareamento.
+ *
+ * Os escopos voltam ao padrão de propósito. Revogar foi uma retirada
+ * deliberada de confiança, e o que tinha sido concedido além do padrão não
+ * pode voltar sozinho junto com o acesso.
+ */
+export async function reativarDispositivo(
+  db: Database,
+  dispositivoId: string,
+  dados: { nome: string; escopos: string },
+) {
+  const [dispositivo] = await db
+    .update(dispositivos)
+    .set({
+      situacao: "ativo",
+      revogadoEm: null,
+      nome: dados.nome,
+      escopos: dados.escopos,
+    })
+    .where(eq(dispositivos.id, dispositivoId))
+    .returning();
+  return dispositivo!;
+}
+
 export async function revogarDispositivo(
   db: Database,
   usuarioId: string,
