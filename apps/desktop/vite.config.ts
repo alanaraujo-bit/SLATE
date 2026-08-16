@@ -14,6 +14,22 @@ export default defineConfig({
   server: {
     port: 4600,
     strictPort: true,
+    watch: {
+      /*
+       * Não vigiar `src-tauri/`.
+       *
+       * Sem isto o `tauri dev` não sobe no Windows. O Vite vigia a pasta do
+       * projeto inteira, e `src-tauri/target/` é onde o Cargo escreve — quando
+       * ele grava `slate_agente_lib.dll`, o Windows tranca o arquivo, o
+       * watcher morre com `EBUSY` e derruba o `beforeDevCommand` antes de a
+       * janela abrir. O erro aponta para o Vite e a causa é o Cargo, o que
+       * torna a pista difícil de seguir.
+       *
+       * Nada aqui dentro é interface: a janela é `src/`, e é ela que precisa
+       * recarregar ao salvar. Mudança em Rust é o próprio Tauri que percebe.
+       */
+      ignored: ["**/src-tauri/**"],
+    },
   },
   clearScreen: false,
 });
