@@ -68,7 +68,7 @@ function lerEnv(conteudo) {
  * aviso de depreciação a cada processo — o alerta é sobre argumento vindo de
  * fora, que aqui não existe: tudo neste arquivo é literal.
  */
-function executar(nome, comando, opcoes = {}) {
+function executar(nome, comando, opcoes = {}, { essencial = true } = {}) {
   const filho = spawn(comando, {
     stdio: ["ignore", "pipe", "pipe"],
     shell: true,
@@ -84,10 +84,19 @@ function executar(nome, comando, opcoes = {}) {
   filho.stdout.on("data", escrever(process.stdout));
   filho.stderr.on("data", escrever(process.stderr));
   filho.on("exit", (codigo) => {
-    if (!encerrando) {
-      console.error(`\n  [${nome}] saiu com código ${codigo}. Encerrando o resto.\n`);
-      encerrar(codigo ?? 1);
+    if (encerrando) return;
+    // Processo não essencial que morre não derruba o ambiente. Fechar a janela
+    // do Agente é uma coisa normal de se fazer, e não pode custar os túneis:
+    // eles sorteiam endereço novo a cada abertura, e endereço novo significa
+    // parear o celular de novo.
+    if (!essencial) {
+      console.error(
+        `\n  [${nome}] saiu com código ${codigo}. O resto continua de pé.\n`,
+      );
+      return;
     }
+    console.error(`\n  [${nome}] saiu com código ${codigo}. Encerrando o resto.\n`);
+    encerrar(codigo ?? 1);
   });
 
   return filho;
@@ -216,13 +225,54 @@ executar("pwa", "pnpm --filter @slate/pwa dev", {
   },
 });
 
+// ---- Agente Desktop -------------------------------------------------------
+//
+// Sobe junto por padrão, e essa é a diferença que importa no dia a dia. Antes,
+// ver uma mudança do Agente no celular passava por marcar tag, esperar a
+// publicação e instalar o `.exe` à mão — dezenas de minutos para conferir uma
+// linha. Aqui o mesmo código roda em perfil `debug`, sem LTO e sem
+// `codegen-units = 1`: mudança em Rust reconstrói em torno de um minuto, e
+// mudança só na interface é instantânea, sem tocar no Rust.
+//
+// Publicar release continua existindo para o que ela é: distribuir para outras
+// máquinas. Não para testar na sua.
+
+const semAgente = process.argv.includes("--sem-agente");
+
+if (!semAgente) {
+  executar(
+    "agente",
+    "pnpm --filter @slate/desktop tauri dev",
+    {
+      cwd: RAIZ,
+      env: {
+        ...process.env,
+        // Direto na porta local, sem passar pelo túnel: o Agente roda nesta
+        // mesma máquina, e o túnel só existe porque o celular não alcança
+        // `localhost`.
+        SLATE_API_URL: "http://localhost:4500",
+      },
+    },
+    { essencial: false },
+  );
+}
+
 console.log(
   [
     "",
     "  ┌─────────────────────────────────────────────────────────────",
     `  │  Celular e navegador:  ${urlPwa}`,
-    "  │  Agente Desktop:       SLATE_API_URL=http://localhost:4500",
     `  │  Sinalização:          ${wssSinalizacao}`,
+    "  │",
+    semAgente
+      ? "  │  Agente Desktop:       não subiu (--sem-agente)."
+      : "  │  Agente Desktop:       subindo em modo dev nesta máquina.",
+    semAgente
+      ? "  │    Para subir à mão:   SLATE_API_URL=http://localhost:4500"
+      : "  │    Fechar a janela dele não derruba o resto.",
+    "  │",
+    "  │  Mudou Rust?      o Agente reconstrói sozinho (~1 min).",
+    "  │  Mudou interface? recarrega na hora, sem recompilar.",
     "  │",
     "  │  Os endereços morrem junto com este processo (Ctrl+C).",
     "  └─────────────────────────────────────────────────────────────",
