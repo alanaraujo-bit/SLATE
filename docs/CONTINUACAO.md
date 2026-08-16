@@ -114,6 +114,7 @@ Cada uma destas foi descoberta do jeito difícil.
 | Email do autor do commit | Deploy fica `Blocked` na Vercel | Usar o endereço `noreply` do GitHub |
 | `vercel ls` esconde deploys `Blocked` | "Nenhum deploy disparou" quando disparou | Conferir no painel, não só na CLI |
 | `cookie_store(true)` do reqwest é **só memória** | Agente pede e-mail e senha a cada abertura, com cookie de 30 dias válido | `cookie_provider` com armazenamento gravado em disco; ver `apps/desktop/src-tauri/src/api.rs` |
+| Cache do GitHub Actions é **isolado por tag** | Cache do CI não acelera a publicação, e uma release nunca aproveita a anterior | O `main` grava, a tag só lê; `shared-key` igual nos dois workflows |
 
 ### Duas lições que se repetiram
 
@@ -222,11 +223,42 @@ O instalador local mais recente é
 `apps/desktop/src-tauri/target/release/bundle/nsis/SLATE_0.1.2_x64-setup.exe`.
 Sua assinatura `.sig` foi verificada contra a chave pública do próprio Agente.
 
-Como o repositório é privado, o Agente não acessa o GitHub diretamente. A API
+O relay privado de releases existe em `services/api/src/atualizacoes.ts`: a API
 consulta a release com um token servidor-servidor, valida o manifesto e entrega
-um redirecionamento temporário apenas para o artefato daquela release. Perder a
-chave privada de atualização impede publicar versões aceitas pelos Agentes já
-instalados: mantenha um backup cifrado antes da primeira release.
+um redirecionamento temporário apenas para o artefato daquela release. Ele foi
+escrito para um repositório privado. **O repositório é público hoje, e o
+`tauri.conf.json` aponta o atualizador direto para o GitHub** — um salto a menos
+e nenhuma dependência do Railway na hora de atualizar. Se o repositório voltar a
+ser privado, o atualizador para de funcionar até o endpoint voltar para a API.
+
+Perder a chave privada de atualização impede publicar versões aceitas pelos
+Agentes já instalados: mantenha um backup cifrado antes da primeira release.
+
+### Quanto tempo a publicação leva, e por quê
+
+A busca em si é rápida — o `latest.json` responde em menos de um segundo. O que
+se sentia como "o Agente não acha a atualização" era a publicação ainda não
+existir: o workflow levava treze minutos e meio, recompilando webrtc, tauri e o
+resto do mundo duas vezes, uma em `debug` para os testes e outra em `release`
+para o instalador.
+
+Duas mudanças atacam isso, e a segunda depende de entender a primeira:
+
+1. **`Swatinem/rust-cache` nos dois workflows.** Cache do GitHub Actions é
+   isolado por ref, e uma tag não enxerga o cache de outra tag — só o do branch
+   padrão. Por isso quem **grava** é o job `agente` do CI, no `main`, e a
+   publicação só **lê** (`save-if: false`), com o mesmo `shared-key`. O CI
+   também faz um `cargo build --release` só para aquecer: `debug` e `release`
+   são artefatos diferentes, e um cache só de `debug` não encurtaria nada
+   justamente no passo em que alguém está esperando.
+2. **`lto = "thin"` no perfil de release.** O LTO gordo religa o programa
+   inteiro num passo final que nenhum cache alcança — rodava por completo em
+   toda publicação, mesmo sem uma linha de Rust ter mudado.
+
+**A primeira publicação depois dessas mudanças ainda vai demorar o tempo
+antigo**, porque o cache nasce vazio. Empurre para o `main` e espere o CI
+terminar antes de marcar a tag: é o que garante que a publicação encontre cache
+para ler.
 
 ### A sessão do Agente sobrevive ao fechamento
 

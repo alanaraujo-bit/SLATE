@@ -88,7 +88,14 @@ custom-protocol = ["tauri/custom-protocol"]
 [profile.release]
 # Instalador pequeno importa num agente que fica sempre residente.
 opt-level = "s"
-lto = true
+# LTO fino, e não `true` (que é o LTO gordo).
+#
+# O gordo religa o programa inteiro num único passo no fim da compilação. Esse
+# passo não é cacheável: rodava por completo em toda publicação, mesmo sem uma
+# linha de Rust ter mudado, e era o que sobrava depois de o cache resolver o
+# resto. O fino faz a otimização entre módulos em paralelo, entrega quase o
+# mesmo tamanho e devolve minutos a cada release.
+lto = "thin"
 codegen-units = 1
 strip = true
 panic = "abort"

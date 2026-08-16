@@ -77,6 +77,20 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # Este job é o produtor do cache de compilação do Agente; a publicação de
+      # release apenas consome (ver `release-desktop.yml`).
+      #
+      # A inversão é imposta pelo GitHub: cache criado numa tag só é visível
+      # para aquela tag, então uma release nunca aproveitaria o cache da
+      # anterior. Cache do branch padrão, por outro lado, é visível de
+      # qualquer ref — daí `shared-key` igual nos dois lados e gravação só
+      # aqui, no `main`.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+          shared-key: agente-windows
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       - name: Instalar dependências
         run: pnpm install --frozen-lockfile
 
@@ -94,6 +108,17 @@ jobs:
 
       - name: Agente nativo e assinatura de atualização
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+
+      # `cargo test` compila em `debug`; o instalador é compilado em `release`,
+      # com `opt-level="s"` e `codegen-units=1`. São artefatos diferentes, e um
+      # cache só com os de `debug` não encurtaria nada na hora de publicar —
+      # que é justamente o momento em que alguém está esperando.
+      #
+      # Custa poucos minutos aqui, onde ninguém espera, para tirar oito da
+      # publicação. Não empacota nem assina: só aquece as dependências.
+      - name: Aquecer as dependências de release
+        if: github.ref == 'refs/heads/main'
+        run: cargo build --release --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
 
   integracao:
     name: Testes de integração

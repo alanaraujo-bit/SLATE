@@ -36,6 +36,19 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # Consome o cache que o job `agente` do CI grava no `main`. Sem isto a
+      # publicação recompilava o mundo — webrtc, tauri e o resto — duas vezes,
+      # uma em `debug` para os testes e outra em `release` para o instalador:
+      # treze minutos entre marcar a tag e o Agente enxergar a versão nova.
+      #
+      # `save-if: false` porque cache gravado numa tag não é visível para a tag
+      # seguinte; guardá-lo aqui gastaria minutos para nada.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+          shared-key: agente-windows
+          save-if: false
+
       - name: Instalar dependências reproduzíveis
         run: pnpm install --frozen-lockfile
 
