@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import type { Database } from "@slate/db";
 import {
   convitesPareamentoQr,
@@ -291,6 +291,16 @@ export async function criarPedidoPareamento(
   return pedido!;
 }
 
+/**
+ * O pedido que o computador vai conferir.
+ *
+ * A ordem é parte da regra, não detalhe de consulta: sem ela o Postgres
+ * devolvia qualquer um dos pedidos abertos da conta, e o código correto que o
+ * celular mostrava era comparado com o de um pedido antigo. O resultado era
+ * "código incorreto" com o código certo na tela, gastando as tentativas até
+ * bloquear. Quem manda é sempre o pedido mais recente — é o que a pessoa está
+ * vendo.
+ */
 export async function buscarPedidoAtivo(
   db: Database,
   usuarioId: string,
@@ -307,9 +317,46 @@ export async function buscarPedidoAtivo(
         gte(pedidosPareamento.expiraEm, agora),
       ),
     )
+    .orderBy(desc(pedidosPareamento.criadoEm))
     .limit(1);
 
   return pedido ?? null;
+}
+
+/**
+ * Encerra os pedidos abertos da conta.
+ *
+ * Chamado antes de emitir um código novo, porque a conta só pode ter um
+ * pareamento em andamento. Um pedido esquecido no servidor — a pessoa cancelou
+ * no celular, fechou a aba, o código expirou na tela mas não no banco —
+ * continuava valendo e disputava a confirmação com o código atual.
+ *
+ * Vence o prazo em vez de marcar bloqueio: o pedido não morreu por tentativa
+ * errada, morreu porque foi substituído, e é isso que o celular lê quando
+ * consulta ("expirado", e ele esquece o código antigo).
+ */
+export async function encerrarPedidosAtivos(
+  db: Database,
+  usuarioId: string,
+  agora: Date = new Date(),
+) {
+  const encerrados = await db
+    .update(pedidosPareamento)
+    // Um milissegundo atrás, não "agora": a busca do pedido ativo aceita
+    // prazo igual ao instante consultado, e o encerrado voltaria a valer se o
+    // computador confirmasse no mesmo milissegundo.
+    .set({ expiraEm: new Date(agora.getTime() - 1) })
+    .where(
+      and(
+        eq(pedidosPareamento.usuarioId, usuarioId),
+        isNull(pedidosPareamento.confirmadoEm),
+        isNull(pedidosPareamento.bloqueadoEm),
+        gte(pedidosPareamento.expiraEm, agora),
+      ),
+    )
+    .returning({ id: pedidosPareamento.id });
+
+  return encerrados.length;
 }
 
 export async function registrarTentativaPareamento(db: Database, pedidoId: string) {

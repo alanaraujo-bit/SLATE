@@ -54,6 +54,7 @@ import {
   criarPedidoPareamento,
   criarSessao,
   criarUsuario,
+  encerrarPedidosAtivos,
   encerrarSessao,
   limparTentativas,
   listarDispositivos,
@@ -486,6 +487,11 @@ export function criarServidor({
 
     const codigo = gerarCodigo();
     const momento = agora();
+
+    // Um código novo aposenta os anteriores. Sem isto a conta acumulava
+    // pedidos abertos — cancelar no celular não avisava o servidor — e o
+    // computador confirmava contra um deles em vez do que está na tela.
+    await encerrarPedidosAtivos(db, sessao.usuarioId, momento);
 
     const pedido = await criarPedidoPareamento(db, {
       usuarioId: sessao.usuarioId,

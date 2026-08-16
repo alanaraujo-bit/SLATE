@@ -509,6 +509,42 @@ suite("API de contas", () => {
       expect((await resposta.json()).pareado).toBe(true);
     });
 
+    it("o código mais recente vence o pedido anterior da mesma conta", async () => {
+      // O celular pode deixar pedidos abertos para trás — cancelar na tela não
+      // avisa o servidor. Antes, a confirmação pegava um pedido qualquer entre
+      // os abertos, e o código certo era comparado com o de outro: dava "código
+      // incorreto" com o código correto na tela, até esgotar as tentativas.
+      const { cookie } = await cadastrar(emailUnico("dois-pedidos"));
+      const agente = await registrarAgente(cookie);
+      const chave = chaveNova();
+
+      const primeiro = await pedirPareamento(cookie, chave);
+      const segundo = await pedirPareamento(cookie, chave);
+      expect(segundo.corpo.codigo).not.toBe(primeiro.corpo.codigo);
+
+      // Verificado antes de qualquer confirmação, e de propósito: só a ordem
+      // da consulta já faria o código novo vencer, e este teste passaria sem
+      // que o pedido antigo tivesse morrido de verdade. É aqui que se vê que
+      // ele morreu — e é isto que o celular parado na tela antiga lê.
+      const antigo = await app.request(
+        `/pareamento/pedidos/${primeiro.corpo.pedidoId}`,
+        { headers: { Cookie: cookie } },
+      );
+      expect((await antigo.json()).situacao).toBe("expirado");
+
+      const confirmar = async (codigo: string) =>
+        app.request("/pareamento/confirmar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
+          body: JSON.stringify(await provaDoAgente(codigo, agente)),
+        });
+
+      // O código antigo já não vale — vira tentativa errada do pedido atual,
+      // que é exatamente o que ele é.
+      expect((await confirmar(primeiro.corpo.codigo)).status).toBe(401);
+      expect((await confirmar(segundo.corpo.codigo)).status).toBe(200);
+    });
+
     it("o QR pareia, entrega as duas chaves e não pode ser repetido", async () => {
       const { cookie } = await cadastrar(emailUnico("qr"));
       const agente = await registrarAgente(cookie);
