@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import { Botao, Rotulo, Superficie } from "@slate/design-system";
 import { api, mensagemDoErro } from "@/lib/api";
-import { guardarParConfiavel, obterOuCriarIdentidade } from "@/lib/identidade-local";
+import {
+  guardarParConfiavel,
+  obterOuCriarIdentidade,
+  renovarIdentidade,
+} from "@/lib/identidade-local";
 
 interface Convite {
   conviteId: string;
@@ -42,12 +46,27 @@ export function ConvitePareamentoQr({
     setErro(null);
     try {
       const identidade = await obterOuCriarIdentidade();
-      const resultado = await api.aceitarConviteQr({
-        token,
-        chavePublica: identidade.chavePublicaExportada,
-        algoritmo: identidade.algoritmo,
-        nome: identidade.nome,
-      });
+      const aceitarCom = (id: {
+        chavePublicaExportada: string;
+        algoritmo: string;
+        nome: string;
+      }) =>
+        api.aceitarConviteQr({
+          token,
+          chavePublica: id.chavePublicaExportada,
+          algoritmo: id.algoritmo,
+          nome: id.nome,
+        });
+
+      let resultado = await aceitarCom(identidade);
+
+      // Mesma saída do pareamento por código: chave revogada não volta a
+      // valer, então o aparelho chega com uma identidade nova em vez de
+      // insistir numa que o servidor já enterrou.
+      if (!resultado.ok && resultado.erro === "dispositivo_revogado") {
+        resultado = await aceitarCom(await renovarIdentidade());
+      }
+
       if (!resultado.ok) {
         setErro(mensagemDoErro(resultado.erro));
         return;

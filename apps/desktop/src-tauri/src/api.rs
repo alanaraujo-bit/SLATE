@@ -16,10 +16,22 @@ pub enum ErroApi {
     CredenciaisInvalidas,
     #[error("é preciso entrar na conta primeiro")]
     NaoAutenticado,
-    #[error("este computador já está registrado em outra conta")]
+    // Estes três erros falam do aparelho que está sendo pareado, nunca deste
+    // computador — dizer "este computador" mandava procurar o problema no
+    // lugar errado.
+    #[error("este aparelho já está registrado em outra conta")]
+    ChaveDeOutraConta,
+    #[error("este aparelho foi removido da conta: peça um código novo no celular")]
+    DispositivoRevogado,
+    #[error("esta chave já está registrada com outra função")]
     ChaveJaRegistrada,
     #[error("nenhum pareamento em andamento")]
     NenhumPedido,
+    /// A conta não reconhece a identidade deste computador — acontece quando a
+    /// chave daqui ficou registrada em outra conta. Sem esta linha o caso saía
+    /// como "resposta inesperada (401)", que não diz nada a quem lê.
+    #[error("este computador não está registrado nesta conta")]
+    AgenteInvalido,
     #[error("código incorreto — restam {restantes} tentativa(s)")]
     CodigoIncorreto { restantes: u32 },
     #[error("tentativas esgotadas: peça um código novo no celular")]
@@ -141,6 +153,9 @@ impl ClienteApi {
             Some("credenciais_invalidas") => ErroApi::CredenciaisInvalidas,
             Some("nao_autenticado") => ErroApi::NaoAutenticado,
             Some("chave_ja_registrada") => ErroApi::ChaveJaRegistrada,
+            Some("chave_de_outra_conta") => ErroApi::ChaveDeOutraConta,
+            Some("dispositivo_revogado") => ErroApi::DispositivoRevogado,
+            Some("agente_invalido") => ErroApi::AgenteInvalido,
             Some("nenhum_pedido_ativo") => ErroApi::NenhumPedido,
             Some("bloqueado") => ErroApi::Bloqueado,
             Some("codigo_incorreto") => ErroApi::CodigoIncorreto {
@@ -410,6 +425,9 @@ mod testes {
             ErroApi::NaoAutenticado,
             ErroApi::Bloqueado,
             ErroApi::CodigoIncorreto { restantes: 2 },
+            ErroApi::ChaveJaRegistrada,
+            ErroApi::ChaveDeOutraConta,
+            ErroApi::DispositivoRevogado,
         ];
 
         for erro in casos {
@@ -417,6 +435,24 @@ mod testes {
             assert!(!texto.is_empty());
             assert!(!texto.contains("HTTP"), "mensagem com jargão: {texto}");
             assert!(!texto.contains("status"), "mensagem com jargão: {texto}");
+        }
+    }
+
+    #[test]
+    fn os_erros_de_chave_falam_do_aparelho_e_nao_do_computador() {
+        // Quem confirma está na frente do computador: culpar a máquina manda
+        // procurar o problema no lugar errado, e foi assim que um celular
+        // revogado virou "este computador está em outra conta".
+        for erro in [
+            ErroApi::ChaveJaRegistrada,
+            ErroApi::ChaveDeOutraConta,
+            ErroApi::DispositivoRevogado,
+        ] {
+            let texto = erro.to_string();
+            assert!(
+                !texto.contains("computador"),
+                "erro do aparelho culpando o computador: {texto}"
+            );
         }
     }
 

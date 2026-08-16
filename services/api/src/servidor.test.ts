@@ -422,12 +422,12 @@ suite("API de contas", () => {
   describe("pareamento", () => {
     const chaveNova = () => `chave-par-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-    const pedirPareamento = async (cookie: string) => {
+    const pedirPareamento = async (cookie: string, chavePublica = chaveNova()) => {
       const resposta = await app.request("/pareamento/pedidos", {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
         body: JSON.stringify({
-          chavePublica: chaveNova(),
+          chavePublica,
           algoritmo: "Ed25519",
           nome: "Celular do Alan",
         }),
@@ -592,6 +592,53 @@ suite("API de contas", () => {
       );
       expect(superficie.nome).toBe("Celular do Alan");
     });
+
+    /** Pareia um celular e devolve a chave dele e o id na conta. */
+    const parearCelular = async (cookie: string, agente: IdentidadeDispositivo) => {
+      const chavePublica = chaveNova();
+      const { corpo } = await pedirPareamento(cookie, chavePublica);
+      const resposta = await app.request("/pareamento/confirmar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
+        body: JSON.stringify(await provaDoAgente(corpo.codigo, agente)),
+      });
+      expect(resposta.status).toBe(200);
+      return { chavePublica, id: (await resposta.json()).dispositivo.id as string };
+    };
+
+    it("a chave de um aparelho removido é recusada já no pedido", async () => {
+      // A linha revogada fica no banco de propósito, então essa chave nunca
+      // mais vale. Recusar só na confirmação fazia o celular exibir um código
+      // que o computador sempre negaria — e negaria falando do computador.
+      const { cookie } = await cadastrar(emailUnico("revogado"));
+      const agente = await registrarAgente(cookie);
+      const celular = await parearCelular(cookie, agente);
+
+      await app.request(`/dispositivos/${celular.id}`, {
+        method: "DELETE",
+        headers: { Cookie: cookie, Origin: ORIGEM },
+      });
+
+      const { resposta, corpo } = await pedirPareamento(cookie, celular.chavePublica);
+      expect(resposta.status).toBe(409);
+      expect(corpo.erro).toBe("dispositivo_revogado");
+    }, 15_000);
+
+    it("a chave de outra conta é recusada com motivo próprio", async () => {
+      // Motivo diferente porque a saída é outra: identidade nova resolve o
+      // aparelho revogado, mas não desfaz o cadastro em outra conta.
+      const dono = await cadastrar(emailUnico("chave-dono"));
+      const outro = await cadastrar(emailUnico("chave-outro"));
+      const agente = await registrarAgente(dono.cookie);
+      const celular = await parearCelular(dono.cookie, agente);
+
+      const { resposta, corpo } = await pedirPareamento(
+        outro.cookie,
+        celular.chavePublica,
+      );
+      expect(resposta.status).toBe(409);
+      expect(corpo.erro).toBe("chave_de_outra_conta");
+    }, 15_000);
 
     it("o código errado é recusado e desconta tentativa", async () => {
       const { cookie } = await cadastrar(emailUnico("errado"));

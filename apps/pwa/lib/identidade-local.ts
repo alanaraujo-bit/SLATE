@@ -161,6 +161,24 @@ export async function esquecerIdentidade(): Promise<void> {
   }
 }
 
+/**
+ * Troca a identidade deste aparelho por uma nova.
+ *
+ * Serve para um caso só: o servidor avisou que esta chave foi revogada. A
+ * linha revogada continua no banco de propósito, para que a mesma chave nunca
+ * volte a valer — então insistir com ela é beco sem saída, e a saída é chegar
+ * ao pareamento com uma chave que ninguém conhece.
+ *
+ * O pedido em andamento morre junto: ele carrega a chave antiga e faria a
+ * confirmação no computador falhar exatamente como antes.
+ */
+export async function renovarIdentidade(): Promise<IdentidadeGuardada> {
+  const anterior = await lerIdentidade();
+  await esquecerIdentidade();
+  await esquecerPedidoPareamento();
+  return obterOuCriarIdentidade(anterior?.nome);
+}
+
 /** Guarda a chave do computador recebida ao concluir a cerimônia física. */
 export async function guardarParConfiavel(par: ParConfiavel): Promise<void> {
   if (

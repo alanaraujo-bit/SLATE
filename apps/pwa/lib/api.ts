@@ -65,6 +65,9 @@ const MENSAGENS: Record<string, string> = {
   convite_invalido: "Este QR Code expirou ou já foi usado.",
   agente_invalido: "Este computador não está mais disponível para pareamento.",
   chave_ja_registrada: "Este dispositivo já está registrado.",
+  chave_de_outra_conta: "Este aparelho já está registrado em outra conta.",
+  dispositivo_revogado:
+    "Este aparelho foi removido da conta. Tente parear de novo.",
   dados_invalidos: "Não foi possível enviar os dados.",
   erro_interno: "Algo deu errado no servidor. Tente de novo em instantes.",
   sem_conexao: "Não foi possível falar com o servidor. Verifique sua conexão.",

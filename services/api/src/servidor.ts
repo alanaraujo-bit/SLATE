@@ -436,6 +436,26 @@ export function criarServidor({
   // ---- Pareamento -------------------------------------------------------
 
   /**
+   * Por que uma chave já cadastrada não serve para este pareamento.
+   *
+   * Os três motivos pedem reações diferentes de quem chama, e por isso não
+   * podem sair com o mesmo código: chave de outra conta é impasse; superfície
+   * revogada se resolve no próprio aparelho, gerando identidade nova; papel
+   * trocado é conflito de cadastro. Devolver tudo como "chave_ja_registrada"
+   * deixava o aparelho preso num beco sem saída, e ainda dizia no Agente que o
+   * problema era com o computador.
+   */
+  function motivoChaveIndisponivel(
+    dispositivo: { usuarioId: string; papel: string; situacao: string },
+    usuarioId: string,
+  ): "chave_de_outra_conta" | "chave_ja_registrada" | "dispositivo_revogado" | null {
+    if (dispositivo.usuarioId !== usuarioId) return "chave_de_outra_conta";
+    if (dispositivo.papel !== "surface") return "chave_ja_registrada";
+    if (dispositivo.situacao !== "ativo") return "dispositivo_revogado";
+    return null;
+  }
+
+  /**
    * A superfície pede pareamento e recebe um código para exibir.
    *
    * O código não protege nada sozinho — ele prova que quem vai confirmar está
@@ -453,6 +473,15 @@ export function criarServidor({
       chavePublica.length < 20
     ) {
       return c.json({ erro: "dados_invalidos" }, 400);
+    }
+
+    // Recusa aqui o que a confirmação recusaria lá na frente. Sem isto o
+    // celular mostrava um código válido, a pessoa digitava no computador e só
+    // então descobria que aquela chave nunca poderia ser aceita.
+    const jaCadastrada = await buscarDispositivoPorChave(db, chavePublica);
+    if (jaCadastrada) {
+      const motivo = motivoChaveIndisponivel(jaCadastrada, sessao.usuarioId);
+      if (motivo) return c.json({ erro: motivo }, 409);
     }
 
     const codigo = gerarCodigo();
@@ -591,13 +620,8 @@ export function criarServidor({
 
     let superficie = await buscarDispositivoPorChave(db, chavePublica);
     if (superficie) {
-      if (
-        superficie.usuarioId !== sessao.usuarioId ||
-        superficie.papel !== "surface" ||
-        superficie.situacao !== "ativo"
-      ) {
-        return c.json({ erro: "chave_ja_registrada" }, 409);
-      }
+      const motivo = motivoChaveIndisponivel(superficie, sessao.usuarioId);
+      if (motivo) return c.json({ erro: motivo }, 409);
     } else {
       superficie = await criarDispositivo(db, {
         usuarioId: sessao.usuarioId,
@@ -728,13 +752,8 @@ export function criarServidor({
       // Permite repetir a cerimônia física para recuperar a cópia local da
       // chave do Agente (por exemplo, após limpar os dados da PWA). Isso não
       // ressuscita dispositivo revogado nem move chave entre contas.
-      if (
-        dispositivo.usuarioId !== sessao.usuarioId ||
-        dispositivo.papel !== "surface" ||
-        dispositivo.situacao !== "ativo"
-      ) {
-        return c.json({ erro: "chave_ja_registrada" }, 409);
-      }
+      const motivo = motivoChaveIndisponivel(dispositivo, sessao.usuarioId);
+      if (motivo) return c.json({ erro: motivo }, 409);
     } else {
       try {
         dispositivo = await criarDispositivo(db, {

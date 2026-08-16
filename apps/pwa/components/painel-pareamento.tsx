@@ -9,6 +9,7 @@ import {
   guardarPedidoPareamento,
   lerPedidoPareamento,
   obterOuCriarIdentidade,
+  renovarIdentidade,
 } from "@/lib/identidade-local";
 import { LeitorQr } from "./leitor-qr";
 
@@ -112,11 +113,21 @@ export function PainelPareamento({
     try {
       const identidade = await obterOuCriarIdentidade();
 
-      const resultado = await api.pedirPareamento({
-        chavePublica: identidade.chavePublicaExportada,
-        algoritmo: identidade.algoritmo,
-        nome: identidade.nome,
-      });
+      const pedirCom = (id: { chavePublicaExportada: string; algoritmo: string; nome: string }) =>
+        api.pedirPareamento({
+          chavePublica: id.chavePublicaExportada,
+          algoritmo: id.algoritmo,
+          nome: id.nome,
+        });
+
+      let resultado = await pedirCom(identidade);
+
+      // Chave revogada nunca mais é aceita, e o aparelho ficaria preso pedindo
+      // um código que o computador sempre recusaria. Uma identidade nova custa
+      // só o pareamento que a pessoa já está fazendo.
+      if (!resultado.ok && resultado.erro === "dispositivo_revogado") {
+        resultado = await pedirCom(await renovarIdentidade());
+      }
 
       if (!resultado.ok) {
         setErro(mensagemDoErro(resultado.erro));
