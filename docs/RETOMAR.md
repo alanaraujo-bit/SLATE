@@ -1,5 +1,29 @@
 # Onde paramos — 17/08/2026
 
+> **Adendo da sessão de Energia Remota.** O marco `P3-M5` foi aberto no plano com
+> 13 tarefas. **Desligar funciona ponta a ponta; acordar não existe ainda.** O
+> que decide tudo está no [ADR-0006](./architecture/ADR-0006-energia-remota.md):
+> um navegador não emite quadro de broadcast, então acordar exige um Agente vivo
+> dentro da rede do alvo — e estar na mesma rede **não** ajuda a PWA. Para o
+> navegador, "em casa" e "no 4G" são igualmente impossíveis.
+>
+> Pronto: perfil de capacidades lido de verdade do Windows (conferido contra
+> `powercfg` nesta máquina), as seis ações no registro fechado, escopos
+> `system.power` e `system.wake` separados e fora do pareamento, `energia.estado`
+> viajando até o celular, e a grade de energia na PWA com segurar-para-confirmar.
+>
+> Falta: a ponte que emite o pacote (`P3-M5-T7`), o último estado conhecido na
+> nuvem (`T6`), a máquina de estados do acordar na tela (`T8`), auditoria (`T4`)
+> e o diagnóstico no Agente (`T9`). `Execucao::AcordarAlvo` hoje responde
+> "acordar outro computador ainda não está disponível" — de propósito, para não
+> responder que deu certo sem ter emitido pacote nenhum.
+>
+> **A armadilha de sempre apareceu de novo**, e vale ler: a grade de energia
+> estava só no caminho da grade clássica, e `ControlesBasicos` retorna cedo
+> quando há perfis. Ou seja, quem tem o Agente novo não veria energia nenhuma.
+> Build verde, testes verdes, recurso invisível. O que achou foi renderizar as
+> duas telas e olhar — e a mesma rodada achou mais três defeitos visuais.
+
 Escrito no fim de uma sessão longa, para quem continuar amanhã ou numa conversa
 nova. O [CONTINUACAO.md](./CONTINUACAO.md) explica o projeto; **este arquivo
 explica o momento**: o que acabou de mudar, o que está pela metade e o que já
