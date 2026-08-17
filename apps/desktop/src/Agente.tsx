@@ -22,8 +22,8 @@ import type { Situacao } from "./tipos";
 
 type Aba = "aparelhos" | "programas" | "ajustes";
 
-const ABAS: readonly { id: Aba; rotulo: string; icone: "Ligacao" | "Grade" | "Configuracoes" }[] = [
-  { id: "aparelhos", rotulo: "Aparelhos", icone: "Ligacao" },
+const ABAS: readonly { id: Aba; rotulo: string; icone: "Celular" | "Grade" | "Configuracoes" }[] = [
+  { id: "aparelhos", rotulo: "Aparelhos", icone: "Celular" },
   { id: "programas", rotulo: "Programas", icone: "Grade" },
   { id: "ajustes", rotulo: "Ajustes", icone: "Configuracoes" },
 ];

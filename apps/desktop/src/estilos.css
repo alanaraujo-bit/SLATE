@@ -1240,6 +1240,100 @@ body {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Resumo do computador                                                      */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * A única superfície da janela com o acento no fundo.
+ *
+ * Ela é o cabeçalho da tela principal, e o realce só funciona porque não se
+ * repete: se cada cartão tivesse fundo colorido, nenhum teria destaque e a
+ * tela viraria um mostruário de cores.
+ */
+.resumo {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--s-space-4);
+  padding: var(--s-space-4) var(--s-space-5);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-lg);
+  background:
+    linear-gradient(
+      135deg,
+      var(--s-accent-soft) 0%,
+      transparent 65%
+    ),
+    var(--s-surface-raised);
+  box-shadow: var(--s-shadow-sm);
+}
+
+.resumo__arte {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--s-radius-md);
+  background: color-mix(in srgb, var(--s-accent) 18%, transparent);
+}
+
+.resumo__arte svg {
+  width: 1.375rem;
+  height: 1.375rem;
+  color: var(--s-accent);
+}
+
+.resumo__texto {
+  display: grid;
+  gap: var(--s-space-1);
+  min-width: 0;
+}
+
+.resumo__texto strong {
+  font-size: var(--s-text-lg);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-tight);
+}
+
+.resumo__linha {
+  display: flex;
+  align-items: center;
+  gap: var(--s-space-2);
+  color: var(--s-text-muted);
+  font-size: var(--s-text-xs);
+}
+
+.resumo__numeros {
+  display: flex;
+  gap: var(--s-space-5);
+}
+
+/*
+ * O número vem antes do rótulo, e maior.
+ *
+ * É a hierarquia que se lê de relance: o olho pega a quantidade e só depois
+ * volta para saber do que ela é. Invertido, obriga a ler tudo.
+ */
+.numero {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-space-1);
+}
+
+.numero strong {
+  font-size: var(--s-text-xl);
+  font-weight: var(--s-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.numero small {
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-2xs);
+  letter-spacing: var(--s-tracking-wide);
+}
+
+/* ------------------------------------------------------------------------ */
 /* Movimento                                                                 */
 /* ------------------------------------------------------------------------ */
 
@@ -1376,6 +1470,15 @@ body {
   .aparelho,
   .programa {
     grid-template-columns: auto 1fr;
+  }
+
+  .resumo {
+    grid-template-columns: auto 1fr;
+  }
+
+  .resumo__numeros {
+    grid-column: 1 / -1;
+    justify-content: start;
   }
 
   .aparelho .permissao,

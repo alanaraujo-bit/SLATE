@@ -50,6 +50,8 @@ export function TelaAparelhos({
    */
   const parear = pediuParear || superficies.length === 0;
 
+  const conectados = superficies.filter((d) => d.online).length;
+
   const confirmar = async (evento: React.FormEvent) => {
     evento.preventDefault();
     if (enviando) return;
@@ -134,6 +136,41 @@ export function TelaAparelhos({
           </Botao>
         )}
       </header>
+
+      {/*
+        O resumo do computador.
+
+        Nenhum dado novo: nome, presença e contagens já vinham de `situacao` e
+        estavam espalhados pela janela ou ausentes. Reunidos, eles respondem de
+        uma olhada o que antes exigia contar linhas — que é a diferença entre
+        uma tela que informa e uma que só lista.
+      */}
+      <div className="resumo">
+        <span className="resumo__arte">
+          <Icone nome="Computador" aria-hidden />
+        </span>
+        <div className="resumo__texto">
+          <strong>{situacao.nomeComputador}</strong>
+          <span className="resumo__linha">
+            <span className={conectados > 0 ? "pulso ativo" : "pulso"} aria-hidden />
+            {conectados > 0
+              ? `${conectados} de ${superficies.length} ${superficies.length === 1 ? "aparelho" : "aparelhos"} conectado${conectados === 1 ? "" : "s"} agora`
+              : superficies.length > 0
+                ? "Nenhum aparelho conectado agora"
+                : "Pronto para parear o primeiro aparelho"}
+          </span>
+        </div>
+        <div className="resumo__numeros">
+          <span className="numero">
+            <strong>{superficies.length}</strong>
+            <small>{superficies.length === 1 ? "pareado" : "pareados"}</small>
+          </span>
+          <span className="numero">
+            <strong>{permitidos.size}</strong>
+            <small>{permitidos.size === 1 ? "com programas" : "com programas"}</small>
+          </span>
+        </div>
+      </div>
 
       {superficies.length === 0 ? (
         <p className="atenuado">Nenhum aparelho pareado ainda.</p>

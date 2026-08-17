@@ -196,9 +196,11 @@ export function TelaProgramas({ podeUsar }: { podeUsar: boolean }) {
               </span>
               <span className="programa__acoes">
                 <Botao tamanho="sm" onClick={() => setEmEdicao(atalho)}>
+                  <Icone nome="Lapis" aria-hidden />
                   Editar
                 </Botao>
                 <Botao tamanho="sm" tom="perigo" onClick={() => setARemover(atalho)}>
+                  <Icone nome="Lixeira" aria-hidden />
                   Remover
                 </Botao>
               </span>

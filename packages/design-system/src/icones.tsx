@@ -86,6 +86,21 @@ export const CAMINHOS_ICONES = {
   Pasta: "M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   Grade: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
 
+  /*
+   * Aparelhos e ações diretas.
+   *
+   * Estes nasceram de a interface estar usando o símbolo errado por falta de
+   * um certo: uma lista de celulares mostrava o ícone de ligação, e remover
+   * mostrava a mesma seta de qualquer outro botão. Ícone que não é o do
+   * assunto obriga a ler o rótulo para saber do que se trata — que é
+   * exatamente o trabalho que ele deveria poupar.
+   */
+  Celular: "M7 3h10a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM10.5 18h3",
+  Computador: "M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM9 20h6M12 16v4",
+  Lixeira: "M4 7h16M9.5 7V5h5v2M6 7l1 13h10l1-13M10 11v6M14 11v6",
+  Lapis: "M4 20l4-1 10-10-3-3L5 16zM14.5 6.5l3 3",
+  Escudo: "M12 3l7 3v6c0 4-3 7.5-7 9-4-1.5-7-5-7-9V6zM9 12l2 2 4-4",
+
   // Sistema
   Energia: "M12 3v9M7.5 6.5a7.5 7.5 0 1 0 9 0",
   Processador: "M7 7h10v10H7zM9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4",
@@ -123,6 +138,11 @@ export const IconeMicrofoneMudo = criarIcone(
 );
 export const IconeGravar = criarIcone("Gravar", CAMINHOS_ICONES.Gravar);
 export const IconeMonitor = criarIcone("Monitor", CAMINHOS_ICONES.Monitor);
+export const IconeCelular = criarIcone("Celular", CAMINHOS_ICONES.Celular);
+export const IconeComputador = criarIcone("Computador", CAMINHOS_ICONES.Computador);
+export const IconeLixeira = criarIcone("Lixeira", CAMINHOS_ICONES.Lixeira);
+export const IconeLapis = criarIcone("Lapis", CAMINHOS_ICONES.Lapis);
+export const IconeEscudo = criarIcone("Escudo", CAMINHOS_ICONES.Escudo);
 export const IconeCamada = criarIcone("Camada", CAMINHOS_ICONES.Camada);
 export const IconeVoltar = criarIcone("Voltar", CAMINHOS_ICONES.Voltar);
 export const IconeAvancar = criarIcone("Avancar", CAMINHOS_ICONES.Avancar);
@@ -157,6 +177,11 @@ export const ICONES: Record<NomeIcone, ReturnType<typeof criarIcone>> = {
   MicrofoneMudo: IconeMicrofoneMudo,
   Gravar: IconeGravar,
   Monitor: IconeMonitor,
+  Celular: IconeCelular,
+  Computador: IconeComputador,
+  Lixeira: IconeLixeira,
+  Lapis: IconeLapis,
+  Escudo: IconeEscudo,
   Camada: IconeCamada,
   Voltar: IconeVoltar,
   Avancar: IconeAvancar,
