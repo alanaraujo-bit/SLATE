@@ -59,6 +59,38 @@ describe("cores da janela", () => {
     expect(literais).toEqual([]);
   });
 
+  it("o anel de foco é aplicado como sombra, nunca como cor de contorno", () => {
+    /*
+     * `--s-ring-focus` vale `0 0 0 2px …, 0 0 0 4px …` — uma sombra, não uma
+     * cor. Escrito como `outline: 2px solid var(--s-ring-focus)` o navegador
+     * descarta a declaração inteira **em silêncio**, e o foco por teclado
+     * simplesmente desaparece: nada quebra, nada avisa, e só quem navega sem
+     * mouse percebe. Foi o que aconteceu aqui.
+     */
+    expect(estilos).not.toMatch(/outline:[^;]*--s-ring-focus/);
+    expect(estilos).toMatch(/box-shadow: var\(--s-ring-focus\)/);
+  });
+
+  it("todo elemento acionável tem estado de foco visível", () => {
+    // Um controle sem `:focus-visible` é invisível para quem navega por
+    // teclado, e a janela inteira do Agente é operável sem mouse.
+    const semComentarios = estilos.replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const seletor of [".lateral__aba", ".botao", ".cor"]) {
+      expect(semComentarios, seletor).toContain(`${seletor}:focus-visible`);
+    }
+  });
+
+  it("o movimento é desligado quando o sistema pede menos movimento", () => {
+    /*
+     * Os tokens de duração já caem a zero sozinhos, mas `animation` com nome
+     * próprio e `transform` não passam por eles. Sem desligar explicitamente,
+     * sobra justamente o movimento que a pessoa pediu para não ver.
+     */
+    const bloco = estilos.slice(estilos.lastIndexOf("prefers-reduced-motion"));
+    expect(bloco).toContain("animation: none");
+    expect(bloco).toContain("transform: none");
+  });
+
   it("as transições saem dos tokens de duração", () => {
     // Os tokens são testados no design system para nunca passar de 400ms e
     // para cair a zero quando o sistema pede menos movimento. Um valor solto

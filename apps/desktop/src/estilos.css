@@ -203,8 +203,8 @@ body {
 }
 
 .lateral__aba:focus-visible {
-  outline: 2px solid var(--s-ring-focus);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--s-ring-focus);
 }
 
 .lateral__estado {
@@ -300,6 +300,21 @@ body {
   letter-spacing: var(--s-tracking-tight);
 }
 
+/*
+ * Elevação, e por que ela precisa de dois mecanismos.
+ *
+ * No tema escuro a profundidade vem de **superfície mais clara**: os tokens
+ * sobem de 950 para 900 e 850 conforme o elemento se aproxima. Sombra ali é
+ * quase invisível, porque preto sobre preto não desenha borda nenhuma.
+ *
+ * No tema claro é o contrário: todas as superfícies são brancas — de
+ * propósito, porque cinza empilhado suja a tela — e quem separa uma camada da
+ * outra é a **sombra**.
+ *
+ * Usar só um dos dois deixa metade dos temas plano. Era o que acontecia aqui:
+ * os cartões só trocavam de superfície, e no claro ficavam brancos sobre
+ * brancos, separados por uma linha de 1px.
+ */
 .cartao {
   display: grid;
   gap: var(--s-space-4);
@@ -307,6 +322,7 @@ body {
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-lg);
   background: var(--s-surface-raised);
+  box-shadow: var(--s-shadow-sm);
 }
 
 .cartao__cabecalho {
@@ -334,6 +350,7 @@ body {
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-lg);
   background: var(--s-surface-raised);
+  box-shadow: var(--s-shadow-sm);
 }
 
 .linha {
@@ -442,11 +459,19 @@ body {
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-lg);
   background: var(--s-surface-raised);
-  transition: border-color var(--s-duration-fast) var(--s-ease-out);
+  box-shadow: var(--s-shadow-sm);
+  transition:
+    border-color var(--s-duration-fast) var(--s-ease-out),
+    box-shadow var(--s-duration-fast) var(--s-ease-out),
+    transform var(--s-duration-fast) var(--s-ease-out);
 }
 
+/* O leve descolar diz "isto responde" antes de qualquer clique. Um pixel:
+   mais do que isso vira lista pulando sob o ponteiro. */
 .aparelho:hover {
   border-color: var(--s-border-strong);
+  box-shadow: var(--s-shadow-md);
+  transform: translateY(-1px);
 }
 
 .aparelho__texto {
@@ -499,11 +524,17 @@ body {
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-lg);
   background: var(--s-surface-raised);
-  transition: border-color var(--s-duration-fast) var(--s-ease-out);
+  box-shadow: var(--s-shadow-sm);
+  transition:
+    border-color var(--s-duration-fast) var(--s-ease-out),
+    box-shadow var(--s-duration-fast) var(--s-ease-out),
+    transform var(--s-duration-fast) var(--s-ease-out);
 }
 
 .programa:hover {
   border-color: var(--tom);
+  box-shadow: var(--s-shadow-md);
+  transform: translateY(-1px);
 }
 
 .programa__arte {
@@ -622,8 +653,8 @@ body {
 }
 
 .cor:focus-visible {
-  outline: 2px solid var(--s-ring-focus);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--s-ring-focus);
 }
 
 .codigo {
@@ -749,8 +780,8 @@ body {
 }
 
 .tema-opcao:focus-visible {
-  outline: 2px solid var(--s-ring-focus);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--s-ring-focus);
 }
 
 .tema-opcao__nome {
@@ -921,8 +952,8 @@ body {
 }
 
 .botao:focus-visible {
-  outline: 2px solid var(--s-ring-focus);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--s-ring-focus);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1012,8 +1043,8 @@ body {
 }
 
 .preferencia input[type="checkbox"]:focus-visible {
-  outline: 2px solid var(--s-ring-focus);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--s-ring-focus);
 }
 
 .atualizador {
@@ -1206,6 +1237,86 @@ body {
 
 .campo input::placeholder {
   color: var(--s-text-subtle);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Movimento                                                                 */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * As linhas entram uma atrás da outra, com um atraso pequeno.
+ *
+ * O escalonamento existe para a lista ser lida como lista, e não como bloco
+ * que apareceu. O atraso é curto de propósito — 40ms por item, teto de cinco —
+ * porque isto acontece a cada troca de aba, e uma coreografia generosa que se
+ * repete o dia inteiro passa de agradável a irritante na terceira vez.
+ */
+.aparelho,
+.programa {
+  animation: surgir var(--s-duration-normal) var(--s-ease-out) backwards;
+}
+
+.aparelho:nth-child(1),
+.programa:nth-child(1) {
+  animation-delay: 0ms;
+}
+.aparelho:nth-child(2),
+.programa:nth-child(2) {
+  animation-delay: 40ms;
+}
+.aparelho:nth-child(3),
+.programa:nth-child(3) {
+  animation-delay: 80ms;
+}
+.aparelho:nth-child(4),
+.programa:nth-child(4) {
+  animation-delay: 120ms;
+}
+.aparelho:nth-child(n + 5),
+.programa:nth-child(n + 5) {
+  animation-delay: 160ms;
+}
+
+/*
+ * O retorno ao toque acontece na descida, não na subida.
+ *
+ * Um controle que só reage depois de soltar parece atrasado mesmo quando a
+ * ação é instantânea. Aqui a escala é mínima e a duração é a mais curta que
+ * existe nos tokens: quem clica precisa sentir, não assistir.
+ */
+.botao:active,
+.lateral__aba:active,
+.seletor-modo__opcao:active,
+.tema-opcao:active {
+  transform: scale(0.985);
+  transition-duration: var(--s-duration-instant);
+}
+
+/*
+ * Nada disso sobrevive à preferência do sistema por menos movimento.
+ *
+ * Os tokens de duração já caem a zero sozinhos, mas `animation` com nome
+ * próprio e `transform` não passam por eles — precisam ser desligados aqui,
+ * senão sobra justamente o movimento que a pessoa pediu para não ver.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .tela,
+  .aparelho,
+  .programa,
+  .modal[open] .modal__caixa {
+    animation: none;
+  }
+
+  .aparelho:hover,
+  .programa:hover,
+  .botao:active,
+  .lateral__aba:active,
+  .seletor-modo__opcao:active,
+  .tema-opcao:active,
+  .cor:hover,
+  .cor--ativa {
+    transform: none;
+  }
 }
 
 /* ------------------------------------------------------------------------ */
