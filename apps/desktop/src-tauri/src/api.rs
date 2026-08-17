@@ -57,6 +57,20 @@ pub enum ErroApi {
     /// porque a reação é diferente: aqui vale tentar de novo.
     #[error("algo deu errado no servidor — tente de novo em instantes")]
     ErroInterno,
+    #[error("esse e-mail não parece válido")]
+    EmailInvalido,
+    /// A senha não passou nas regras do servidor. As mensagens vêm de lá —
+    /// repeti-las aqui faria duas listas que divergem no dia em que uma mudar.
+    #[error("{0}")]
+    SenhaFraca(String),
+    /// Cadastro de um e-mail que já tem conta.
+    ///
+    /// A API responde **sucesso sem sessão** nesse caso, de propósito: dizer
+    /// "e-mail já cadastrado" entregaria quais endereços têm conta. Este erro é
+    /// construído aqui, a partir da ausência de sessão, e existe só para virar
+    /// uma orientação útil na tela em vez de um formulário que não sai do lugar.
+    #[error("se você já tem conta com esse e-mail, entre com sua senha")]
+    TalvezJaTenhaConta,
     #[error("o servidor respondeu de forma inesperada ({0})")]
     Inesperado(u16),
 }
@@ -73,11 +87,33 @@ struct RespostaUsuario {
     usuario: Usuario,
 }
 
+/// A resposta do cadastro.
+///
+/// `usuario` é opcional, e a opcionalidade **é** o contrato: um cadastro com
+/// e-mail já existente responde 201 sem ele e sem sessão, para não revelar
+/// quais endereços têm conta. Torná-lo obrigatório faria esse caso virar erro
+/// de leitura de JSON, e a pessoa veria "resposta inesperada" em vez da
+/// orientação de entrar com a senha.
+#[derive(Debug, Deserialize)]
+struct RespostaCadastro {
+    #[serde(default)]
+    usuario: Option<Usuario>,
+}
+
 #[derive(Debug, Deserialize)]
 struct RespostaErro {
     erro: Option<String>,
     #[serde(rename = "tentativasRestantes")]
     tentativas_restantes: Option<u32>,
+    /// As regras de senha reprovadas, quando o cadastro falha por senha fraca.
+    /// A mensagem de cada uma vem pronta do servidor.
+    #[serde(default)]
+    problemas: Option<Vec<ProblemaSenha>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ProblemaSenha {
+    mensagem: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -247,10 +283,30 @@ impl ClienteApi {
         let corpo: RespostaErro = resposta.json().await.unwrap_or(RespostaErro {
             erro: None,
             tentativas_restantes: None,
+            problemas: None,
         });
 
         match corpo.erro.as_deref() {
             Some("credenciais_invalidas") => ErroApi::CredenciaisInvalidas,
+            Some("email_invalido") => ErroApi::EmailInvalido,
+            Some("senha_invalida") => ErroApi::SenhaFraca("A senha não é válida.".into()),
+            Some("senha_fraca") => {
+                // As mensagens vêm do servidor, e são juntadas com espaço em vez
+                // de virarem lista: a caixa de erro da entrada é uma linha só, e
+                // na prática quase sempre chega um problema apenas.
+                let texto = corpo
+                    .problemas
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|p| p.mensagem)
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                ErroApi::SenhaFraca(if texto.is_empty() {
+                    "A senha precisa ter pelo menos 8 caracteres.".into()
+                } else {
+                    texto
+                })
+            }
             Some("nao_autenticado") => ErroApi::NaoAutenticado,
             Some("chave_ja_registrada") => ErroApi::ChaveJaRegistrada,
             Some("chave_de_outra_conta") => ErroApi::ChaveDeOutraConta,
@@ -282,6 +338,49 @@ impl ClienteApi {
         let corpo: RespostaUsuario = resposta.json().await.map_err(|_| ErroApi::Inesperado(0))?;
         self.guardar_sessao();
         Ok(corpo.usuario)
+    }
+
+    /// Cria a conta e já entra nela.
+    ///
+    /// Existe no Agente, e não só na PWA, porque instalar o Agente primeiro é um
+    /// caminho de primeira execução perfeitamente normal — e sem isto ele era um
+    /// beco: a janela pedia uma conta que não havia como criar dali, e respondia
+    /// "credenciais inválidas" a quem tentasse o próprio e-mail.
+    ///
+    /// **Cadastrar um e-mail que já tem conta responde 201 sem `usuario`.** É a
+    /// defesa da API contra descobrir quais endereços têm conta, e o cliente
+    /// precisa tratar: sem isso o botão parece funcionar, nenhuma sessão é
+    /// criada, e a tela volta ao começo sem explicar nada.
+    pub async fn cadastrar(
+        &self,
+        email: &str,
+        senha: &str,
+        nome: Option<&str>,
+    ) -> Result<Usuario, ErroApi> {
+        let mut corpo = serde_json::json!({ "email": email, "senha": senha });
+        if let Some(nome) = nome.map(str::trim).filter(|n| !n.is_empty()) {
+            corpo["nome"] = serde_json::json!(nome);
+        }
+
+        let resposta = self
+            .http
+            .post(self.url("/contas/cadastro"))
+            .json(&corpo)
+            .send()
+            .await
+            .map_err(|_| ErroApi::SemConexao)?;
+
+        if !resposta.status().is_success() {
+            return Err(self.erro_de(resposta).await);
+        }
+
+        let corpo: RespostaCadastro = resposta.json().await.map_err(|_| ErroApi::Inesperado(0))?;
+        let Some(usuario) = corpo.usuario else {
+            return Err(ErroApi::TalvezJaTenhaConta);
+        };
+
+        self.guardar_sessao();
+        Ok(usuario)
     }
 
     pub async fn sessao_atual(&self) -> Result<Usuario, ErroApi> {

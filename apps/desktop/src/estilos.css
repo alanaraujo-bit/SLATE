@@ -2032,6 +2032,106 @@ body::after {
   font-size: 0.58rem;
 }
 
+/*
+ * A troca entre entrar e criar conta.
+ *
+ * Botão de texto, e não um link: ele executa uma ação nesta tela em vez de
+ * levar a outro lugar, e um `<a>` sem destino é mentira para quem navega por
+ * teclado ou leitor de tela.
+ */
+.botao-texto {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--s-accent);
+  cursor: pointer;
+}
+
+.botao-texto:hover {
+  text-decoration: underline;
+}
+
+.botao-texto:focus-visible {
+  outline: 2px solid var(--s-accent);
+  outline-offset: 2px;
+  border-radius: var(--s-radius-sm);
+}
+
+.entrada__alternar {
+  justify-self: center;
+  font-size: var(--s-text-sm);
+}
+
+/*
+ * A janela do Agente é baixa, e o cadastro é mais alto que a entrada.
+ *
+ * Medido: com o campo de nome, a alternância e o aviso de recuperação, o cartão
+ * passa de 588px para 703px — 83px além da janela de 668px. O `.portal` rola,
+ * então nada fica inalcançável, mas rolar para achar o botão de criar conta na
+ * primeira tela do produto é ruim. Aqui o cartão aperta o bastante para caber
+ * inteiro, sem mexer no tamanho dos alvos de clique.
+ *
+ * Por altura, e não por `orientation` ou largura: quem decide é o espaço
+ * vertical, que é exatamente o que está faltando.
+ */
+@media (max-height: 46rem) {
+  .entrada {
+    gap: var(--s-space-3);
+    /* Folga lateral preservada: o que falta é altura, e apertar os lados só
+       deixaria os campos colados na borda sem devolver espaço vertical. */
+    padding: var(--s-space-5) var(--s-space-6);
+  }
+
+  /*
+   * Na janela baixa, o cadastro esconde o "ou / Continuar com o Google".
+   *
+   * Apertar espaçamento sozinho não fechava a conta — sobravam 24px —, e o
+   * passo seguinte seria cortar conteúdo que diz algo: o aviso de que não há
+   * recuperação de senha, ou o selo de acesso protegido. O botão do Google
+   * está **desabilitado e marcado "em breve"**: ele não entrega nada hoje, e é
+   * o único elemento aqui cuja ausência não tira informação nem ação de
+   * ninguém. Então é ele que cede.
+   *
+   * **Quando o OAuth existir de verdade, isto precisa voltar** — e aí a saída
+   * é outra, provavelmente rolagem interna no cartão com o botão de enviar
+   * sempre à vista. Esconder um caminho de entrada que funciona seria defeito.
+   */
+  .entrada--cadastro .divisor,
+  .entrada--cadastro .botao-google {
+    display: none;
+  }
+
+  .entrada h1 {
+    font-size: 1.4rem;
+  }
+
+  .entrada__cabecalho {
+    gap: var(--s-space-1);
+    margin-bottom: 0;
+  }
+
+  .entrada .campo {
+    gap: var(--s-space-1);
+  }
+
+  .entrada .divisor {
+    margin-block: calc(var(--s-space-1) * -1);
+  }
+}
+
+.entrada__aviso {
+  margin: 0;
+  font-size: var(--s-text-2xs);
+  line-height: 1.45;
+  color: var(--s-text-subtle);
+}
+
+.campo__opcional {
+  font-style: normal;
+  color: var(--s-text-subtle);
+}
+
 .entrada__rodape {
   display: grid;
   grid-template-columns: auto 1fr;

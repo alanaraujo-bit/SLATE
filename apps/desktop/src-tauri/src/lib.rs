@@ -201,6 +201,39 @@ async fn entrar(
     Ok(usuario)
 }
 
+/// Cria a conta e deixa este computador pronto, numa tacada.
+///
+/// Registra o Agente logo depois, igual à entrada: quem acabou de criar a conta
+/// espera ver o computador na lista, não descobrir que falta um passo. O
+/// registro compartilhado com `entrar` é de propósito — dois caminhos que
+/// chegam ao mesmo estado precisam registrar do mesmo jeito, senão um deles
+/// esquece no dia em que o outro mudar.
+#[tauri::command]
+async fn cadastrar(
+    estado: tauri::State<'_, Estado>,
+    email: String,
+    senha: String,
+    nome: Option<String>,
+) -> Result<Usuario, String> {
+    let usuario = estado
+        .api
+        .cadastrar(&email, &senha, nome.as_deref())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    estado
+        .api
+        .registrar_agente(
+            &estado.identidade.chave_publica(),
+            estado.identidade.algoritmo(),
+            &estado.nome_computador,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(usuario)
+}
+
 #[tauri::command]
 async fn sair(estado: tauri::State<'_, Estado>) -> Result<(), String> {
     estado.api.sair().await.map_err(|e| e.to_string())
@@ -544,6 +577,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             situacao,
             entrar,
+            cadastrar,
             sair,
             confirmar_pareamento,
             criar_convite_qr,

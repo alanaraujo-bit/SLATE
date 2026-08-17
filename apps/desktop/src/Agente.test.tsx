@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Agente } from "./Agente";
 
@@ -261,5 +261,128 @@ describe("tela principal do Agente", () => {
 
     expect(invocar).not.toHaveBeenCalledWith("remover_dispositivo", { id: "s1" });
     expect(screen.getByText("Celular do Alan")).toBeTruthy();
+  });
+});
+
+/*
+ * A tela de entrada.
+ *
+ * Estes testes existem por causa de um beco real: a janela só sabia entrar, e
+ * quem instalava o Agente antes de abrir a PWA encontrava um formulário
+ * pedindo uma conta que não havia como criar dali. Tentar o próprio e-mail
+ * respondia "credenciais inválidas", que parece defeito e não falta de
+ * cadastro. Nenhum teste pegava isso porque nenhum olhava para a saída.
+ */
+function deslogado() {
+  invocar.mockReset();
+  invocar.mockImplementation((comando: string) => {
+    if (comando === "situacao") {
+      return Promise.resolve({
+        conectado: false,
+        usuario: null,
+        nomeComputador: "PHANTOMX",
+        chavePublica: "chave",
+        dispositivos: [],
+      });
+    }
+    return Promise.resolve(null);
+  });
+}
+
+describe("entrada e criação de conta", () => {
+  beforeEach(deslogado);
+  afterEach(cleanup);
+
+  it("oferece criar conta a quem não tem — a saída existe sem tentar entrar antes", async () => {
+    await montar();
+    expect(screen.getByRole("button", { name: "Não tenho conta ainda" })).toBeTruthy();
+  });
+
+  it("criar conta chama o comando de cadastro, e não o de entrada", async () => {
+    // O comando precisa existir e estar registrado no `lib.rs`. Recurso pronto
+    // dos dois lados e nenhum comando registrado no meio já custou os painéis
+    // inteiros neste projeto uma vez.
+    await montar();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Não tenho conta ainda" }).click();
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/E-mail/i), {
+        target: { value: "novo@exemplo.com" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Senha$/i), {
+        target: { value: "uma-senha-boa" },
+      });
+    });
+
+    await act(async () => {
+      screen.getByRole("button", { name: /Criar conta/ }).click();
+    });
+
+    expect(invocar).toHaveBeenCalledWith(
+      "cadastrar",
+      expect.objectContaining({ email: "novo@exemplo.com", senha: "uma-senha-boa" }),
+    );
+    expect(invocar).not.toHaveBeenCalledWith("entrar", expect.anything());
+  });
+
+  it("avisa que não há recuperação de senha antes de a pessoa escolher uma", async () => {
+    // Sem recuperação por e-mail (AÇÃO-004), esquecer a senha custa a conta
+    // inteira. Avisar depois do cadastro seria avisar tarde demais.
+    await montar();
+    expect(screen.queryByText(/recuperação de senha/i)).toBeNull();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Não tenho conta ainda" }).click();
+    });
+
+    expect(screen.getByText(/recuperação de senha/i)).toBeTruthy();
+  });
+
+  it("e-mail já cadastrado volta para a entrada em vez de travar", async () => {
+    // A API responde sucesso sem sessão nesse caso, para não revelar quais
+    // endereços têm conta. Sem tratar, o botão parece funcionar e nada
+    // acontece — a pessoa relê a mesma tela sem saber o que mudou.
+    invocar.mockImplementation((comando: string) => {
+      if (comando === "situacao") {
+        return Promise.resolve({
+          conectado: false,
+          usuario: null,
+          nomeComputador: "PHANTOMX",
+          chavePublica: "chave",
+          dispositivos: [],
+        });
+      }
+      if (comando === "cadastrar") {
+        return Promise.reject("se você já tem conta com esse e-mail, entre com sua senha");
+      }
+      return Promise.resolve(null);
+    });
+
+    await montar();
+    await act(async () => {
+      screen.getByRole("button", { name: "Não tenho conta ainda" }).click();
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/E-mail/i), {
+        target: { value: "existente@exemplo.com" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Senha$/i), {
+        target: { value: "uma-senha-boa" },
+      });
+    });
+    await act(async () => {
+      screen.getByRole("button", { name: /Criar conta/ }).click();
+    });
+
+    // Voltou para entrar, com o e-mail preservado e o motivo na tela.
+    expect(screen.getByRole("button", { name: /^Entrar$/ })).toBeTruthy();
+    expect((screen.getByLabelText(/E-mail/i) as HTMLInputElement).value).toBe(
+      "existente@exemplo.com",
+    );
+    expect(screen.getByRole("alert").textContent).toMatch(/entre com sua senha/i);
   });
 });

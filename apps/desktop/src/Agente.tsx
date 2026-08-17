@@ -171,8 +171,23 @@ function Entrada({
 }) {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [nome, setNome] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+
+  /*
+   * Entrar ou criar conta.
+   *
+   * A janela só sabia entrar, e isso fazia dela um beco: instalar o Agente
+   * antes de abrir a PWA é um primeiro uso perfeitamente normal, e quem fazia
+   * isso encontrava um formulário pedindo uma conta que não havia como criar
+   * dali — respondendo "credenciais inválidas" ao próprio e-mail, que parece
+   * defeito e não falta de cadastro.
+   *
+   * A alternância é a mesma peça que a PWA já tem em `formulario-conta.tsx`.
+   */
+  const [modo, setModo] = useState<"entrar" | "cadastrar">("entrar");
+  const cadastrando = modo === "cadastrar";
 
   /*
    * Em que ponto do formulário a pessoa está: 0 em repouso, 1 no e-mail, 2 na
@@ -195,11 +210,26 @@ function Entrada({
     setEnviando(true);
     setPasso(PASSO_PALCO.entrando);
     try {
-      await invoke("entrar", { email, senha });
+      if (cadastrando) {
+        await invoke("cadastrar", { email, senha, nome: nome.trim() || null });
+      } else {
+        await invoke("entrar", { email, senha });
+      }
       aoEntrar();
     } catch (e) {
       // O Rust já devolve mensagens em português e sem jargão.
-      setErro(String(e));
+      const mensagem = String(e);
+      setErro(mensagem);
+      /*
+       * Cadastrar um e-mail que já tem conta responde sucesso sem sessão — é
+       * assim que a API evita revelar quais endereços têm conta. O Rust traduz
+       * isso em `TalvezJaTenhaConta`, e aqui vira o próximo passo já preparado:
+       * volta para "entrar" com o e-mail preservado, em vez de deixar a pessoa
+       * relendo a mesma tela sem saber o que mudou.
+       */
+      if (cadastrando && mensagem.includes("entre com sua senha")) {
+        setModo("entrar");
+      }
       // A superfície recua junto com o erro: deixá-la acesa depois de a entrada
       // falhar seria a tela comemorando o que não aconteceu.
       setPasso(PASSO_PALCO.repouso);
@@ -265,7 +295,10 @@ function Entrada({
           </ul>
         </aside>
 
-        <form className="entrada" onSubmit={enviar}>
+        <form
+          className={`entrada${cadastrando ? " entrada--cadastro" : ""}`}
+          onSubmit={enviar}
+        >
           <div className="entrada__marca-compacta">
             <span className="marca-simbolo" aria-hidden="true"><i /><i /><i /><i /></span>
             <span className="marca">SLATE</span>
@@ -277,9 +310,29 @@ function Entrada({
           </div>
 
           <div className="entrada__cabecalho">
-            <h1>Boas-vindas de volta</h1>
-            <p className="atenuado">Entre com a mesma conta usada no seu celular.</p>
+            <h1>{cadastrando ? "Criar sua conta" : "Boas-vindas de volta"}</h1>
+            <p className="atenuado">
+              {cadastrando
+                ? "Uma conta só, usada aqui e no celular."
+                : "Entre com a mesma conta usada no seu celular."}
+            </p>
           </div>
+
+        {cadastrando && (
+          <label className="campo">
+            {/* Opcional, e dito na etiqueta: um campo obrigatório a mais no
+                primeiro contato é atrito sem contrapartida. */}
+            <span>Nome <em className="campo__opcional">(opcional)</em></span>
+            <input
+              type="text"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              onFocus={() => !enviando && setPasso(PASSO_PALCO.email)}
+              autoComplete="name"
+              placeholder="Como podemos te chamar"
+            />
+          </label>
+        )}
 
         <label className="campo">
           <span>E-mail</span>
@@ -302,8 +355,8 @@ function Entrada({
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
             onFocus={() => !enviando && setPasso(PASSO_PALCO.senha)}
-            autoComplete="current-password"
-            placeholder="Sua senha"
+            autoComplete={cadastrando ? "new-password" : "current-password"}
+            placeholder={cadastrando ? "Pelo menos 8 caracteres" : "Sua senha"}
             required
           />
         </label>
@@ -315,9 +368,46 @@ function Entrada({
         )}
 
           <button type="submit" className="botao principal botao--largo entrada__enviar" disabled={enviando}>
-            <span>{enviando ? "Entrando…" : "Entrar"}</span>
+            <span>
+              {enviando
+                ? cadastrando
+                  ? "Criando…"
+                  : "Entrando…"
+                : cadastrando
+                  ? "Criar conta"
+                  : "Entrar"}
+            </span>
             {!enviando && <Icone nome="Avancar" aria-hidden />}
           </button>
+
+        {/*
+          A troca de modo vem logo abaixo do botão, e não no rodapé: é a saída
+          de quem chegou aqui sem conta, e no rodapé ela seria encontrada depois
+          de a pessoa já ter tentado o próprio e-mail e levado "credenciais
+          inválidas".
+        */}
+        <button
+          type="button"
+          className="botao-texto entrada__alternar"
+          onClick={() => {
+            setModo(cadastrando ? "entrar" : "cadastrar");
+            setErro(null);
+          }}
+        >
+          {cadastrando ? "Já tenho conta" : "Não tenho conta ainda"}
+        </button>
+
+        {cadastrando && (
+          /*
+            Avisado no cadastro, e não escondido: sem recuperação por e-mail
+            (AÇÃO-004), esquecer a senha custa a conta inteira — dispositivos e
+            painéis junto. A PWA diz o mesmo, com as mesmas palavras.
+          */
+          <p className="entrada__aviso">
+            A recuperação de senha por e-mail ainda não está ativa. Guarde sua
+            senha em lugar seguro.
+          </p>
+        )}
 
         <div className="divisor">
           <span>ou</span>
