@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Botao, Icone, Rotulo, type NomeIcone } from "@slate/design-system";
+import { Botao, Icone, Marca, Rotulo, type NomeIcone, type NomeMarca } from "@slate/design-system";
 import type { CorAtalho, ItemDePerfilDeck, PerfilDeDeck } from "@slate/protocol";
 import type { Atalho } from "./programas";
 import { Modal } from "../modal";
@@ -16,7 +16,16 @@ interface AcaoCatalogo {
   nome: string;
   grupo: "Mídia" | "Volume" | "Serviços" | "Programas";
   icone: NomeIcone;
-  marca?: "youtube" | "twitch" | "netflix" | "prime" | "disney" | "spotify";
+  marca?: NomeMarca;
+  /**
+   * PNG extraído do próprio executável, quando existe.
+   *
+   * A tela de Programas já mostrava o ícone de verdade e só o editor não —
+   * então o mesmo jogo aparecia com a cara dele numa aba e como um monitor
+   * genérico na outra, que é justamente onde a pessoa precisa reconhecê-lo de
+   * relance para montar o painel.
+   */
+  arte?: string;
 }
 
 const ACOES_FIXAS: readonly AcaoCatalogo[] = [
@@ -77,6 +86,7 @@ export function TelaPaineis() {
       nome: atalho.nome,
       grupo: "Programas" as const,
       icone: "Monitor" as const,
+      arte: atalho.icone,
     }));
     return [...ACOES_FIXAS, ...programas];
   }, [configuracao?.atalhos]);
@@ -329,7 +339,7 @@ export function TelaPaineis() {
               const acao = catalogoPorId.get(item.actionId);
               return (
                 <article key={`${item.actionId}:${item.ordem}`} className={`item-deck${item.tamanho === "largo" ? " item-deck--largo" : ""}`} style={{ "--tom": `var(--s-control-${item.cor ?? perfil.cor})` } as React.CSSProperties}>
-                  <span className="item-deck__arte">{acao?.marca ? <MarcaServico marca={acao.marca} /> : <Icone nome={acao?.icone ?? "Grade"} aria-hidden />}</span>
+                  <span className="item-deck__arte"><ArteDaAcao acao={acao} /></span>
                   <strong>{acao?.nome ?? item.actionId}</strong>
                   <div className="item-deck__acoes">
                     <button type="button" onClick={() => mover(item, -1)} disabled={indice === 0} aria-label="Mover para trás"><Icone nome="Voltar" aria-hidden /></button>
@@ -349,7 +359,7 @@ export function TelaPaineis() {
             {(["Mídia", "Volume", "Serviços", "Programas"] as const).map((grupo) => {
               const acoes = catalogo.filter((acao) => acao.grupo === grupo);
               if (acoes.length === 0) return null;
-              return <div className="catalogo-deck__grupo" key={grupo}><span>{grupo}</span><div>{acoes.map((acao) => <button key={acao.actionId} type="button" disabled={usados.has(acao.actionId)} onClick={() => adicionar(acao.actionId)}>{acao.marca ? <MarcaServico marca={acao.marca} /> : <Icone nome={acao.icone} aria-hidden />}<span>{acao.nome}</span>{usados.has(acao.actionId) ? <Icone nome="Verificado" aria-label="Adicionado" /> : <Icone nome="Mais" aria-hidden />}</button>)}</div></div>;
+              return <div className="catalogo-deck__grupo" key={grupo}><span>{grupo}</span><div>{acoes.map((acao) => <button key={acao.actionId} type="button" disabled={usados.has(acao.actionId)} onClick={() => adicionar(acao.actionId)}><span className="catalogo-deck__arte"><ArteDaAcao acao={acao} /></span><span>{acao.nome}</span>{usados.has(acao.actionId) ? <Icone nome="Verificado" aria-label="Adicionado" /> : <Icone nome="Mais" aria-hidden />}</button>)}</div></div>;
             })}
           </div>
         </div>
@@ -366,7 +376,25 @@ export function TelaPaineis() {
   );
 }
 
-function MarcaServico({ marca }: { marca: NonNullable<AcaoCatalogo["marca"]> }) {
-  const simbolo = { youtube: "▶", twitch: "T", netflix: "N", prime: "prime", disney: "D+", spotify: "≋" }[marca];
-  return <span className={`marca-servico marca-servico--${marca}`} aria-hidden>{simbolo}</span>;
+/**
+ * O símbolo de uma ação, seja ela qual for.
+ *
+ * Três origens — o ícone do executável, a marca do serviço, o ícone do sistema
+ * — e um lugar só que decide entre elas. Antes a prévia e o catálogo repetiam
+ * essa escolha em duas expressões separadas, e foi assim que o ícone real do
+ * programa ficou de fora das duas.
+ */
+function ArteDaAcao({ acao }: { acao?: AcaoCatalogo }) {
+  if (acao?.arte) {
+    // Origem 32×32: suavizar borra justamente o desenho que identifica o jogo.
+    return <img src={acao.arte} alt="" aria-hidden style={{ imageRendering: "pixelated" }} />;
+  }
+  if (acao?.marca) {
+    return (
+      <span className={`marca-servico marca-servico--${acao.marca}`}>
+        <Marca nome={acao.marca} tamanho="100%" />
+      </span>
+    );
+  }
+  return <Icone nome={acao?.icone ?? "Grade"} aria-hidden />;
 }

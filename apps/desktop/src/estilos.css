@@ -2128,3 +2128,619 @@ body::after {
     align-items: start;
   }
 }
+
+/* ------------------------------------------------------------------------ */
+/* Painéis — o editor                                                        */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * Esta tela é a única do Agente que edita algo que aparece **em outro lugar**.
+ * Cadastrar um programa se confere na própria lista; montar um painel só se
+ * confere olhando o celular — e ir e voltar entre o computador e o aparelho a
+ * cada tecla movida é o tipo de atrito que faz a pessoa desistir de arrumar.
+ *
+ * Por isso a prévia é um telefone, e não uma lista. Ela usa as colunas reais
+ * do perfil, muda de proporção junto com o seletor de orientação e mostra a
+ * mesma cor que a tecla vai ter lá. O que se vê aqui é o que chega lá.
+ */
+
+.tela--paineis {
+  /* O editor precisa de mais largura que as telas de leitura: são três blocos
+     de conteúdo — perfis, prévia e catálogo — e espremê-los em 44rem
+     transformaria a prévia num telefone de brinquedo. */
+  max-width: 66rem;
+}
+
+.editor-deck {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+  gap: var(--s-space-5);
+  align-items: start;
+}
+
+.editor-deck__perfis {
+  display: grid;
+  gap: var(--s-space-1);
+  align-content: start;
+  padding: var(--s-space-3);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-lg);
+  background: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
+}
+
+.editor-deck__rotulo {
+  padding: var(--s-space-1) var(--s-space-2) var(--s-space-2);
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-caps);
+  text-transform: uppercase;
+}
+
+.perfil-editor {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--s-space-3);
+  min-height: 2.5rem;
+  padding: 0 var(--s-space-3);
+  border: 0;
+  border-radius: var(--s-radius-md);
+  background: transparent;
+  color: var(--s-text-muted);
+  font: inherit;
+  font-size: var(--s-text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--s-duration-fast) var(--s-ease-out),
+    color var(--s-duration-fast) var(--s-ease-out);
+}
+
+/* O ponto é a cor do perfil, e é ela que a pessoa procura na lista: quem
+   montou um painel se lembra da cor antes de se lembrar do nome. */
+.perfil-editor i {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: var(--s-radius-full);
+  background: var(--tom);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tom) 22%, transparent);
+}
+
+.perfil-editor span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.perfil-editor svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--s-success);
+}
+
+.perfil-editor:hover {
+  background: var(--s-surface-sunken);
+  color: var(--s-text);
+}
+
+.perfil-editor--ativo {
+  background: color-mix(in srgb, var(--tom) 14%, transparent);
+  color: var(--s-text);
+}
+
+.perfil-editor:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+}
+
+.editor-deck__principal {
+  display: grid;
+  gap: var(--s-space-5);
+  align-content: start;
+  min-width: 0;
+}
+
+.editor-deck__cabecalho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-space-4);
+}
+
+.nome-perfil {
+  display: grid;
+  gap: var(--s-space-2);
+  font-size: var(--s-text-sm);
+  color: var(--s-text-muted);
+}
+
+.nome-perfil input {
+  min-width: 16rem;
+  min-height: var(--s-touch-min);
+  padding: 0 var(--s-space-3);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface-sunken);
+  box-shadow: var(--s-inset-sutil);
+  color: var(--s-text);
+  font: inherit;
+  font-size: var(--s-text-md);
+  transition:
+    border-color var(--s-duration-fast) var(--s-ease-out),
+    box-shadow var(--s-duration-fast) var(--s-ease-out);
+}
+
+.nome-perfil input:focus {
+  outline: none;
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 3px var(--s-accent-soft);
+}
+
+.editor-deck__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-space-2);
+}
+
+.editor-deck__preferencias {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-space-6);
+  padding: var(--s-space-4) var(--s-space-5);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-lg);
+  background: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
+}
+
+.preferencia-deck {
+  display: grid;
+  gap: var(--s-space-2);
+}
+
+.preferencia-deck > span {
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-caps);
+  text-transform: uppercase;
+}
+
+.cores--compactas .cor {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.stepper-colunas {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-space-1);
+  padding: var(--s-space-1);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface-sunken);
+  box-shadow: var(--s-inset-sutil);
+}
+
+.stepper-colunas button {
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: var(--s-radius-sm);
+  background: transparent;
+  color: var(--s-text-muted);
+  font: inherit;
+  font-size: var(--s-text-lg);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--s-duration-fast) var(--s-ease-out),
+    color var(--s-duration-fast) var(--s-ease-out);
+}
+
+.stepper-colunas button:hover {
+  background: var(--s-surface-raised);
+  color: var(--s-text);
+}
+
+.stepper-colunas button:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+}
+
+.stepper-colunas strong {
+  min-width: 1.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--s-text-md);
+}
+
+.paginas-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-space-2);
+}
+
+.paginas-editor button {
+  min-height: 2rem;
+  padding: 0 var(--s-space-3);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-full);
+  background: transparent;
+  color: var(--s-text-muted);
+  font: inherit;
+  font-size: var(--s-text-xs);
+  cursor: pointer;
+  transition:
+    border-color var(--s-duration-fast) var(--s-ease-out),
+    background var(--s-duration-fast) var(--s-ease-out),
+    color var(--s-duration-fast) var(--s-ease-out);
+}
+
+.paginas-editor button:hover {
+  border-color: var(--s-border-strong);
+  color: var(--s-text);
+}
+
+.paginas-editor button.ativa {
+  border-color: transparent;
+  background: var(--s-accent);
+  color: var(--s-on-accent);
+}
+
+.paginas-editor button:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+}
+
+.paginas-editor__nova {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-space-1);
+  border-style: dashed;
+}
+
+.paginas-editor__nova svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/*
+ * A prévia é um telefone.
+ *
+ * O corpo escuro em volta não é decoração: é o que dá escala à grade. Sem ele
+ * a mesma grade de três colunas parece folgada na tela do computador, a pessoa
+ * enche a página, e no aparelho as teclas saem apertadas. Com a moldura, ela
+ * julga o tamanho pelo aparelho — que é onde o dedo vai bater.
+ */
+.preview-deck {
+  display: grid;
+  grid-template-columns: repeat(var(--colunas), minmax(0, 1fr));
+  gap: var(--s-space-3);
+  padding: var(--s-space-4);
+  border: 1px solid var(--s-palco-borda);
+  border-radius: var(--s-radius-xl);
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--s-palco-alto), transparent 70%),
+    var(--s-palco-baixo);
+  box-shadow: var(--s-palco-sombra), var(--s-inset);
+  transition: max-width var(--s-duration-normal) var(--s-ease-out);
+}
+
+.preview-deck--retrato {
+  max-width: 22rem;
+}
+
+.preview-deck--paisagem {
+  max-width: 40rem;
+}
+
+.preview-deck__vazio {
+  grid-column: 1 / -1;
+  display: grid;
+  justify-items: center;
+  gap: var(--s-space-2);
+  padding: var(--s-space-8) var(--s-space-4);
+  border: 1px dashed var(--s-border-strong);
+  border-radius: var(--s-radius-lg);
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-sm);
+  text-align: center;
+}
+
+.preview-deck__vazio svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/*
+ * A tecla na prévia, e por que as ações moram dentro dela.
+ *
+ * Uma coluna de botões ao lado obrigaria a prévia a deixar de parecer um
+ * telefone. Escondê-las até o ponteiro chegar mantém as duas coisas: de longe
+ * é o painel como ele vai ser, de perto é um editor.
+ */
+.item-deck {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: var(--s-space-2);
+  min-height: 5rem;
+  padding: var(--s-space-3) var(--s-space-2);
+  border: 1px solid color-mix(in srgb, var(--tom) 34%, transparent);
+  border-radius: var(--s-radius-lg);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--tom) 26%, transparent),
+      color-mix(in srgb, var(--tom) 9%, transparent)
+    );
+  color: var(--s-text);
+  text-align: center;
+  transition:
+    transform var(--s-duration-fast) var(--s-ease-spring),
+    border-color var(--s-duration-fast) var(--s-ease-out);
+}
+
+.item-deck--largo {
+  grid-column: span 2;
+}
+
+.item-deck:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--tom) 60%, transparent);
+}
+
+.item-deck__arte {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--tom);
+}
+
+.item-deck__arte svg {
+  width: 100%;
+  height: 100%;
+}
+
+.item-deck strong {
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-medium);
+  line-height: var(--s-leading-tight);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.item-deck__acoes {
+  position: absolute;
+  inset: auto var(--s-space-1) var(--s-space-1);
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--s-duration-fast) var(--s-ease-out);
+}
+
+.item-deck:hover .item-deck__acoes,
+.item-deck:focus-within .item-deck__acoes {
+  opacity: 1;
+}
+
+.item-deck__acoes button {
+  display: grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border: 0;
+  border-radius: var(--s-radius-xs);
+  background: var(--s-surface-overlay);
+  color: var(--s-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--s-duration-fast) var(--s-ease-out),
+    color var(--s-duration-fast) var(--s-ease-out);
+}
+
+.item-deck__acoes button svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.item-deck__acoes button:hover:not(:disabled) {
+  background: var(--s-surface-raised);
+  color: var(--s-text);
+}
+
+.item-deck__acoes button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.item-deck__acoes button:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+  opacity: 1;
+}
+
+.catalogo-deck {
+  display: grid;
+  gap: var(--s-space-4);
+  padding: var(--s-space-5);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-lg);
+  background: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
+}
+
+.catalogo-deck__cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-space-4);
+}
+
+.catalogo-deck__cabecalho strong {
+  display: block;
+  font-size: var(--s-text-md);
+  font-weight: var(--s-weight-semibold);
+}
+
+.catalogo-deck__cabecalho span {
+  color: var(--s-text-muted);
+  font-size: var(--s-text-sm);
+}
+
+.catalogo-deck__grupo {
+  display: grid;
+  gap: var(--s-space-2);
+}
+
+.catalogo-deck__grupo > span {
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-caps);
+  text-transform: uppercase;
+}
+
+.catalogo-deck__grupo > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-space-2);
+}
+
+.catalogo-deck__grupo button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-space-2);
+  min-height: 2.25rem;
+  padding: 0 var(--s-space-3);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-full);
+  background: transparent;
+  color: var(--s-text);
+  font: inherit;
+  font-size: var(--s-text-sm);
+  cursor: pointer;
+  transition:
+    border-color var(--s-duration-fast) var(--s-ease-out),
+    background var(--s-duration-fast) var(--s-ease-out);
+}
+
+.catalogo-deck__grupo button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.catalogo-deck__grupo button .marca-servico {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.catalogo-deck__grupo button:hover:not(:disabled) {
+  border-color: var(--s-accent);
+  background: var(--s-accent-soft);
+}
+
+/* Já está no painel: continua visível, com a marca de conferido, porque
+   sumir da lista faria a pessoa procurar o que ela mesma acabou de colocar. */
+.catalogo-deck__grupo button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.catalogo-deck__grupo button:disabled svg:last-child {
+  color: var(--s-success);
+}
+
+.catalogo-deck__grupo button:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Marcas dos serviços                                                       */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * A caixa dá tamanho e cor; o desenho vem de `Marca`, no design system, e
+ * herda os dois. O par desta regra está em `apps/pwa/app/globals.css` — mesmo
+ * conjunto, mesmas cores, para que a tecla no editor e a tecla no aparelho
+ * não sejam duas coisas parecidas.
+ */
+.marca-servico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.marca-servico--youtube,
+.marca-servico--netflix {
+  color: var(--s-control-red);
+}
+
+.marca-servico--twitch {
+  color: var(--s-control-violet);
+}
+
+.marca-servico--disney {
+  color: var(--s-control-indigo);
+}
+
+.marca-servico--prime {
+  color: var(--s-control-cyan);
+}
+
+.marca-servico--spotify {
+  color: var(--s-control-green);
+}
+
+@media (max-width: 60rem) {
+  .editor-deck {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .editor-deck__perfis {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .editor-deck__rotulo {
+    width: 100%;
+    padding-bottom: 0;
+  }
+}
+
+/* A arte no catálogo: caixa fixa para que ícone de sistema, marca de serviço
+   e PNG de executável — três origens de tamanhos diferentes — não façam as
+   pastilhas da lista pularem de altura entre uma linha e outra. */
+.catalogo-deck__arte {
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+}
+
+.catalogo-deck__arte img,
+.catalogo-deck__arte svg,
+.catalogo-deck__arte .marca-servico {
+  width: 100%;
+  height: 100%;
+}
+
+.item-deck__arte img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

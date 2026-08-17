@@ -1340,17 +1340,21 @@ button {
   box-shadow: var(--s-glow-accent);
 }
 
+/*
+ * A caixa da marca.
+ *
+ * Ela define o tamanho e a cor; o desenho vem de `Marca`, no design system, e
+ * herda os dois. Antes eram caracteres soltos — "▶", "N", "prime" — e cada um
+ * exigia um ajuste próprio de corpo e espaçamento para não ficar maior ou
+ * menor que os vizinhos. Com forma vetorial na mesma grade dos ícones, a
+ * caixa é uma só e ninguém precisa mais compensar tipografia.
+ */
 .marca-servico {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 1.75rem;
   height: 1.75rem;
-  font-family: var(--s-font-display);
-  font-size: var(--s-text-sm);
-  font-weight: var(--s-weight-bold);
-  line-height: 1;
-  letter-spacing: var(--s-tracking-tight);
 }
 
 .marca-servico--youtube,
@@ -1358,20 +1362,20 @@ button {
   color: var(--s-control-red);
 }
 
-.marca-servico--twitch,
-.marca-servico--disney {
+.marca-servico--twitch {
   color: var(--s-control-violet);
+}
+
+.marca-servico--disney {
+  color: var(--s-control-indigo);
 }
 
 .marca-servico--prime {
   color: var(--s-control-cyan);
-  font-size: var(--s-text-2xs);
-  letter-spacing: normal;
 }
 
 .marca-servico--spotify {
   color: var(--s-control-green);
-  font-size: var(--s-text-xl);
 }
 
 @media (orientation: landscape) {

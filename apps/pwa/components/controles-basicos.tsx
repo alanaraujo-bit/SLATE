@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Icone, Rotulo } from "@slate/design-system";
+import { Icone, Marca, Rotulo } from "@slate/design-system";
 import type { AtalhoDeDeck, ItemDePerfilDeck, PerfilDeDeck } from "@slate/protocol";
 import {
   CONTROLES_ATALHOS,
@@ -194,17 +194,9 @@ export function ControlesBasicos({
 
 function Representacao({ controle }: { controle: Controle }) {
   if (controle.marca) {
-    const simbolos = {
-      youtube: "▶",
-      twitch: "T",
-      netflix: "N",
-      prime: "prime",
-      disney: "D+",
-      spotify: "≋",
-    } as const;
     return (
-      <span className={`marca-servico marca-servico--${controle.marca}`} aria-hidden>
-        {simbolos[controle.marca]}
+      <span className={`marca-servico marca-servico--${controle.marca}`}>
+        <Marca nome={controle.marca} tamanho="100%" />
       </span>
     );
   }

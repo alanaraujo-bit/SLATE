@@ -11,6 +11,8 @@
  * em `acoes.rs` fixa a lista do lado do Rust; `controles.test.ts` fixa esta.
  */
 
+import type { NomeMarca } from "@slate/design-system";
+
 export interface Controle {
   actionId: string;
   rotulo: string;
@@ -33,7 +35,7 @@ export interface Controle {
   /** Ocupa duas colunas no modo em pé: é a tecla mais usada. */
   destaque?: boolean;
   /** Marca visual própria para serviços conhecidos; não é um ícone do sistema. */
-  marca?: "youtube" | "twitch" | "netflix" | "prime" | "disney" | "spotify";
+  marca?: NomeMarca;
 }
 
 export const CONTROLES_MIDIA: readonly Controle[] = [
