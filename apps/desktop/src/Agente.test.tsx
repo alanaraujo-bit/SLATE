@@ -15,6 +15,31 @@ vi.mock("@tauri-apps/plugin-autostart", () => ({
   disable: vi.fn(),
 }));
 
+/*
+ * O jsdom não implementa `<dialog>`.
+ *
+ * `showModal` e `close` simplesmente não existem lá, e sem eles qualquer tela
+ * com diálogo quebra no teste por um motivo que nada tem a ver com o produto.
+ * O elemento nativo é usado de propósito na janela — ele traz foco preso,
+ * `Esc` e camada de topo de graça —, então o que falta é preenchido aqui, no
+ * ambiente de teste, e não evitado no código.
+ */
+beforeEach(() => {
+  const proto = window.HTMLDialogElement?.prototype;
+  if (!proto) return;
+  if (!proto.showModal) {
+    proto.showModal = function () {
+      this.open = true;
+    };
+  }
+  if (!proto.close) {
+    proto.close = function () {
+      this.open = false;
+      this.dispatchEvent(new Event("close"));
+    };
+  }
+});
+
 function celular(extra: Record<string, unknown> = {}) {
   return {
     id: "s1",
@@ -185,6 +210,12 @@ describe("tela principal do Agente", () => {
     await act(async () => {
       screen.getByRole("button", { name: "Remover" }).click();
     });
+    await act(async () => {
+      const confirmar = screen
+        .getAllByRole("button", { name: "Remover" })
+        .find((b) => b.closest(".modal"));
+      confirmar!.click();
+    });
 
     // Sem aparelho nenhum, a tela de parear precisa estar de pé — e o QR sai
     // sozinho, como sai para quem abre o programa pela primeira vez.
@@ -193,7 +224,7 @@ describe("tela principal do Agente", () => {
     expect(screen.getByRole("button", { name: "Código" })).toBeTruthy();
   });
 
-  it("remover um aparelho pede a remoção pelo processo em Rust", async () => {
+  it("remover um aparelho pede confirmação antes de tocar no processo em Rust", async () => {
     responder([celular()]);
     await montar();
 
@@ -201,6 +232,34 @@ describe("tela principal do Agente", () => {
       screen.getByRole("button", { name: "Remover" }).click();
     });
 
+    // Nada aconteceu ainda: remover é destrutivo e desfazer custa parear de
+    // novo, com a cerimônia física inteira. O primeiro clique abre a pergunta.
+    expect(invocar).not.toHaveBeenCalledWith("remover_dispositivo", { id: "s1" });
+    expect(screen.getByText("Remover este aparelho?")).toBeTruthy();
+
+    await act(async () => {
+      // O botão do diálogo, e não o da lista: os dois se chamam "Remover".
+      const confirmar = screen
+        .getAllByRole("button", { name: "Remover" })
+        .find((b) => b.closest(".modal"));
+      confirmar!.click();
+    });
+
     expect(invocar).toHaveBeenCalledWith("remover_dispositivo", { id: "s1" });
+  });
+
+  it("cancelar a remoção não remove nada", async () => {
+    responder([celular()]);
+    await montar();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Remover" }).click();
+    });
+    await act(async () => {
+      screen.getByRole("button", { name: "Cancelar" }).click();
+    });
+
+    expect(invocar).not.toHaveBeenCalledWith("remover_dispositivo", { id: "s1" });
+    expect(screen.getByText("Celular do Alan")).toBeTruthy();
   });
 });
