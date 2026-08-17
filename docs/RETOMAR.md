@@ -1,6 +1,12 @@
 # Onde paramos — 17/08/2026
 
-> **Adendo da sessão de Energia Remota.** O marco `P3-M5` foi aberto no plano com
+> **Adendo da sessão de Energia Remota — publicado em 17/08.** PWA em produção e
+> **Agente 0.1.8** assinado no ar, com `.exe`, `.sig` e `latest.json` anunciando
+> a versão. A disciplina do cache foi respeitada: push, CI inteiro verde
+> (`32074976732`, cinco jobs, e é ele quem grava o cache `agente-windows`), e só
+> então a tag. A publicação saiu em ~6 min.
+>
+> O marco `P3-M5` foi aberto no plano com
 > 13 tarefas. **Desligar funciona ponta a ponta; acordar não existe ainda.** O
 > que decide tudo está no [ADR-0006](./architecture/ADR-0006-energia-remota.md):
 > um navegador não emite quadro de broadcast, então acordar exige um Agente vivo
