@@ -47,10 +47,15 @@ banco com a validação de integração e ponta a ponta.
   em `apps/desktop/src-tauri/src/acoes.rs`, e acrescentar uma tecla é editar os
   dois lados e publicar. Nada aparece na tela sem funcionar do outro lado: cada
   grupo é liberado por capacidade negociada no handshake.
-- **Publicação automática do Agente.** O código, o instalador e o workflow
-  existem, mas a primeira release ainda depende das AÇÕES-008 e 009. Até isso
-  acontecer, a interface informa a indisponibilidade real em vez de prometer uma
-  atualização que não pode baixar.
+Estas duas descrições ficaram para trás e valem uma correção: a grade **é**
+configurável desde 17/08 — painéis com nome, cor, colunas, páginas e troca
+automática por programa em foco, montados na janela do Agente. A lista fixa
+em `controles.ts` e `acoes.rs` continua existindo como catálogo do que pode ser
+colocado num painel, e é ela que segue exigindo os dois lados.
+
+A **publicação automática do Agente** também já funciona: marcar uma tag
+`slate-v*` gera instalador, assinatura e `latest.json`. A primeira release saiu
+na 0.1.3 e a mais recente é a **0.1.7**.
 
 ## 3. Decisões que parecem erradas até você saber por quê
 
@@ -259,9 +264,10 @@ automática é silenciosa quando a rede falha; a busca manual sempre responde. A
 pessoa vê versão, notas, bytes baixados e pode adiar. A instalação é passiva e só
 começa depois da confirmação explícita.
 
-O instalador local mais recente é
-`apps/desktop/src-tauri/target/release/bundle/nsis/SLATE_0.1.2_x64-setup.exe`.
-Sua assinatura `.sig` foi verificada contra a chave pública do próprio Agente.
+O instalador oficial não é mais gerado à mão: ele sai da tag. A versão corrente
+é a **0.1.7**, publicada com `.exe`, `.exe.sig` e `latest.json` em
+<https://github.com/alanaraujo-bit/SLATE/releases>. O `pnpm instalador` continua
+existindo para gerar um `.exe` local sem publicar nada.
 
 O relay privado de releases existe em `services/api/src/atualizacoes.ts`: a API
 consulta a release com um token servidor-servidor, valida o manifesto e entrega
@@ -322,8 +328,16 @@ Nenhuma bloqueia o desenvolvimento. Detalhes em
 | **AÇÃO-002** Certificado de assinatura | SmartScreen avisa ao instalar o Agente |
 | **AÇÃO-004** Provedor de e-mail | Recuperação de senha; a tela de cadastro avisa |
 | **AÇÃO-007** Credenciais TURN | Prova real do caminho relay do WebRTC |
-| **AÇÃO-008** Token de leitura de releases no Railway | Consulta e download de atualização em produção |
-| **AÇÃO-009** Secrets da chave de atualização no GitHub | Publicação automática de releases assinadas |
+
+Duas saíram da lista:
+
+- **AÇÃO-009** (secrets da chave de atualização) está feita — `TAURI_SIGNING_
+  PRIVATE_KEY` e sua senha existem no repositório, e as releases saem assinadas
+  desde a 0.1.3.
+- **AÇÃO-008** (token de leitura de releases no Railway) deixou de ser
+  necessária quando o repositório passou a ser público: o `tauri.conf.json`
+  aponta o atualizador direto para o GitHub, sem passar pela API. Ela volta a
+  ser necessária **se o repositório voltar a ser privado** — ver §7.
 
 ## 9. Como manter o plano honesto
 

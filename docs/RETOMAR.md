@@ -28,17 +28,15 @@ Testado e em produção, salvo onde indicado.
 | Marcas próprias dos serviços | ✅ desenho nosso, no design system |
 | Editor de painéis com prévia de telefone | ✅ conferido nos dois temas |
 
-⚠️ **Empurrado e verificado no CI, mas ainda não distribuído.** Tudo da metade
-da tabela para baixo está na `main` (`383adf8`), com os cinco jobs verdes. A
-PWA sobe sozinha na Vercel a cada push, então essa metade já está no ar; o
-**Agente**, não — ele sai por release assinada, e o publicado continua sendo o
-`0.1.6`, que não tem os comandos de painel.
+✅ **Tudo isto está publicado.** A PWA subiu sozinha na Vercel e o Agente
+**0.1.7** saiu assinado em 17/08, com `.exe`, `.sig` e `latest.json` no ar. Os
+Agentes instalados enxergam a atualização pelo endpoint de sempre.
 
-Enquanto o Agente não for publicado, o celular cai na grade clássica: um Agente
-antigo não manda perfis, e a PWA trata isso como o caso normal. Nada quebra —
-só não aparece. Ver §9.
+Versões: Agente **0.1.7** publicado e assinado; PWA e API em produção.
 
-Versões: Agente **0.1.6** publicado e assinado; PWA e API em produção.
+Um Agente que ainda não atualizou continua funcionando com a PWA nova: sem
+perfis no `deck.estado`, o celular mantém a grade clássica. Nada quebra — os
+painéis só aparecem depois que aquele computador atualizar.
 
 ## 2. As decisões desta sessão que não podem ser desfeitas por engano
 
@@ -248,21 +246,21 @@ use os localizadores do Playwright (`locator`, `getByRole`), que não passam por
 Nada aqui bloqueia continuar programando. É o que **só você pode fazer**, em
 ordem de importância.
 
-### 1. Publicar o Agente — sem isso, nada disto chega ao celular
+### 1. ~~Publicar o Agente~~ — feito: 0.1.7 no ar
 
-Os painéis exigem código novo em Rust (os comandos Tauri e o envio do deck). O
-Agente publicado é o `0.1.6` e não os tem. **A PWA já pode subir sozinha, mas
-sozinha ela não mostra painel nenhum** — ela desenha o que o Agente manda, e um
-Agente antigo não manda perfis. As duas pontas se toleram (a PWA cai na grade
-clássica quando não vêm perfis), então a ordem não quebra nada; só não adianta
-publicar só um lado e ir olhar o celular.
+Publicado em 17/08 a partir de `cfa0fed`, com a disciplina do cache respeitada:
+empurrar para a `main`, esperar o CI (execução `32055712666`, cinco jobs
+verdes, e é ele quem grava o cache `agente-windows`) e só então marcar a tag.
 
-**A parte de esperar já está feita.** A armadilha do cache diz para empurrar
-para a `main`, esperar o CI terminar e só então marcar a tag. O CI fechou verde
-na execução `32049170198`, sobre o commit `383adf8`, e foi ali que o job
-`agente` gravou o cache `agente-windows` no branch padrão. Marque a tag a
-partir deste commit e a release sai em torno de seis minutos, não treze — não é
-preciso outro ciclo de empurrar e esperar.
+**Vale saber para a próxima:** o bump de versão mexe no `Cargo.lock`, e o
+`Cargo.lock` entra na chave do cache. Marcar a tag no mesmo instante do push
+teria feito a release procurar um cache que ainda não existia para aquele
+lock. Esperar o CI é o que manteve a publicação em **5min30** em vez dos treze
+minutos antigos.
+
+Conferido depois de sair: `latest.json` anunciando `0.1.7`, o `.exe` baixando
+com 200 pelo endereço que o próprio `tauri.conf.json` consulta, e a assinatura
+presente. Só falta abrir o Agente numa máquina e aceitar a atualização.
 
 ### 2. Olhar e dizer o que achou
 
