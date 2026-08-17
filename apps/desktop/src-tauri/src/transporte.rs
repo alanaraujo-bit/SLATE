@@ -1,6 +1,7 @@
 use crate::acoes::{self, EstadoComandos, RecepcaoAcao};
 use crate::atalhos::{Atalho, AtalhosPersonalizados, ConfiguracaoDeck, PerfilDeDeck};
 use crate::api::ClienteApi;
+use crate::energia;
 use crate::identidade::{
     mensagem_desafio_sinalizacao, mensagem_fingerprint_dtls, normalizar_fingerprint_dtls,
     verificar_assinatura, Identidade,
@@ -642,7 +643,28 @@ impl PeerConnectionEventHandler for EventosPar {
 
                                 proxima_sequencia_saida += 1;
                                 let inicio = Instant::now();
-                                let resultado = acoes::executar(acao, &atalhos);
+                                // O perfil é lido a cada execução, e não guardado
+                                // na abertura da sessão: a hibernação pode ser
+                                // ligada ou desligada no Windows com a sessão de
+                                // pé, e um perfil velho recusaria uma ação que a
+                                // máquina passou a suportar — ou pior, tentaria
+                                // uma que ela deixou de suportar.
+                                let perfil = energia::montar_perfil(
+                                    &energia::detectar(),
+                                    false,
+                                    None,
+                                );
+                                let resultado = match acoes::executar(acao, &atalhos, &perfil) {
+                                    acoes::Execucao::Concluida(resultado) => resultado,
+                                    // Acordar precisa da nuvem para saber o alvo,
+                                    // e a ponte ainda não está ligada aqui
+                                    // (P3-M5-T7). Recusar dizendo o que é continua
+                                    // sendo melhor que responder que deu certo
+                                    // sem ter emitido pacote nenhum.
+                                    acoes::Execucao::AcordarAlvo(_) => {
+                                        Err("acordar outro computador ainda não está disponível")
+                                    }
+                                };
                                 // A chave `error` é omitida quando deu certo, em
                                 // vez de ir como `null`: ausente é o que o
                                 // schema descreve, e `null` já custou toda

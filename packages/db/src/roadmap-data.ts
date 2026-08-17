@@ -740,6 +740,223 @@ export const ROADMAP: SeedItem[] = [
           { key: "P3-M4-T3", kind: "TASK", title: "Provedor de estado de mídia e áudio" },
         ],
       },
+      {
+        key: "P3-M5",
+        kind: "MILESTONE",
+        title: "Energia remota",
+        description:
+          "Bloquear, suspender, hibernar, reiniciar, desligar e acordar o computador pelo " +
+          "celular, com o estado de menor consumo que ainda preserve capacidade de retorno " +
+          "(Pronto para Retorno). Dirigido por capacidades reais da máquina, nunca por promessa.",
+        weight: 4,
+        // Depende do Motor de Ações porque toda ação de energia entra pelo mesmo
+        // registro fechado, e do transporte porque o retorno do acordar é a
+        // reconexão real do Agente — não a confirmação de envio de um pacote.
+        dependsOn: ["P3-M2", "P1-M5"],
+        children: [
+          {
+            key: "P3-M5-T1",
+            kind: "TASK",
+            title: "Decisão de arquitetura: o que software sozinho consegue fazer",
+            description:
+              "Registrar por escrito o limite físico que governa todo o resto: um navegador não " +
+              "emite pacote UDP, então acordar exige sempre um componente dentro do domínio de " +
+              "broadcast do alvo. Define os níveis de compatibilidade e as alternativas recusadas.",
+            gates: [
+              g("adr", "ADR-0006 escrito, com o limite físico e a ponte de acordar"),
+              g("niveis", "Níveis de compatibilidade definidos a partir de capacidade real"),
+              g("recusadas", "Alternativas recusadas registradas com o motivo"),
+            ],
+          },
+          {
+            key: "P3-M5-T2",
+            kind: "TASK",
+            title: "Perfil de capacidades de energia do computador",
+            description:
+              "O Agente descobre o que aquela máquina de fato suporta — suspender, hibernar, " +
+              "acordar pela rede, placa de rede ativa, endereço físico, permissão de driver — e " +
+              "publica isso pelo protocolo. Duas máquinas nunca são presumidas iguais.",
+            dependsOn: ["P3-M5-T1"],
+            gates: [
+              g("deteccao", "Estados de energia suportados são lidos do Windows, não presumidos"),
+              g("adaptador", "Placa de rede ativa e endereço físico são identificados"),
+              g("permissao-driver", "Permissão de acordar do driver e do Windows é lida"),
+              g("desconhecido", "Capacidade não determinável é reportada como desconhecida, nunca como suporte"),
+              g("protocolo", "Perfil viaja por mensagem própria, atrás de capacidade negociada"),
+            ],
+          },
+          {
+            key: "P3-M5-T3",
+            kind: "TASK",
+            title: "Ações de energia no Motor de Ações",
+            description:
+              "Bloquear, suspender, hibernar, reiniciar, desligar e cancelar desligamento, " +
+              "entrando pelo mesmo registro fechado das demais ações.",
+            dependsOn: ["P3-M5-T2"],
+            gates: [
+              g("registro", "As seis ações existem no registro fechado e nada mais executa"),
+              g("mecanismo", "Cada ação usa a API do Windows correspondente, sem linha de comando montada"),
+              g("sem-forcar", "Desligar e reiniciar não forçam o fechamento de programas por padrão"),
+              g("indisponivel", "Ação sem suporte na máquina é recusada com motivo, não tentada"),
+            ],
+          },
+          {
+            key: "P3-M5-T4",
+            kind: "TASK",
+            title: "Modelo de permissão e registro de auditoria",
+            description:
+              "Desligar é autoridade diferente de pausar música. A concessão é feita na janela " +
+              "do Agente, por aparelho, e sobrevive a repareamento. Acordar é separado de " +
+              "desligar porque acordar não destrói nada.",
+            dependsOn: ["P3-M5-T3"],
+            gates: [
+              g("nao-no-pareamento", "Pareamento não concede nenhuma ação de energia"),
+              g("concessao-local", "Concessão é feita no computador e sobrevive à reconfirmação do par"),
+              g("separacao", "Acordar e desligar exigem autorizações distintas"),
+              g("auditoria", "Toda ação de energia é registrada com aparelho, ação e resultado"),
+              g("limite-taxa", "Repetição e enxurrada de pedidos de energia são limitadas"),
+            ],
+          },
+          {
+            key: "P3-M5-T5",
+            kind: "TASK",
+            title: "Pronto para Retorno: escolher o estado de menor consumo com retorno confiável",
+            description:
+              "O SLATE escolhe sozinho entre desligar e hibernar conforme o que aquela máquina " +
+              "comprovadamente consegue: desligamento quando o retorno a partir dele for " +
+              "confiável, hibernação quando não for. Nunca promete consumo zero com retorno.",
+            dependsOn: ["P3-M5-T2", "P3-M5-T3"],
+            gates: [
+              g("escolha", "Estado é escolhido a partir do perfil, com preferência registrada"),
+              g("sem-promessa", "Ausência de retorno confiável nunca é apresentada como Pronto para Retorno"),
+              g("reversivel", "Pessoa pode ver e trocar o estado escolhido"),
+            ],
+          },
+          {
+            key: "P3-M5-T6",
+            kind: "TASK",
+            title: "Último estado conhecido do computador na nuvem",
+            description:
+              "Um computador em Pronto para Retorno está ausente da sinalização, e hoje ausente " +
+              "é indistinguível de nunca ter existido. Sem isto não há tela de computadores, " +
+              "porque a máquina desligada simplesmente não aparece.",
+            dependsOn: ["P3-M5-T5"],
+            gates: [
+              g("persistencia", "Último acesso, capacidades e estado de energia sobrevivem à desconexão"),
+              g("intencional", "Saída deliberada para Pronto para Retorno se distingue de queda"),
+              g("listagem", "PWA lista computadores offline da conta com o que se sabe deles"),
+            ],
+          },
+          {
+            key: "P3-M5-T7",
+            kind: "TASK",
+            title: "Acordar pela rede e a ponte de acordar",
+            description:
+              "O pacote mágico é emitido por um Agente online na mesma rede do alvo, acionado " +
+              "pelo celular como uma ação comum — reaproveitando anti-repetição, escopo e " +
+              "auditoria. O celular manda o identificador do computador; o endereço físico " +
+              "nunca sai da nuvem para o celular.",
+            dependsOn: ["P3-M5-T6"],
+            gates: [
+              g("pacote", "Pacote mágico é montado conforme a especificação e coberto por teste"),
+              g("nunca-o-celular", "Celular manda identificador; endereço físico jamais viaja pelo canal"),
+              g("ponte-autorizada", "Ponte só aciona alvo da mesma conta, e só com autorização"),
+              g("sem-ponte", "Ausência de ponte na rede é detectada e explicada, não silenciada"),
+              g("acordar-real", "Máquina real em Pronto para Retorno acorda e o Agente reconecta"),
+            ],
+          },
+          {
+            key: "P3-M5-T8",
+            kind: "TASK",
+            title: "Máquina de estados do acordar",
+            description:
+              "Pedido, envio, espera pelo computador, Agente conectando, online. Pacote enviado " +
+              "não é computador ligado, e a interface nunca diz que é.",
+            dependsOn: ["P3-M5-T7"],
+            gates: [
+              g("estados", "Os estados são derivados de eventos reais, incluindo a reconexão do Agente"),
+              g("tempo-esgotado", "Tempo esgotado, alvo inalcançável e falha são estados distintos"),
+              g("duplicado", "Pedido repetido não inicia duas esperas nem multiplica pacotes"),
+              g("retentativa", "Retentativa é limitada e não vira enxurrada de pacotes"),
+            ],
+          },
+          {
+            key: "P3-M5-T9",
+            kind: "TASK",
+            title: "Configuração assistida e diagnóstico no Agente",
+            description:
+              "O que puder ser configurado com segurança pelo software é configurado; o que " +
+              "depender do firmware vira orientação específica com um botão de testar de novo. " +
+              "Nada de alterar BIOS por baixo dos panos.",
+            dependsOn: ["P3-M5-T2"],
+            gates: [
+              g("hibernacao", "Hibernação desligada é detectada e pode ser ligada com consentimento"),
+              g("permissao", "Permissão de acordar do adaptador é verificada e corrigível"),
+              g("orientacao", "Dependência de firmware vira orientação identificada, não bloqueio da funcionalidade"),
+              g("testar-de-novo", "Autoteste pode ser repetido e o resultado fica guardado"),
+            ],
+          },
+          {
+            key: "P3-M5-T10",
+            kind: "TASK",
+            title: "Superfície de energia na PWA",
+            description:
+              "Os controles de energia no celular e no tablet, mostrando só o que aquele " +
+              "computador sabe fazer, com proteção adequada no que é destrutivo.",
+            dependsOn: ["P3-M5-T5", "P3-M5-T8"],
+            gates: [
+              g("por-capacidade", "Só aparece o que o computador anunciou saber fazer"),
+              g("confirmacao", "Desligar e reiniciar exigem confirmação deliberada, não um toque"),
+              g("acompanhamento", "Progresso do acordar é mostrado como estado real, não otimismo"),
+              g("retrato-paisagem", "Telefone e tablet, em pé e deitado, conferidos"),
+              g("erro", "Falha, sem suporte e tempo esgotado têm tela própria e dizem o que fazer"),
+            ],
+          },
+          {
+            key: "P3-M5-T11",
+            kind: "TASK",
+            title: "Tela de capacidades de energia",
+            description:
+              "Diagnóstico em linguagem de produto: o que funciona, o que precisa de ajuste e o " +
+              "que aquela máquina não suporta. S3, S4, ACPI e pacote mágico ficam nos detalhes " +
+              "avançados, não na tela principal.",
+            dependsOn: ["P3-M5-T9", "P3-M5-T10"],
+            gates: [
+              g("linguagem", "Tela principal não exige conhecer estados ACPI nem pacote mágico"),
+              g("sem-esconder", "Limitação de hardware ou de rede aparece, em vez de ser omitida"),
+              g("avancado", "Detalhes técnicos existem para quem procurar"),
+            ],
+          },
+          {
+            key: "P3-M5-T12",
+            kind: "TASK",
+            title: "Acordar de outra rede",
+            description:
+              "Acordar o computador de casa estando no 4G. Investigar e implementar o melhor " +
+              "caminho puramente por software, e detectar honestamente as topologias em que ele " +
+              "não existe — sem exigir compra de equipamento e sem abrir porta insegura.",
+            dependsOn: ["P3-M5-T7"],
+            gates: [
+              g("sem-compra", "Nenhum caminho implementado exige comprar equipamento"),
+              g("sem-porta", "Nenhum caminho implementado pede abertura insegura de porta"),
+              g("deteccao", "Topologia sem caminho possível é detectada e explicada"),
+              g("fora-do-laboratorio", "Funciona entre redes de verdade, não só em ambiente controlado"),
+            ],
+          },
+          {
+            key: "P3-M5-T13",
+            kind: "TASK",
+            title: "Testes e regressão da energia remota",
+            dependsOn: ["P3-M5-T10", "P3-M5-T12"],
+            gates: [
+              g("unidade", "Detecção, pacote, autorização e máquina de estados são cobertos"),
+              g("negativos", "Pedido malformado, não autorizado, aparelho revogado e alvo sem suporte"),
+              g("versao", "Agente antigo sem energia remota continua funcionando com a PWA nova"),
+              g("regressao", "Suíte existente continua verde com a energia remota dentro"),
+            ],
+          },
+        ],
+      },
     ],
   },
   {

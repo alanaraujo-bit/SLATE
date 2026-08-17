@@ -1,5 +1,6 @@
 mod acoes;
 mod atalhos;
+mod energia;
 mod foco;
 mod icone;
 mod api;

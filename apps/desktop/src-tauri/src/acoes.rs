@@ -1,4 +1,5 @@
 use crate::atalhos::{validar_caminho, AtalhosPersonalizados};
+use crate::energia::{AcaoEnergia, PerfilEnergia};
 use crate::pares::ParConfiavel;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
@@ -28,6 +29,22 @@ pub enum Acao {
     /// seletor de arquivo do Windows. Nada do que chega pelo canal vira alvo de
     /// execução — é a mesma promessa dos atalhos fixos, com a lista em disco.
     AbrirPrograma(String),
+    /// Mexe no estado de energia **deste** computador (ADR-0006).
+    Energia(AcaoEnergia),
+    /// Leva este computador ao estado de Pronto para Retorno que o perfil
+    /// escolheu. É `Energia` com o alvo decidido na execução, e não no pedido:
+    /// qual estado é o certo depende do que a máquina comprovadamente suporta,
+    /// e essa decisão não pode vir do celular.
+    ProntoParaRetorno,
+    /// Pede a **este** Agente que emita o pacote que acorda outra máquina.
+    ///
+    /// O alvo está desligado, então quem recebe o pedido é sempre uma ponte —
+    /// um Agente vivo na mesma rede (ADR-0006 §2). O conteúdo é o identificador
+    /// do dispositivo alvo e **nunca** um endereço físico: o endereço vem da
+    /// nuvem, autenticado pela identidade da própria ponte e restrito à própria
+    /// conta. Se ele viajasse no pedido, qualquer aparelho pareado poderia
+    /// mandar um Agente emitir quadros para endereços arbitrários da rede.
+    Acordar(String),
 }
 
 /// Atalhos de abertura.
@@ -163,18 +180,47 @@ pub fn receber(
         "atalho.spotify" => Acao::AbrirAtalho(Atalho::Spotify),
         "atalho.disney" => Acao::AbrirAtalho(Atalho::Disney),
         "atalho.prime" => Acao::AbrirAtalho(Atalho::Prime),
+        // Energia (ADR-0006). Entram no mesmo registro fechado, e não por uma
+        // porta própria: é o que faz cada uma herdar a janela de timestamp, a
+        // sequência, os ids já vistos e a verificação de escopo sem código novo.
+        "sistema.bloquear" => Acao::Energia(AcaoEnergia::Bloquear),
+        "sistema.suspender" => Acao::Energia(AcaoEnergia::Suspender),
+        "sistema.hibernar" => Acao::Energia(AcaoEnergia::Hibernar),
+        "sistema.reiniciar" => Acao::Energia(AcaoEnergia::Reiniciar),
+        "sistema.desligar" => Acao::Energia(AcaoEnergia::Desligar),
+        "sistema.cancelar-desligamento" => Acao::Energia(AcaoEnergia::CancelarDesligamento),
+        "sistema.pronto-para-retorno" => Acao::ProntoParaRetorno,
         // `programa.<id>` é atalho cadastrado neste computador. O id só é
         // aceito como chave de busca — quem existe de fato é decidido em
         // `executar`, contra a lista em disco.
-        outro => match outro.strip_prefix("programa.") {
-            Some(id) if !id.is_empty() && id.len() <= 64 => Acao::AbrirPrograma(id.to_string()),
-            _ => {
-                return RecepcaoAcao::Recusada {
-                    id: envelope.id,
-                    motivo: "nao_encontrada",
+        outro => {
+            // `sistema.acordar.<id>` segue a mesma forma, e pelo mesmo motivo:
+            // o identificador é chave de busca na nuvem, nunca um alvo. Um
+            // endereço físico disfarçado de identificador continua sendo
+            // identificador — ele não é usado para montar pacote nenhum.
+            if let Some(id) = outro.strip_prefix("sistema.acordar.") {
+                if !id.is_empty() && id.len() <= 128 {
+                    Acao::Acordar(id.to_string())
+                } else {
+                    return RecepcaoAcao::Recusada {
+                        id: envelope.id,
+                        motivo: "nao_encontrada",
+                    };
+                }
+            } else {
+                match outro.strip_prefix("programa.") {
+                    Some(id) if !id.is_empty() && id.len() <= 64 => {
+                        Acao::AbrirPrograma(id.to_string())
+                    }
+                    _ => {
+                        return RecepcaoAcao::Recusada {
+                            id: envelope.id,
+                            motivo: "nao_encontrada",
+                        }
+                    }
                 }
             }
-        },
+        }
     };
 
     if !par.tem_escopo(escopo_exigido(&acao)) {
@@ -208,10 +254,53 @@ pub fn escopo_exigido(acao: &Acao) -> &'static str {
         // processo. Separar em dois escopos daria duas caixas para marcar sem
         // nenhum ganho de segurança.
         Acao::AbrirAtalho(_) | Acao::AbrirPrograma(_) => "system.process",
+        // Energia é autoridade própria, e nenhuma delas vem no pareamento
+        // (ADR-0006 §6).
+        Acao::Energia(_) | Acao::ProntoParaRetorno => "system.power",
+        // Acordar é separado de desligar de propósito: não é o mesmo risco.
+        // Acordar, no pior caso, liga uma máquina à toa; desligar pode custar
+        // trabalho não salvo. Um escopo só obrigaria quem quer o botão de ligar
+        // a conceder também o de desligar.
+        Acao::Acordar(_) => "system.wake",
     }
 }
 
-pub fn executar(acao: Acao, cadastrados: &AtalhosPersonalizados) -> Result<(), &'static str> {
+/// O que sair de `executar`.
+///
+/// Existe porque acordar não cabe no mesmo formato das outras: todas as demais
+/// ações terminam neste processo, em microssegundos, e acordar precisa
+/// perguntar à nuvem qual o alvo antes de emitir qualquer coisa — o que é
+/// assíncrono e pode falhar por rede.
+///
+/// Devolver um pedido em vez de um resultado obriga o chamador, pelo
+/// compilador, a tratar esse caminho. A alternativa — um braço que devolve erro
+/// e alguém lembrar de interceptar antes — é exatamente a classe de defeito que
+/// este projeto já pagou caro: recurso pronto dos dois lados e nenhum comando
+/// registrado no meio, sem erro em lugar nenhum.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Execucao {
+    Concluida(Result<(), &'static str>),
+    /// Emitir o pacote que acorda o dispositivo de id informado. Quem resolve o
+    /// endereço é a nuvem, nunca o pedido que chegou pelo canal.
+    AcordarAlvo(String),
+}
+
+pub fn executar(
+    acao: Acao,
+    cadastrados: &AtalhosPersonalizados,
+    perfil: &PerfilEnergia,
+) -> Execucao {
+    if let Acao::Acordar(alvo) = acao {
+        return Execucao::AcordarAlvo(alvo);
+    }
+    Execucao::Concluida(executar_local(acao, cadastrados, perfil))
+}
+
+fn executar_local(
+    acao: Acao,
+    cadastrados: &AtalhosPersonalizados,
+    perfil: &PerfilEnergia,
+) -> Result<(), &'static str> {
     // Três famílias com mecanismos diferentes: tecla de mídia é sinal ao
     // aplicativo em foco, atalho de site abre o navegador, atalho cadastrado
     // executa um programa. Separar aqui, e não dentro de um `match` só, é o que
@@ -227,6 +316,26 @@ pub fn executar(acao: Acao, cadastrados: &AtalhosPersonalizados) -> Result<(), &
             abrir_programa(&atalho.caminho)
         }
         Acao::AbrirAtalho(atalho) => abrir_endereco(atalho.url()),
+        Acao::Energia(acao_energia) => crate::energia::executar(acao_energia, perfil),
+        // Qual estado é o certo depende do que esta máquina comprovadamente
+        // suporta, e essa decisão não vem do celular: ela sai do perfil, aqui.
+        Acao::ProntoParaRetorno => match perfil.pronto_para_retorno {
+            crate::energia::EstadoProntoParaRetorno::Desligado => {
+                crate::energia::executar(AcaoEnergia::Desligar, perfil)
+            }
+            crate::energia::EstadoProntoParaRetorno::Hibernado => {
+                crate::energia::executar(AcaoEnergia::Hibernar, perfil)
+            }
+            // Sem retorno confiável não existe Pronto para Retorno, e desligar
+            // assim mesmo deixaria a máquina inalcançável. Recusar é o certo.
+            crate::energia::EstadoProntoParaRetorno::Nenhum => {
+                Err("este computador não consegue voltar sozinho depois de desligar")
+            }
+        },
+        // Tratado em `executar`, antes de chegar aqui: acordar precisa da
+        // nuvem. O braço existe para o compilador cobrar quem acrescentar uma
+        // ação, e nunca é alcançado.
+        Acao::Acordar(_) => Err("acordar é resolvido pela ponte"),
         Acao::ReproduzirPausar
         | Acao::ProximaFaixa
         | Acao::FaixaAnterior
@@ -253,9 +362,11 @@ fn apertar_tecla_de_midia(acao: Acao) -> Result<(), &'static str> {
             Acao::AumentarVolume => VK_VOLUME_UP.0 as u8,
             Acao::DiminuirVolume => VK_VOLUME_DOWN.0 as u8,
             Acao::Mudo => VK_VOLUME_MUTE.0 as u8,
-            Acao::AbrirAtalho(_) | Acao::AbrirPrograma(_) => {
-                return Err("atalho não é tecla de mídia")
-            }
+            Acao::AbrirAtalho(_)
+            | Acao::AbrirPrograma(_)
+            | Acao::Energia(_)
+            | Acao::ProntoParaRetorno
+            | Acao::Acordar(_) => return Err("essa ação não é tecla de mídia"),
         };
         // A ação é deliberadamente limitada a teclas de mídia registradas;
         // nenhum código, atalho ou conteúdo arbitrário chega ao Windows.
@@ -343,6 +454,37 @@ mod testes {
 
     fn par(escopos: &[&str]) -> ParConfiavel {
         par_com_local(escopos, &[])
+    }
+
+    fn atalhos_vazios() -> AtalhosPersonalizados {
+        let pasta = std::env::temp_dir().join(format!(
+            "slate-acoes-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        AtalhosPersonalizados::carregar(&pasta).unwrap()
+    }
+
+    fn perfil_de_teste() -> PerfilEnergia {
+        use crate::energia::{EstadoProntoParaRetorno, NivelEnergia, Suporte};
+        PerfilEnergia {
+            bloquear: Suporte::Sim,
+            suspender: Suporte::Sim,
+            hibernar: Suporte::Sim,
+            reiniciar: Suporte::Sim,
+            desligar: Suporte::Sim,
+            cancelar_desligamento: Suporte::Sim,
+            acordar_pela_rede: Suporte::Sim,
+            acordar_de_suspenso: Suporte::Sim,
+            acordar_de_hibernado: Suporte::Sim,
+            acordar_de_desligado: Suporte::Desconhecido,
+            pronto_para_retorno: EstadoProntoParaRetorno::Hibernado,
+            nivel: NivelEnergia::Padrao,
+            adaptador: None,
+            tipo_de_adaptador: None,
+            impedimentos: Vec::new(),
+            testado_em: None,
+        }
     }
 
     fn par_com_local(escopos: &[&str], locais: &[&str]) -> ParConfiavel {
@@ -602,6 +744,191 @@ mod testes {
                 "deixou passar: {endereco}"
             );
         }
+    }
+
+    #[test]
+    fn nenhuma_acao_de_energia_passa_com_os_escopos_do_pareamento() {
+        // O ponto do ADR-0006 §6: um celular recém-pareado controla mídia e não
+        // desliga nem acorda computador nenhum. Se alguém acrescentar
+        // `system.power` a `ESCOPOS_PADRAO`, este teste cai — e é para cair.
+        let pareado = par(&["action.execute", "system.media", "state.read", "deck.read"]);
+        for identificador in [
+            "sistema.bloquear",
+            "sistema.suspender",
+            "sistema.hibernar",
+            "sistema.reiniciar",
+            "sistema.desligar",
+            "sistema.cancelar-desligamento",
+            "sistema.pronto-para-retorno",
+            "sistema.acordar.abc-123",
+        ] {
+            let mut estado = EstadoComandos::depois_do_hello();
+            assert_eq!(
+                receber(&pedido("um", 1, 10_000, identificador), &pareado, &mut estado, 10_000),
+                RecepcaoAcao::Recusada {
+                    id: "um".into(),
+                    motivo: "escopo_negado",
+                },
+                "escapou da verificação de escopo: {identificador}"
+            );
+        }
+    }
+
+    #[test]
+    fn toda_a_grade_de_energia_e_reconhecida() {
+        // A grade da PWA e a lista daqui precisam falar dos mesmos
+        // identificadores. Um botão que existe na tela e não existe aqui
+        // responde "ação não encontrada", que é pior do que não existir.
+        let esperadas = [
+            ("sistema.bloquear", Acao::Energia(AcaoEnergia::Bloquear)),
+            ("sistema.suspender", Acao::Energia(AcaoEnergia::Suspender)),
+            ("sistema.hibernar", Acao::Energia(AcaoEnergia::Hibernar)),
+            ("sistema.reiniciar", Acao::Energia(AcaoEnergia::Reiniciar)),
+            ("sistema.desligar", Acao::Energia(AcaoEnergia::Desligar)),
+            (
+                "sistema.cancelar-desligamento",
+                Acao::Energia(AcaoEnergia::CancelarDesligamento),
+            ),
+            ("sistema.pronto-para-retorno", Acao::ProntoParaRetorno),
+        ];
+
+        let autorizado = par_com_local(&["action.execute"], &["system.power"]);
+        let mut estado = EstadoComandos::depois_do_hello();
+
+        for (indice, (identificador, esperada)) in esperadas.iter().enumerate() {
+            let seq = indice as i64 + 1;
+            assert_eq!(
+                receber(
+                    &pedido(&format!("id-{seq}"), seq, 10_000, identificador),
+                    &autorizado,
+                    &mut estado,
+                    10_000,
+                ),
+                RecepcaoAcao::Aceita {
+                    id: format!("id-{seq}"),
+                    acao: esperada.clone(),
+                },
+                "identificador não reconhecido: {identificador}"
+            );
+        }
+    }
+
+    #[test]
+    fn acordar_e_desligar_sao_autorizacoes_separadas() {
+        // Quem quer só o botão de ligar não é obrigado a conceder o de
+        // desligar. Se alguém fundir os dois escopos, este teste cai.
+        let so_acordar = par_com_local(&["action.execute"], &["system.wake"]);
+        let mut estado = EstadoComandos::depois_do_hello();
+        assert_eq!(
+            receber(
+                &pedido("um", 1, 10_000, "sistema.acordar.alvo-1"),
+                &so_acordar,
+                &mut estado,
+                10_000,
+            ),
+            RecepcaoAcao::Aceita {
+                id: "um".into(),
+                acao: Acao::Acordar("alvo-1".into()),
+            }
+        );
+
+        // E o mesmo aparelho não desliga nada.
+        let mut estado = EstadoComandos::depois_do_hello();
+        assert_eq!(
+            receber(
+                &pedido("dois", 1, 10_000, "sistema.desligar"),
+                &so_acordar,
+                &mut estado,
+                10_000,
+            ),
+            RecepcaoAcao::Recusada {
+                id: "dois".into(),
+                motivo: "escopo_negado",
+            }
+        );
+
+        // E a recíproca: quem pode desligar não acorda os outros por tabela.
+        let so_desligar = par_com_local(&["action.execute"], &["system.power"]);
+        let mut estado = EstadoComandos::depois_do_hello();
+        assert_eq!(
+            receber(
+                &pedido("tres", 1, 10_000, "sistema.acordar.alvo-1"),
+                &so_desligar,
+                &mut estado,
+                10_000,
+            ),
+            RecepcaoAcao::Recusada {
+                id: "tres".into(),
+                motivo: "escopo_negado",
+            }
+        );
+    }
+
+    #[test]
+    fn acordar_nunca_carrega_endereco_fisico() {
+        // Mesma promessa de `atalho_de_programa_exige_a_mesma_concessao_e_nunca_carrega_caminho`,
+        // e pelo mesmo motivo: o identificador é chave de busca na nuvem. Se
+        // algum dia alguém trocar isto por "o celular manda o endereço", este
+        // teste cai. Um endereço disfarçado de identificador continua sendo
+        // identificador — ele não vira alvo de pacote nenhum, porque quem
+        // resolve o alvo é a nuvem contra a própria conta.
+        let autorizado = par_com_local(&["action.execute"], &["system.wake"]);
+
+        let mut estado = EstadoComandos::depois_do_hello();
+        assert_eq!(
+            receber(
+                &pedido("um", 1, 10_000, "sistema.acordar.AA:BB:CC:DD:EE:FF"),
+                &autorizado,
+                &mut estado,
+                10_000,
+            ),
+            RecepcaoAcao::Aceita {
+                id: "um".into(),
+                // Continua sendo um id opaco. Não há caminho daqui até um
+                // pacote sem a nuvem confirmar que este id é da conta.
+                acao: Acao::Acordar("AA:BB:CC:DD:EE:FF".into()),
+            }
+        );
+
+        // Sem identificador não há ação.
+        let mut estado = EstadoComandos::depois_do_hello();
+        assert!(matches!(
+            receber(
+                &pedido("dois", 1, 10_000, "sistema.acordar."),
+                &autorizado,
+                &mut estado,
+                10_000,
+            ),
+            RecepcaoAcao::Recusada { motivo: "nao_encontrada", .. }
+        ));
+    }
+
+    #[test]
+    fn acordar_sai_de_executar_como_pedido_e_nao_como_resultado() {
+        // O compilador cobra o tratamento do caminho assíncrono. Se alguém
+        // colapsar isto num `Result`, acordar vira uma ação que "deu certo"
+        // sem nunca ter emitido pacote nenhum.
+        let atalhos = atalhos_vazios();
+        let perfil = perfil_de_teste();
+        assert_eq!(
+            executar(Acao::Acordar("alvo-1".into()), &atalhos, &perfil),
+            Execucao::AcordarAlvo("alvo-1".into())
+        );
+    }
+
+    #[test]
+    fn pronto_para_retorno_recusa_quando_nao_ha_volta() {
+        // Desligar uma máquina que não sabe voltar a deixaria inalcançável — o
+        // pior resultado possível desta funcionalidade.
+        let atalhos = atalhos_vazios();
+        let mut perfil = perfil_de_teste();
+        perfil.pronto_para_retorno = crate::energia::EstadoProntoParaRetorno::Nenhum;
+        assert_eq!(
+            executar(Acao::ProntoParaRetorno, &atalhos, &perfil),
+            Execucao::Concluida(Err(
+                "este computador não consegue voltar sozinho depois de desligar"
+            ))
+        );
     }
 
     #[test]

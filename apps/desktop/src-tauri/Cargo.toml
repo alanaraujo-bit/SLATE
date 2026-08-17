@@ -103,6 +103,23 @@ windows = { version = "0.58", features = [
     # `QueryFullProcessImageNameW` — que traduzem o processo em nome de
     # arquivo — moram aqui.
     "Win32_System_Threading",
+    # Energia remota (ADR-0006).
+    #
+    # `Power` traz `GetPwrCapabilities` — a leitura de quais estados esta
+    # máquina suporta de verdade — e `SetSuspendState`. `Shutdown` traz
+    # `LockWorkStation`, `InitiateSystemShutdownExW` e `AbortSystemShutdownW`.
+    "Win32_System_Power",
+    "Win32_System_Shutdown",
+    # Desligar exige habilitar `SeShutdownPrivilege` no token do processo: ele
+    # existe em todo usuário interativo, mas nasce desabilitado, e sem
+    # `AdjustTokenPrivileges` o desligamento falha com acesso negado.
+    "Win32_Security",
+    # O adaptador de rede ativo e o endereço físico dele, para o pacote mágico.
+    # `Ndis` traz `IfOperStatusUp` e `WinSock` o `SOCKADDR_IN` de onde sai o
+    # IPv4 que dá o broadcast da sub-rede.
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_Networking_WinSock",
 ] }
 
 [features]

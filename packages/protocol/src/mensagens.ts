@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { hello } from "./handshake";
+import { perfilEnergia } from "./energia";
 
 /**
  * Schemas de conteúdo por tipo de mensagem (ADR-0003).
@@ -23,6 +24,16 @@ export const ESCOPOS = [
   "system.input",
   "system.process",
   "system.shell",
+  /**
+   * Desligar, reiniciar, hibernar, suspender e bloquear (ADR-0006).
+   *
+   * Separado de `system.wake` porque não é o mesmo risco: acordar, no pior caso,
+   * liga uma máquina à toa; desligar pode custar trabalho não salvo. Um escopo
+   * só obrigaria quem quer o botão de ligar a conceder também o de desligar.
+   */
+  "system.power",
+  /** Pedir a um Agente-ponte que emita o pacote que acorda outra máquina. */
+  "system.wake",
 ] as const;
 
 export type Escopo = (typeof ESCOPOS)[number];
@@ -42,6 +53,12 @@ export const ESCOPOS_PADRAO: readonly Escopo[] = [
 export const ESCOPOS_SOMENTE_NO_PC: readonly Escopo[] = [
   "system.shell",
   "action.define",
+  // Desligar o computador de alguém é autoridade de quem está na frente dele.
+  // Pelo mesmo motivo de `system.process`: a conta revoga, mas nunca concede
+  // (ADR-0004 §4). Vale também para acordar — quem não pode desligar aquele
+  // computador também não decide sozinho que ele deve ligar.
+  "system.power",
+  "system.wake",
 ];
 
 // ---------------------------------------------------------------------------
@@ -223,6 +240,30 @@ export const deckEstado = z.object({
 
 export type DeckEstado = z.infer<typeof deckEstado>;
 
+/**
+ * O perfil de energia daquele computador, enviado depois do hello.
+ *
+ * Mensagem própria em vez de capacidades no hello porque as duas coisas têm
+ * formatos incompatíveis: `capabilities` é uma lista de nomes, e isto é um mapa
+ * de valores de três estados por máquina, com adaptador e impedimentos junto.
+ * Espremer isso em nomes de capacidade daria strings como
+ * `energia.acordar-de-hibernado-desconhecido`, que ninguém consegue evoluir.
+ *
+ * A capacidade `energia.controle` continua existindo, e é ela que diz se esta
+ * mensagem chega — um Agente antigo não a anuncia e a PWA não espera perfil.
+ */
+export const energiaEstado = z.object({
+  perfil: perfilEnergia,
+  /**
+   * Se este Agente pode servir de ponte para acordar outras máquinas da conta:
+   * ele está online, tem rede utilizável e recebeu a concessão. Ausente em
+   * Agentes que não sabem ser ponte.
+   */
+  podeSerPonte: z.boolean().optional(),
+});
+
+export type EnergiaEstado = z.infer<typeof energiaEstado>;
+
 export const contextoAlterado = z.object({
   /** Perfil que passou a valer. */
   profileId: z.string().min(1).max(128),
@@ -251,6 +292,7 @@ export const SCHEMAS = {
   "state.system": estadoSistema,
   "state.media": estadoMidia,
   "deck.estado": deckEstado,
+  "energia.estado": energiaEstado,
   "context.changed": contextoAlterado,
 } as const;
 
@@ -292,6 +334,12 @@ export const ESCOPO_EXIGIDO: Record<TipoConhecido, Escopo | null> = {
   // atalhos aparecem é a capacidade `action.atalhos`, anunciada por par — este
   // escopo só diz que a lista pode ser recebida, não que ela pode ser aberta.
   "deck.estado": "deck.read",
+  // Receber o perfil é `state.read`, que o pareamento concede — saber que
+  // aquele computador hiberna não é poder hibernar. Quem autoriza *executar* é
+  // `system.power`/`system.wake`, verificado na ação. Esconder o perfil de quem
+  // não pode desligar deixaria a interface sem como explicar por que o botão
+  // não está lá.
+  "energia.estado": "state.read",
   "context.changed": "state.read",
 };
 

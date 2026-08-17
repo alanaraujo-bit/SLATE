@@ -39,6 +39,24 @@ export const CAPACIDADES = [
    */
   "action.atalhos",
   "action.define",
+  /**
+   * Bloquear, suspender, hibernar, reiniciar e desligar aquele computador, e a
+   * mensagem `energia.estado` que descreve o que ele sabe fazer (ADR-0006).
+   *
+   * Anunciada **por par**, como `action.atalhos`: depende da permissão marcada
+   * na janela do Agente para aquele aparelho, não da versão instalada.
+   */
+  "energia.controle",
+  /**
+   * Este Agente sabe emitir o pacote que acorda outra máquina da conta na mesma
+   * rede — ou seja, sabe ser ponte.
+   *
+   * Separada de `energia.controle` porque as duas respondem perguntas
+   * diferentes: uma é "o que este computador faz consigo mesmo", a outra é "este
+   * computador serve para ligar os outros". Um Agente pode ter a primeira sem a
+   * segunda, num notebook sem rede utilizável.
+   */
+  "energia.ponte",
   "state.system",
   "state.media",
   "context.rules",
