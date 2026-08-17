@@ -36,6 +36,41 @@ body {
   /* Fundo e texto acompanham o tema; sem isto o Windows desenha barra de
      rolagem clara sobre janela escura. */
   color-scheme: light dark;
+  /*
+   * O texto pequeno de interface fica fino demais sem isto no Windows, e é
+   * onde mora quase toda a diferença entre "parece um aplicativo" e "parece
+   * uma página".
+   */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+ * Barra de rolagem discreta.
+ *
+ * A padrão do Windows é larga, clara e cinza — ela aparece por cima de um
+ * painel escuro e é a primeira coisa que denuncia interface web dentro de uma
+ * janela nativa.
+ */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: var(--s-radius-full);
+  background: var(--s-border-strong);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--s-text-subtle);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -139,6 +174,32 @@ body {
   border-color: var(--s-border);
   color: var(--s-text);
   font-weight: var(--s-weight-medium);
+}
+
+/*
+ * A marca de seleção é uma barra à esquerda, e não só o fundo mais claro.
+ *
+ * Fundo sozinho some no tema claro, onde a diferença entre duas superfícies é
+ * de poucos por cento de luminância. A barra usa o acento e sobrevive aos
+ * dois temas — é a mesma razão de ela ser desenhada, e não pintada com cor
+ * de texto.
+ */
+.lateral__aba.ativa::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 1.25rem;
+  border-radius: var(--s-radius-full);
+  background: var(--s-accent);
+}
+
+.lateral__aba {
+  position: relative;
+}
+
+.lateral__aba.ativa svg {
+  color: var(--s-accent);
 }
 
 .lateral__aba:focus-visible {
@@ -865,6 +926,289 @@ body {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Preferências e atualizador                                                */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * A linha de preferência é o padrão de "rótulo à esquerda, controle à
+ * direita".
+ *
+ * Sem grade explícita, título e explicação se emendavam numa frase só e o
+ * controle terminava jogado no fim do parágrafo — o que parecia texto
+ * quebrado, e era só falta de layout.
+ */
+.inicio-automatico {
+  display: grid;
+  gap: var(--s-space-3);
+}
+
+.preferencia {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--s-space-4);
+  cursor: pointer;
+}
+
+.preferencia__texto {
+  display: grid;
+  gap: var(--s-space-1);
+  min-width: 0;
+}
+
+.preferencia__texto strong {
+  font-size: var(--s-text-sm);
+  font-weight: var(--s-weight-medium);
+}
+
+.preferencia__texto small {
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-xs);
+  line-height: var(--s-leading-normal);
+}
+
+/*
+ * Interruptor de verdade para `role="switch"`.
+ *
+ * Uma caixa de seleção quadrada diz "marque para confirmar"; um interruptor
+ * diz "isto está ligado agora". A diferença importa aqui, porque a preferência
+ * vale imediatamente, sem botão de salvar.
+ */
+.preferencia input[type="checkbox"] {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 2.5rem;
+  height: 1.5rem;
+  border-radius: var(--s-radius-full);
+  background: var(--s-border-strong);
+  cursor: pointer;
+  transition: background var(--s-duration-fast) var(--s-ease-out);
+}
+
+.preferencia input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 0.1875rem;
+  left: 0.1875rem;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: var(--s-radius-full);
+  background: var(--s-slate-0);
+  transition: transform var(--s-duration-fast) var(--s-ease-spring);
+}
+
+.preferencia input[type="checkbox"]:checked {
+  background: var(--s-accent);
+}
+
+.preferencia input[type="checkbox"]:checked::after {
+  transform: translateX(1rem);
+}
+
+.preferencia input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.preferencia input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--s-ring-focus);
+  outline-offset: 2px;
+}
+
+.atualizador {
+  display: grid;
+  gap: var(--s-space-3);
+}
+
+.atualizador__linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-space-4);
+  font-size: var(--s-text-sm);
+  color: var(--s-text-muted);
+}
+
+.atualizador__oferta {
+  display: grid;
+  gap: var(--s-space-3);
+  padding: var(--s-space-4);
+  border: 1px solid var(--s-accent);
+  border-radius: var(--s-radius-md);
+  background: var(--s-accent-soft);
+}
+
+.atualizador__oferta strong {
+  font-size: var(--s-text-sm);
+}
+
+.atualizador__oferta p {
+  margin: var(--s-space-1) 0 0;
+  color: var(--s-text-muted);
+  font-size: var(--s-text-xs);
+}
+
+.atualizador__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-space-2);
+}
+
+.atualizador__progresso {
+  width: 100%;
+  height: 0.375rem;
+  border-radius: var(--s-radius-full);
+  background: var(--s-surface-sunken);
+  overflow: hidden;
+}
+
+.atualizador__progresso > * {
+  display: block;
+  height: 100%;
+  border-radius: var(--s-radius-full);
+  background: var(--s-accent);
+  transition: width var(--s-duration-normal) var(--s-ease-out);
+}
+
+.pequeno {
+  font-size: var(--s-text-xs);
+}
+
+.botao.discreto {
+  border-color: transparent;
+  background: transparent;
+  color: var(--s-text-muted);
+}
+
+.botao.discreto:hover {
+  background: var(--s-surface-sunken);
+  border-color: var(--s-border);
+  color: var(--s-text);
+}
+
+.botao--largo {
+  width: 100%;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Entrada na conta — as duas metades                                        */
+/* ------------------------------------------------------------------------ */
+
+.portal {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * A vitrine tem fundo próprio, e é o único lugar da janela com gradiente.
+ *
+ * Usado uma vez só, ele lê como identidade; repetido em cada cartão, viraria
+ * aquele brilho genérico que faz tudo parecer o mesmo modelo pronto.
+ */
+.portal__vitrine {
+  display: grid;
+  align-content: center;
+  gap: var(--s-space-5);
+  padding: var(--s-space-10);
+  background:
+    radial-gradient(
+      120% 120% at 15% 10%,
+      var(--s-accent-soft) 0%,
+      transparent 55%
+    ),
+    var(--s-surface-sunken);
+  border-right: 1px solid var(--s-border);
+}
+
+.portal__promessa {
+  margin: 0;
+  max-width: 18rem;
+  font-size: var(--s-text-2xl);
+  font-weight: var(--s-weight-semibold);
+  line-height: var(--s-leading-tight);
+  letter-spacing: var(--s-tracking-tight);
+}
+
+.portal__recursos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-space-4);
+}
+
+.portal__recursos li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-space-3);
+  color: var(--s-text-muted);
+  font-size: var(--s-text-sm);
+}
+
+/*
+ * O ícone dentro de uma pastilha com o fundo na própria cor.
+ *
+ * É o que dá peso ao ícone sem engordar o traço: um símbolo de 1px solto no
+ * escuro some, e engrossá-lo o deixaria pesado ao lado do texto.
+ */
+.chip {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--s-radius-md);
+  background: color-mix(in srgb, var(--tom) 18%, transparent);
+}
+
+.chip svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--tom);
+}
+
+.chip--violet {
+  --tom: var(--s-control-violet);
+}
+
+.chip--cyan {
+  --tom: var(--s-control-cyan);
+}
+
+.chip--green {
+  --tom: var(--s-control-green);
+}
+
+.entrada {
+  display: grid;
+  align-content: center;
+  gap: var(--s-space-4);
+  width: min(24rem, 100%);
+  justify-self: center;
+  padding: var(--s-space-8);
+}
+
+.entrada__cabecalho {
+  display: grid;
+  gap: var(--s-space-2);
+  margin-bottom: var(--s-space-2);
+}
+
+.entrada__rodape {
+  margin: 0;
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-2xs);
+  line-height: var(--s-leading-normal);
+}
+
+.campo input::placeholder {
+  color: var(--s-text-subtle);
+}
+
+/* ------------------------------------------------------------------------ */
 /* Janela estreita                                                           */
 /* ------------------------------------------------------------------------ */
 
@@ -873,6 +1217,18 @@ body {
  * lado do jogo. Abaixo de 40rem a lateral vira uma faixa horizontal em vez de
  * espremer o conteúdo até ele deixar de ser legível.
  */
+@media (max-width: 52rem) {
+  /* A apresentação sai de cena antes do formulário: quem já conhece o produto
+     não precisa ser apresentado a ele toda vez. */
+  .portal {
+    grid-template-columns: 1fr;
+  }
+
+  .portal__vitrine {
+    display: none;
+  }
+}
+
 @media (max-width: 40rem) {
   .agente {
     grid-template-columns: 1fr;

@@ -61,12 +61,9 @@ export function Agente() {
     );
   }
 
+  // Sem envoltório: a entrada ocupa a janela inteira, com as duas metades.
   if (!situacao?.conectado) {
-    return (
-      <div className="agente agente--centro">
-        <Entrada aoEntrar={carregar} erroExterno={erro} />
-      </div>
-    );
+    return <Entrada aoEntrar={carregar} erroExterno={erro} />;
   }
 
   const conectados = situacao.dispositivos.filter(
@@ -160,45 +157,91 @@ function Entrada({
   };
 
   return (
-    <form className="entrada" onSubmit={enviar}>
-      <span className="marca marca--grande">SLATE</span>
-      <h1>Entrar na sua conta</h1>
-      <p className="atenuado">
-        Use a mesma conta do SLATE no celular. É ela que liga os dois.
-      </p>
-
-      <label className="campo">
-        <span>E-mail</span>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="email"
-          autoCapitalize="none"
-          required
-        />
-      </label>
-
-      <label className="campo">
-        <span>Senha</span>
-        <input
-          type="password"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          autoComplete="current-password"
-          required
-        />
-      </label>
-
-      {(erro || erroExterno) && (
-        <p className="erro" role="alert">
-          {erro ?? erroExterno}
+    /*
+     * Duas metades: à esquerda o que o produto é, à direita o que a pessoa faz.
+     *
+     * A da esquerda não é enfeite. Esta é a primeira tela de um programa que
+     * alguém acabou de instalar, e ela responde "o que isto faz?" enquanto o
+     * formulário responde "o que eu faço agora?". Numa janela estreita a
+     * apresentação sai de cena e o formulário fica — quem já conhece o produto
+     * não precisa ser apresentado a ele toda vez.
+     */
+    <div className="portal">
+      <aside className="portal__vitrine" aria-hidden="true">
+        <span className="marca marca--grande">SLATE</span>
+        <p className="portal__promessa">
+          Seu celular vira o painel de controle do computador.
         </p>
-      )}
+        <ul className="portal__recursos">
+          <li>
+            <span className="chip chip--violet">
+              <Icone nome="Play" aria-hidden />
+            </span>
+            Mídia e volume, sem sair do jogo
+          </li>
+          <li>
+            <span className="chip chip--cyan">
+              <Icone nome="Grade" aria-hidden />
+            </span>
+            Programas e jogos que você escolher
+          </li>
+          <li>
+            <span className="chip chip--green">
+              <Icone nome="Verificado" aria-hidden />
+            </span>
+            Pareamento confirmado neste computador
+          </li>
+        </ul>
+      </aside>
 
-      <button type="submit" className="botao principal" disabled={enviando}>
-        {enviando ? "Entrando…" : "Entrar"}
-      </button>
-    </form>
+      <form className="entrada" onSubmit={enviar}>
+        <div className="entrada__cabecalho">
+          <h1>Entrar na sua conta</h1>
+          <p className="atenuado">
+            Use a mesma conta do SLATE no celular. É ela que liga os dois.
+          </p>
+        </div>
+
+        <label className="campo">
+          <span>E-mail</span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            autoCapitalize="none"
+            placeholder="voce@exemplo.com"
+            required
+          />
+        </label>
+
+        <label className="campo">
+          <span>Senha</span>
+          <input
+            type="password"
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+            autoComplete="current-password"
+            placeholder="Sua senha"
+            required
+          />
+        </label>
+
+        {(erro || erroExterno) && (
+          <p className="erro" role="alert">
+            {erro ?? erroExterno}
+          </p>
+        )}
+
+        <button type="submit" className="botao principal botao--largo" disabled={enviando}>
+          {enviando ? "Entrando…" : "Entrar"}
+        </button>
+
+        <p className="entrada__rodape">
+          A senha vai direto para o processo do SLATE neste computador. Esta
+          janela nunca vê sua chave nem seu cookie de sessão.
+        </p>
+      </form>
+    </div>
   );
 }
