@@ -193,19 +193,70 @@ jobs:
       - name: Instalar dependências
         run: pnpm install --frozen-lockfile
 
+      - name: Verificar se o banco de homologação está configurado
+        id: verificar
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DATABASE_URL_STAGING não configurado; testes da PWA pulados."
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Instalar navegadores
+        if: steps.verificar.outputs.configurado == 'true'
         # WebKit entra porque é o motor do iPad e do iPhone, onde as
         # limitações de PWA são maiores. Testar só em Chromium deixaria de
         # fora justamente a plataforma mais restritiva.
         run: pnpm --filter @slate/pwa exec playwright install chromium webkit --with-deps
 
+      # A PWA fala com a API por `/api` na própria origem, e esse desvio é
+      # resolvido **no build** pelo `next.config.ts`. Era isto que faltava: sem
+      # API no ar e sem `API_URL`, os testes de conta e pareamento pediam login
+      # a um `/api` que respondia 404 — e o job passou oito execuções vermelho
+      # por configuração, não por defeito.
+      - name: Subir a API
+        if: steps.verificar.outputs.configurado == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+          # Sem isto, todo POST volta 403.
+          #
+          # A PWA fala com `/api` na própria origem, o Next repassa a
+          # requisição e o cabeçalho `Origin` do navegador vai junto — e a
+          # verificação de origem é comparação exata contra uma lista que, sem
+          # esta variável, está vazia. O sintoma seria "criar conta não
+          # funciona no CI", com a API saudável e os logs limpos.
+          ORIGENS_PERMITIDAS: http://localhost:4400
+          # Cookie `Secure` sobre `http://localhost` é aceito pelo Chromium e
+          # recusado pelo WebKit — e o WebKit é metade desta matriz. O padrão
+          # fora de produção já é `false`; está explícito para que ninguém o
+          # ligue aqui achando que aperta a segurança.
+          COOKIE_SEGURO: "false"
+        run: |
+          pnpm --filter @slate/db exec tsx src/migrate.ts
+          PORT=4500 pnpm --filter @slate/api exec tsx src/main.ts &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4500/saude > /dev/null; then
+              echo "API no ar após ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::A API não respondeu em 60s"
+          exit 1
+
       - name: Subir a PWA
+        if: steps.verificar.outputs.configurado == 'true'
+        env:
+          API_URL: http://localhost:4500
         run: |
           pnpm --filter @slate/pwa exec next build
           pnpm --filter @slate/pwa exec next start -p 4400 &
           for i in $(seq 1 60); do
             if curl -sf http://localhost:4400/manifest.webmanifest > /dev/null; then
-              echo "no ar após ${i}s"
+              echo "PWA no ar após ${i}s"
               exit 0
             fi
             sleep 1
@@ -213,10 +264,23 @@ jobs:
           echo "::error::A PWA não respondeu em 60s"
           exit 1
 
-      - name: Testes de instalabilidade
+      # `interoperabilidade-webrtc.spec.ts` fica de fora de propósito: ele sobe
+      # uma sonda em Rust com `cargo run`, e esta máquina não tem toolchain —
+      # era a segunda causa do vermelho. O par Chromium↔Agente é exercitado no
+      # job `agente`, no Windows, que é onde o Agente de fato roda.
+      #
+      # E a suíte inteira depende do banco, inclusive o que parece não
+      # depender: "o indicador passa a dizer que não há internet" mora em
+      # `instalabilidade.spec.ts` mas cria uma conta antes de cortar a rede.
+      # Por isso o gate é do job todo, como em `integracao` e `e2e`, e não uma
+      # seleção de arquivos que envelheceria à primeira migração de teste.
+      - name: Instalabilidade, offline, conta e pareamento
+        if: steps.verificar.outputs.configurado == 'true'
         env:
           E2E_BASE_URL: http://localhost:4400
-        run: pnpm --filter @slate/pwa exec playwright test
+        run: >
+          pnpm --filter @slate/pwa exec playwright test
+          e2e/instalabilidade.spec.ts e2e/conta-e-pareamento.spec.ts
 
       - name: Guardar o relatório quando falhar
         if: failure()
