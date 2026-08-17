@@ -134,15 +134,17 @@ railway up --detach     # da RAIZ do repo; o build usa services/api/Dockerfile
 **Pendência real:** conectar o repositório ao serviço para deployar sozinho no
 push. Enquanto não fizer, isto volta a acontecer.
 
-### O e2e da PWA está vermelho há 8 execuções
+### ~~O e2e da PWA está vermelho há 8 execuções~~ — consertado em 17/08
 
-O job `pwa` do `ci.yml` sobe a PWA com `next start` mas **não sobe a API nem
-define `API_URL`** — então os 17 testes de conta e pareamento não têm como
-passar. É anterior a esta sessão. O job `integracao`, no mesmo arquivo, já mostra
-o padrão de subir com banco.
+Eram três causas, nenhuma delas defeito de código: faltava subir a API,
+faltava `ORIGENS_PERMITIDAS` (o Next repassa o `Origin` e a lista vazia recusa
+todo POST com 403), e `interoperabilidade-webrtc.spec.ts` sobe uma sonda em
+Rust com `cargo run` numa máquina Ubuntu sem toolchain.
 
-Isto ficou caro: se estivesse verde, teria pegado o beco sem saída do pareamento
-antes do operador.
+**A execução 32049170198 fechou com os cinco jobs verdes** — a primeira vez.
+
+Vale manter assim: os defeitos que esta sessão achou à mão são exatamente a
+classe de coisa que uma suíte ponta a ponta verde pega sem ninguém olhar.
 
 ### Release: empurre para a `main` e espere o CI antes de marcar a tag
 
@@ -298,9 +300,11 @@ E a regra de convivência, que vale conferir: **um toque seu vence o
 automático** até o computador mudar para outro programa. Escolheu "Cinema" com
 o OBS aberto? Fica em Cinema. Abriu o Valorant depois? Aí sim o painel segue.
 
-### 4. Duas pendências antigas que continuam de pé
+### 4. Uma pendência antiga que continua de pé
 
-- **O e2e da PWA está vermelho** porque o job `pwa` do CI não sobe a API nem
-  define `API_URL`. É anterior a tudo isto e continua igual.
 - **O `slate-api` não tem trigger de GitHub.** Todo deploy da API é manual, e
-  já custou um dia de investigação na direção errada.
+  já custou um dia de investigação na direção errada. Nada desta sessão mexeu
+  na API, então ela não está atrasada agora — mas o próximo commit em
+  `services/api` volta a precisar de `railway up` na mão.
+
+O e2e da PWA, que estava nesta lista, foi consertado — ver §4 acima.
