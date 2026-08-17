@@ -453,6 +453,72 @@ suite("API de contas", () => {
 
       expect(resposta.status).toBe(404);
     });
+
+    it("desconectar o computador não é irreversível: entrar de novo o reativa", async () => {
+      // O beco que tirou o pareamento do ar em 17/08. Revogar o Agente deixava
+      // as duas portas de pareamento fechadas — QR e código exigem um Agente
+      // **ativo** com aquela chave —, e nada reabria: registrar de novo só
+      // sabia criar, batia na chave duplicada e devolvia 409, que o Agente
+      // trata como sucesso desde a segunda execução. Sair e entrar parecia
+      // funcionar e não mudava nada, para sempre.
+      const { cookie } = await cadastrar(emailUnico("reativa"));
+      const chavePublica = `chave-reativa-${Date.now()}-${Math.random()}`;
+      const registrar = () =>
+        app.request("/dispositivos/agente", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: cookie, Origin: ORIGEM },
+          body: JSON.stringify({ chavePublica, algoritmo: "Ed25519", nome: "PC do Alan" }),
+        });
+
+      const criado = await (await registrar()).json();
+      await app.request(`/dispositivos/${criado.dispositivo.id}`, {
+        method: "DELETE",
+        headers: { Cookie: cookie, Origin: ORIGEM },
+      });
+
+      const volta = await registrar();
+      expect(volta.status).toBe(200);
+
+      const lista = await (
+        await app.request("/dispositivos", { headers: { Cookie: cookie } })
+      ).json();
+      const agente = lista.dispositivos.find(
+        (d: { id: string }) => d.id === criado.dispositivo.id,
+      );
+      // A mesma linha de volta, e não uma cópia: a conta não pode encher de
+      // fantasmas do mesmo computador a cada reconexão.
+      expect(lista.dispositivos).toHaveLength(1);
+      expect(agente.situacao).toBe("ativo");
+    });
+
+    it("reativar não move computador entre contas", async () => {
+      // A recusa que continua valendo: reaproveitar a linha é para o dono dela.
+      const dono = await cadastrar(emailUnico("dono3"));
+      const estranho = await cadastrar(emailUnico("estranho3"));
+      const chavePublica = `chave-disputada-${Date.now()}-${Math.random()}`;
+
+      await app.request("/dispositivos/agente", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: dono.cookie, Origin: ORIGEM },
+        body: JSON.stringify({ chavePublica, algoritmo: "Ed25519", nome: "PC do dono" }),
+      });
+
+      const invasao = await app.request("/dispositivos/agente", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: estranho.cookie,
+          Origin: ORIGEM,
+        },
+        body: JSON.stringify({ chavePublica, algoritmo: "Ed25519", nome: "PC roubado" }),
+      });
+
+      expect(invasao.status).toBe(409);
+      const lista = await (
+        await app.request("/dispositivos", { headers: { Cookie: estranho.cookie } })
+      ).json();
+      expect(lista.dispositivos).toEqual([]);
+    });
   });
 
   describe("pareamento", () => {

@@ -438,6 +438,44 @@ export function criarServidor({
       return c.json({ erro: "dados_invalidos" }, 400);
     }
 
+    /**
+     * Mesmo computador voltando: reaproveita a linha em vez de recusar.
+     *
+     * **Sem isto, desconectar o computador era irreversível.** Revogar marca a
+     * linha como `revogado`, e as duas portas de pareamento — o QR em
+     * `/pareamento/convites` e o código em `/pareamento/confirmar` — exigem um
+     * Agente **ativo** com aquela chave. Entrar de novo não resolvia: este
+     * endereço só sabia criar, a chave já existia, e o 409 que voltava é
+     * tratado como sucesso pelo Agente ("já registrado é situação normal a
+     * partir da segunda execução"). O login parecia dar certo, nada mudava, e
+     * nenhuma tela dizia por quê.
+     *
+     * É o mesmo beco que a confirmação de pareamento já resolve para o celular,
+     * algumas centenas de linhas abaixo: lá a linha revogada é reativada em vez
+     * de recusada. O Agente tinha ficado sem a outra metade.
+     *
+     * Reativar aqui não afrouxa nada — chegar a este ponto exige sessão válida
+     * na conta, a mesma prova que o primeiro registro pediria. Os escopos
+     * voltam ao padrão porque revogar foi uma retirada deliberada de confiança:
+     * o que tinha sido concedido além do padrão não volta junto com o acesso.
+     */
+    const existente = await buscarDispositivoPorChave(db, chavePublica);
+    if (existente) {
+      // Chave de outra conta é impasse, e papel trocado é conflito de cadastro:
+      // os dois continuam recusados, como sempre foram.
+      if (existente.usuarioId !== sessao.usuarioId || existente.papel !== "agent") {
+        return c.json({ erro: "chave_ja_registrada" }, 409);
+      }
+      const dispositivo =
+        existente.situacao === "ativo"
+          ? existente
+          : await reativarDispositivo(db, existente.id, {
+              nome: nome.trim().slice(0, 100),
+              escopos: ESCOPOS_PADRAO.join(" "),
+            });
+      return c.json({ dispositivo: { id: dispositivo.id, nome: dispositivo.nome } }, 200);
+    }
+
     try {
       const dispositivo = await criarDispositivo(db, {
         usuarioId: sessao.usuarioId,
@@ -450,6 +488,8 @@ export function criarServidor({
 
       return c.json({ dispositivo: { id: dispositivo.id, nome: dispositivo.nome } }, 201);
     } catch (erro) {
+      // Continua valendo para a corrida entre duas requisições simultâneas: a
+      // busca acima não é uma trava, e quem perder a corrida cai aqui.
       if (ehChaveDuplicada(erro)) return c.json({ erro: "chave_ja_registrada" }, 409);
       console.error("Falha ao registrar o Agente:", erro);
       return c.json({ erro: "erro_interno" }, 500);
