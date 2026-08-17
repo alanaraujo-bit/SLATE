@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#06080c",
+  themeColor: "#08090f",
   width: "device-width",
   initialScale: 1,
   // Cobre a área do entalhe em vez de deixar barras pretas nas laterais.

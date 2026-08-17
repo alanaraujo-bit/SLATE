@@ -69,12 +69,69 @@ describe("uso do movimento nas primitivas", () => {
 
   it("as animações contínuas são reservadas a atividade real", () => {
     const limpo = semComentarios(primitivas);
-    const animacoes = [...limpo.matchAll(/animation:\s*([\w-]+)/g)].map((m) => m[1]);
 
-    // Só duas: a faixa de execução em curso e o pulso de estado ativo. Qualquer
-    // animação infinita além dessas é decoração, e decoração que se move
-    // distrai quem precisa reagir rápido.
-    expect(new Set(animacoes)).toEqual(new Set(["s-botao-carregando", "s-pulsar"]));
+    /*
+     * A régua é `infinite`, e não a existência de animação.
+     *
+     * O que cansa e distrai é o que se repete para sempre ao lado de quem está
+     * tentando ler ou digitar. Uma animação que roda uma vez na abertura e para
+     * não tem esse efeito — e a versão anterior deste teste proibia as duas
+     * coisas juntas, o que obrigaria a afrouxar a lista toda vez que uma
+     * entrada fosse animada. Verificar o laço direto é mais estrito onde
+     * importa e mais honesto sobre o motivo.
+     */
+    const infinitas = [...limpo.matchAll(/animation:\s*([\w-]+)[^;]*infinite/g)].map(
+      (m) => m[1],
+    );
+
+    // Só duas: a faixa de execução em curso e o pulso de estado ativo. As duas
+    // significam "algo está acontecendo agora"; qualquer outra seria decoração.
+    expect(new Set(infinitas)).toEqual(new Set(["s-botao-carregando", "s-pulsar"]));
+  });
+
+  it("toda animação de uma vez só é desligada quando se pede menos movimento", () => {
+    const limpo = semComentarios(primitivas);
+
+    /*
+     * As durações caem a zero por token, mas `animation` com nome próprio não
+     * passa por elas: o nome carrega a própria duração, e o bloco de
+     * preferência precisa desligá-la explicitamente. Sem esta verificação, uma
+     * animação de entrada nova entraria e continuaria rodando exatamente para
+     * quem pediu que não rodasse.
+     */
+    /*
+     * Percorre as regras como `seletor { corpo }` em vez de procurar o nome da
+     * animação e caçar o seletor para trás com uma expressão: a primeira versão
+     * fazia isso e casou com `.25rem` no meio de um valor, o que dava um teste
+     * que falhava pelo motivo errado. Um par seletor/corpo é o que se quer
+     * saber, então é o que se lê.
+     */
+    const regras = [...limpo.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+      seletor: m[1]!.trim(),
+      corpo: m[2]!,
+    }));
+
+    const CONTINUAS = ["s-botao-carregando", "s-pulsar"];
+    const deUmaVez = regras.filter((r) => {
+      const nome = r.corpo.match(/animation:\s*([\w-]+)/)?.[1];
+      return nome !== undefined && !CONTINUAS.includes(nome) && !r.corpo.includes("infinite");
+    });
+
+    const desligadas = new Set(
+      regras
+        .filter((r) => /animation:\s*none/.test(r.corpo))
+        .flatMap((r) => r.seletor.split(",").map((s) => s.trim())),
+    );
+
+    expect(deUmaVez.length).toBeGreaterThan(0);
+    for (const regra of deUmaVez) {
+      for (const seletor of regra.seletor.split(",").map((s) => s.trim())) {
+        expect(
+          desligadas.has(seletor),
+          `${seletor} continua animando com movimento reduzido`,
+        ).toBe(true);
+      }
+    }
   });
 
   it("o recuo ao toque não acontece em estado inerte", () => {

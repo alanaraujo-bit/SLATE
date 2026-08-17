@@ -8,7 +8,7 @@ mod transporte;
 
 use api::{ClienteApi, ConvitePareamentoQr, Dispositivo, SituacaoConviteQr, Usuario};
 use identidade::{mensagem_confirmacao_pareamento, mensagem_criacao_convite_qr, Identidade};
-use atalhos::{Atalho, AtalhosPersonalizados};
+use atalhos::{Atalho, AtalhosPersonalizados, PerfilDeDeck};
 use pares::ParesConfiaveis;
 use serde::Serialize;
 use std::sync::Arc;
@@ -301,6 +301,101 @@ async fn renomear_atalho(
         .map_err(|e| e.to_string())
 }
 
+/// Reenvia o deck para todo aparelho ligado agora.
+///
+/// Chamada depois de cada mudança de painel. Sem isto, mexer no editor só
+/// valeria na conexão seguinte — a pessoa arrasta uma tecla na janela, olha
+/// para o celular e não vê nada mudar. Um erro aqui significa apenas que
+/// ninguém está ouvindo; a mudança já está gravada em disco.
+async fn reanunciar_deck(estado: &tauri::State<'_, Estado>) {
+    let _ = estado
+        .avisos_de_permissao
+        .send(transporte::AVISO_TODOS.to_string());
+}
+
+/// A configuração do deck como a **janela** a recebe.
+///
+/// Struct separada de `ConfiguracaoDeck` porque esta carrega `Atalho` inteiro,
+/// e `Atalho` tem `caminho`. Aqui isso é correto e necessário — a janela roda
+/// neste computador e o editor precisa listar os programas cadastrados. O que
+/// não pode acontecer é esta struct encontrar o caminho do canal: o celular
+/// recebe `AtalhoNoCanal`, em `transporte.rs`, que não tem o campo (ADR-0004).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfiguracaoDeckNaJanela {
+    atalhos: Vec<Atalho>,
+    perfis: Vec<PerfilDeDeck>,
+    perfil_padrao_id: String,
+}
+
+#[tauri::command]
+async fn listar_configuracao_deck(
+    estado: tauri::State<'_, Estado>,
+) -> Result<ConfiguracaoDeckNaJanela, String> {
+    let configuracao = estado.atalhos.configuracao();
+    Ok(ConfiguracaoDeckNaJanela {
+        atalhos: estado.atalhos.listar(),
+        perfis: configuracao.perfis,
+        perfil_padrao_id: configuracao.perfil_padrao_id,
+    })
+}
+
+#[tauri::command]
+async fn criar_perfil(
+    estado: tauri::State<'_, Estado>,
+    nome: String,
+    cor: Option<String>,
+) -> Result<PerfilDeDeck, String> {
+    // A cor é opcional porque criar um painel não deve exigir uma escolha
+    // estética antes de existir qualquer conteúdo. A janela escolhe depois.
+    let perfil = estado
+        .atalhos
+        .criar_perfil(&nome, cor.as_deref().unwrap_or("blue"))
+        .map_err(|e| e.to_string())?;
+    reanunciar_deck(&estado).await;
+    Ok(perfil)
+}
+
+#[tauri::command]
+async fn duplicar_perfil(
+    estado: tauri::State<'_, Estado>,
+    id: String,
+) -> Result<PerfilDeDeck, String> {
+    let perfil = estado.atalhos.duplicar_perfil(&id).map_err(|e| e.to_string())?;
+    reanunciar_deck(&estado).await;
+    Ok(perfil)
+}
+
+#[tauri::command]
+async fn salvar_perfil(
+    estado: tauri::State<'_, Estado>,
+    perfil: PerfilDeDeck,
+) -> Result<PerfilDeDeck, String> {
+    let salvo = estado
+        .atalhos
+        .salvar_perfil(perfil)
+        .map_err(|e| e.to_string())?;
+    reanunciar_deck(&estado).await;
+    Ok(salvo)
+}
+
+#[tauri::command]
+async fn remover_perfil(estado: tauri::State<'_, Estado>, id: String) -> Result<(), String> {
+    estado.atalhos.remover_perfil(&id).map_err(|e| e.to_string())?;
+    reanunciar_deck(&estado).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn definir_perfil_padrao(estado: tauri::State<'_, Estado>, id: String) -> Result<(), String> {
+    estado
+        .atalhos
+        .definir_perfil_padrao(&id)
+        .map_err(|e| e.to_string())?;
+    reanunciar_deck(&estado).await;
+    Ok(())
+}
+
 #[tauri::command]
 async fn falha_inicial(estado: tauri::State<'_, Estado>) -> Result<Option<String>, String> {
     Ok(estado.falha_inicial.lock().await.clone())
@@ -389,6 +484,12 @@ pub fn run() {
             criar_atalho,
             remover_atalho,
             renomear_atalho,
+            listar_configuracao_deck,
+            criar_perfil,
+            duplicar_perfil,
+            salvar_perfil,
+            remover_perfil,
+            definir_perfil_padrao,
             falha_inicial
         ])
         .run(tauri::generate_context!())

@@ -32,6 +32,8 @@ export interface Controle {
   exigeGradeCompleta: boolean;
   /** Ocupa duas colunas no modo em pé: é a tecla mais usada. */
   destaque?: boolean;
+  /** Marca visual própria para serviços conhecidos; não é um ícone do sistema. */
+  marca?: "youtube" | "twitch" | "netflix" | "prime" | "disney" | "spotify";
 }
 
 export const CONTROLES_MIDIA: readonly Controle[] = [
@@ -104,36 +106,42 @@ export const CONTROLES_ATALHOS: readonly Controle[] = [
     actionId: "atalho.youtube",
     rotulo: "YouTube",
     icone: "Monitor",
+    marca: "youtube",
     exigeGradeCompleta: false,
   },
   {
     actionId: "atalho.twitch",
     rotulo: "Twitch",
     icone: "Monitor",
+    marca: "twitch",
     exigeGradeCompleta: false,
   },
   {
     actionId: "atalho.netflix",
     rotulo: "Netflix",
     icone: "Monitor",
+    marca: "netflix",
     exigeGradeCompleta: false,
   },
   {
     actionId: "atalho.prime",
     rotulo: "Prime Video",
     icone: "Monitor",
+    marca: "prime",
     exigeGradeCompleta: false,
   },
   {
     actionId: "atalho.disney",
     rotulo: "Disney+",
     icone: "Monitor",
+    marca: "disney",
     exigeGradeCompleta: false,
   },
   {
     actionId: "atalho.spotify",
     rotulo: "Spotify",
     icone: "Monitor",
+    marca: "spotify",
     exigeGradeCompleta: false,
   },
 ];

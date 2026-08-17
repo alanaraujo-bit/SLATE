@@ -127,7 +127,7 @@ describe("paleta de controles", () => {
 
 describe("textoSobre", () => {
   it("escolhe texto escuro sobre cor clara", () => {
-    expect(textoSobre("#ffffff")).toBe("#0c0f15");
+    expect(textoSobre("#ffffff")).toBe("#0d0f18");
   });
 
   it("escolhe texto claro sobre cor escura", () => {

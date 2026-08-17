@@ -172,43 +172,43 @@ export function passaAA(
 export function textoSobre(
   fundo: string,
   claro = "#ffffff",
-  escuro = "#0c0f15",
+  escuro = "#0d0f18",
 ): string {
   return contraste(escuro, fundo) >= contraste(claro, fundo) ? escuro : claro;
 }
 
 /** Valores semânticos do tema escuro, para verificação automatizada. */
 export const TEMA_ESCURO = {
-  bg: "#06080c",
-  surface: "#0c0f15",
-  surfaceRaised: "#141820",
-  border: "#232a35",
-  borderStrong: "#333c4a",
-  text: "#eef1f6",
-  textMuted: "#a2acbb",
-  textSubtle: "#7d8798",
-  accent: "#5fa8ff",
-  onAccent: "#04121f",
+  bg: "#08090f",
+  surface: "#0d0f18",
+  surfaceRaised: "#131622",
+  border: "#1f2231",
+  borderStrong: "#2f3446",
+  text: "#eef0f7",
+  textMuted: "#a6adc0",
+  textSubtle: "#868ea4",
+  accent: "#6ee7f0",
+  onAccent: "#04141a",
   success: "#4ade80",
   warning: "#fbbf24",
   danger: "#f87171",
-  info: "#22d3ee",
+  info: "#7dd3fc",
 } as const;
 
 /** Valores semânticos do tema claro, para verificação automatizada. */
 export const TEMA_CLARO = {
-  bg: "#f6f7f9",
+  bg: "#f4f5f8",
   surface: "#ffffff",
   surfaceRaised: "#ffffff",
-  border: "#d8dce4",
-  borderStrong: "#b4bcc9",
-  text: "#141820",
-  textMuted: "#505a6b",
-  textSubtle: "#6b7688",
-  accent: "#2b6fd6",
+  border: "#e5e7ed",
+  borderStrong: "#cfd2dc",
+  text: "#131622",
+  textMuted: "#4d5568",
+  textSubtle: "#666e83",
+  accent: "#0e7f92",
   onAccent: "#ffffff",
   success: "#16a34a",
   warning: "#d97706",
   danger: "#dc2626",
-  info: "#0891b2",
+  info: "#0284c7",
 } as const;

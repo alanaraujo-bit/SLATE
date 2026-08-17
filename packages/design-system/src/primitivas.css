@@ -43,15 +43,28 @@
   min-height: var(--s-touch-min);
 
   padding: var(--s-space-2) var(--s-space-4);
-  border: 1px solid var(--s-border);
+  border: 1px solid var(--s-border-strong);
   border-radius: var(--s-radius-md);
-  background: var(--s-surface-raised);
+  /*
+   * Fundo em degradê, não chapado.
+   *
+   * São dois degraus adjacentes da escada de elevação, do mais claro no topo
+   * para o mais escuro embaixo — a inclinação que um objeto físico tem quando
+   * a luz vem de cima. Somado ao fio de luz na aresta superior, é o que faz o
+   * botão parecer uma tecla e não um retângulo pintado. A diferença entre os
+   * dois degraus é pequena de propósito: o que se percebe é o relevo, não o
+   * degradê.
+   */
+  background-image: linear-gradient(180deg, var(--s-grad-alto), var(--s-grad-baixo));
+  background-color: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
   color: var(--s-text);
 
   font-family: var(--s-font-sans);
   font-size: var(--s-text-sm);
   font-weight: var(--s-weight-medium);
   line-height: var(--s-leading-tight);
+  letter-spacing: var(--s-tracking-tight);
   text-align: center;
 
   cursor: pointer;
@@ -63,6 +76,7 @@
   transition:
     background var(--s-duration-fast) var(--s-ease-out),
     border-color var(--s-duration-fast) var(--s-ease-out),
+    box-shadow var(--s-duration-fast) var(--s-ease-out),
     transform var(--s-duration-instant) var(--s-ease-out),
     opacity var(--s-duration-fast) var(--s-ease-out);
 }
@@ -89,10 +103,18 @@
 
 /* ---- Tons ------------------------------------------------------------- */
 
+/*
+ * O botão de acento é o único elemento sólido da interface, e é assim que ele
+ * diz "a ação principal é esta". O degradê aqui vai do acento para a variante
+ * forte, mantendo a mesma lógica de luz vinda de cima do botão comum.
+ */
 .s-botao[data-tom="acento"] {
-  background: var(--s-accent);
-  border-color: var(--s-accent);
+  background-image: linear-gradient(180deg, var(--s-accent), var(--s-accent-strong));
+  background-color: var(--s-accent);
+  border-color: var(--s-accent-strong);
+  box-shadow: var(--s-highlight-strong), var(--s-shadow-sm);
   color: var(--s-on-accent);
+  font-weight: var(--s-weight-semibold);
 }
 
 .s-botao[data-tom="sucesso"] {
@@ -123,10 +145,30 @@
 /* ---- Estados ---------------------------------------------------------- */
 
 @media (hover: hover) {
+  /*
+   * O hover sobe um degrau na escada em vez de trocar por uma cor chapada:
+   * achatar o degradê ao passar o mouse fazia o botão parecer que perdeu
+   * relevo justo no momento em que deveria ganhar.
+   */
   .s-botao[data-estado="idle"]:hover,
   .s-botao[data-estado="error"]:hover {
-    background: var(--s-surface-overlay);
+    /*
+     * O topo é a superfície sobreposta clareada por uma pitada do próprio
+     * texto — assim o degrau de hover nasce do tema em vez de apontar para uma
+     * primitiva, que no tema claro estaria escura e inverteria a luz.
+     */
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--s-text) 7%, var(--s-surface-overlay)),
+      var(--s-surface-overlay)
+    );
     border-color: var(--s-border-strong);
+    box-shadow: var(--s-highlight-strong), var(--s-shadow-md);
+  }
+
+  .s-botao[data-tom="acento"][data-estado="idle"]:hover {
+    background-image: linear-gradient(180deg, var(--s-signal-300), var(--s-accent));
+    box-shadow: var(--s-highlight-strong), var(--s-shadow-md);
   }
 
   .s-botao[data-cor][data-estado="idle"]:hover {
@@ -141,18 +183,28 @@
  */
 .s-botao:active:not([aria-disabled="true"]):not([aria-busy="true"]) {
   transform: scale(0.97);
+  /* Some o relevo e some a sombra: a tecla afundou, e uma sombra sob um objeto
+     pressionado é o detalhe que faz o recuo parecer falso. */
+  box-shadow: none;
 }
 
+/*
+ * Ligado é estado, não ênfase — por isso ganha o halo do acento em vez de só
+ * mudar de cor. Num painel com vinte teclas, a borda acesa é o que se acha de
+ * relance sem ler rótulo nenhum.
+ */
 .s-botao[data-estado="active"] {
   background: var(--s-accent-soft);
   border-color: var(--s-accent);
+  box-shadow: var(--s-glow-accent);
   color: var(--s-accent);
 }
 
 .s-botao[data-cor][data-estado="active"] {
   background: var(--cor-controle);
   border-color: var(--cor-controle);
-  color: var(--s-slate-1000);
+  box-shadow: var(--s-highlight-strong);
+  color: var(--s-on-control);
 }
 
 .s-botao[data-estado="loading"] {
@@ -234,6 +286,13 @@
 /* Superficie                                                              */
 /* ======================================================================= */
 
+/*
+ * Cada nível soma três coisas ao anterior, sempre na mesma ordem: sobe um
+ * degrau na escada de cor, ganha uma sombra maior e recebe o fio de luz na
+ * aresta de cima. Antes só a cor mudava, e uma diferença de cor sozinha não
+ * lê como altura — lê como duas caixas de tons diferentes, que é o que fazia
+ * a tela parecer plana mesmo tendo três níveis declarados.
+ */
 .s-superficie {
   background: var(--s-surface);
   border: 1px solid var(--s-border);
@@ -242,12 +301,13 @@
 
 .s-superficie[data-nivel="elevada"] {
   background: var(--s-surface-raised);
-  box-shadow: var(--s-shadow-sm);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
 }
 
 .s-superficie[data-nivel="sobreposta"] {
   background: var(--s-surface-overlay);
-  box-shadow: var(--s-shadow-lg);
+  border-color: var(--s-border-strong);
+  box-shadow: var(--s-highlight-strong), var(--s-shadow-lg);
 }
 
 .s-superficie[data-preenchida] {
@@ -267,25 +327,40 @@
   color: var(--s-text-muted);
 }
 
+/*
+ * O ponto de estado ganha um halo da própria cor.
+ *
+ * Um círculo chapado de 8px é o que qualquer painel tem; o halo faz o ponto
+ * parecer aceso — uma luz de equipamento — e é o que se enxerga pelo canto do
+ * olho sem tirar a atenção do jogo. `currentColor` porque cada situação já
+ * pinta o ponto, e o halo precisa seguir a cor sem repetir a lista.
+ */
 .s-indicador__ponto {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: var(--s-radius-full);
   background: var(--s-state-unavailable);
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
+  color: var(--s-state-unavailable);
   flex: none;
 }
 
+/* `color` junto com `background` porque o halo é `currentColor`. */
 .s-indicador[data-situacao="ok"] .s-indicador__ponto {
   background: var(--s-success);
+  color: var(--s-success);
 }
 .s-indicador[data-situacao="atencao"] .s-indicador__ponto {
   background: var(--s-warning);
+  color: var(--s-warning);
 }
 .s-indicador[data-situacao="erro"] .s-indicador__ponto {
   background: var(--s-danger);
+  color: var(--s-danger);
 }
 .s-indicador[data-situacao="ativo"] .s-indicador__ponto {
   background: var(--s-accent);
+  color: var(--s-accent);
 }
 
 .s-indicador[data-pulsando] .s-indicador__ponto {
@@ -344,4 +419,214 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ======================================================================= */
+/* Palco                                                                   */
+/* ======================================================================= */
+
+/*
+ * O que é isto, e por que existe.
+ *
+ * O ícone do SLATE está descrito no próprio `slate.svg`: "uma superfície de
+ * controle vista em perspectiva: uma grade de células, uma delas acesa". Aqui
+ * essa descrição deixa de ser desenho e vira objeto — a mesma grade, em
+ * perspectiva de verdade, com uma tecla acesa.
+ *
+ * Isto não é ornamento tirado de uma galeria de efeitos. É a única imagem que
+ * a primeira tela precisa mostrar, porque diz o que o produto é sem uma linha
+ * de texto: muitos controles, um em foco, e a superfície inteira ao alcance.
+ *
+ * Sobre movimento, que nesta base é assunto sério (§36): **nada aqui se mexe
+ * sozinho**. A tecla acesa só muda quando a pessoa avança no formulário, e a
+ * inclinação só responde ao ponteiro dela. Uma animação em laço ao lado de um
+ * campo de senha puxaria o olho justamente de quem está digitando — é a mesma
+ * regra que `movimento.test.ts` enuncia sobre decoração que se move. Movimento
+ * com causa não é decoração; é retorno.
+ */
+
+/*
+ * O recorte fica aqui, e o 3D começa só lá dentro.
+ *
+ * `overflow: hidden` no mesmo elemento que carrega `transform-style:
+ * preserve-3d` achata o contexto 3D em vários motores — as teclas voltariam a
+ * ser retângulos no plano da tela, e o efeito sumiria sem erro nenhum
+ * aparecer. Por isso são dois elementos: um corta, o outro projeta.
+ */
+.s-palco {
+  /* A altura cede antes do formulário: numa janela baixa o palco encolhe em
+     vez de empurrar a promessa e os recursos para fora da vista. */
+  height: clamp(7rem, 26vh, 13rem);
+  overflow: hidden;
+  /* A imagem se dissolve na borda de baixo em vez de terminar em corte reto,
+     que denunciaria a caixa que a contém. */
+  mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+}
+
+.s-palco__cena {
+  /* Distância do olho. Mais perto exagera a fuga e a grade vira funil; mais
+     longe achata e deixa de valer a pena ser 3D. */
+  perspective: 46rem;
+  perspective-origin: 50% 38%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+/*
+ * A placa: a superfície de controle inclinada, como um aparelho apoiado na
+ * mesa à sua frente.
+ *
+ * As duas variáveis de inclinação são escritas pelo ponteiro, em JavaScript, e
+ * têm valor de repouso aqui — assim a placa nasce na pose certa mesmo que o
+ * mouse nunca entre na janela, e volta a ela quando o ponteiro sai.
+ */
+.s-palco__placa {
+  --giro-x: 0deg;
+  --giro-y: 0deg;
+
+  display: grid;
+  grid-template-columns: repeat(4, 3.25rem);
+  grid-template-rows: repeat(3, 2.5rem);
+  gap: var(--s-space-2);
+  transform-style: preserve-3d;
+  transform: rotateX(calc(54deg + var(--giro-x))) rotateZ(calc(-32deg + var(--giro-y)));
+  transition: transform var(--s-duration-slow) var(--s-ease-out);
+}
+
+/*
+ * Cada tecla é um objeto com espessura.
+ *
+ * A espessura é falsa e é o que faz a ilusão funcionar: uma sombra projetada
+ * no plano da placa, deslocada no eixo Z. Sem ela as teclas seriam adesivos
+ * colados numa superfície inclinada, que é o efeito de quase toda grade "3D"
+ * feita só com `rotate`.
+ */
+.s-palco__tecla {
+  position: relative;
+  border-radius: var(--s-radius-sm);
+  border: 1px solid var(--s-palco-borda);
+  background-image: linear-gradient(180deg, var(--s-palco-alto), var(--s-palco-baixo));
+  background-color: var(--s-palco-baixo);
+  box-shadow:
+    var(--s-highlight),
+    var(--s-palco-sombra);
+  transform: translateZ(0);
+  transition:
+    transform var(--s-duration-normal) var(--s-ease-out),
+    box-shadow var(--s-duration-normal) var(--s-ease-out),
+    border-color var(--s-duration-normal) var(--s-ease-out),
+    background var(--s-duration-normal) var(--s-ease-out);
+
+  /* A entrada é uma onda: as teclas sobem em sequência, e o atraso de cada uma
+     vem do índice que o React escreve. Acontece uma vez, na abertura. */
+  animation: s-palco-surgir var(--s-duration-slow) var(--s-ease-out) both;
+  animation-delay: calc(var(--i) * 45ms);
+}
+
+@keyframes s-palco-surgir {
+  from {
+    opacity: 0;
+    transform: translateZ(-2.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateZ(0);
+  }
+}
+
+/*
+ * A tecla acesa.
+ *
+ * Ela sobe da placa e acende com o acento — nunca com uma cor de controle. A
+ * paleta de controles pertence ao usuário; se o foco da marca usasse uma
+ * daquelas doze cores, a primeira tela do produto ensinaria exatamente a
+ * confusão que a paleta foi ajustada para eliminar.
+ *
+ * Qual tecla acende é decidido aqui, e não em JavaScript. O React escreve um
+ * único atributo — em que passo do formulário a pessoa está — e o CSS traduz
+ * isso em posição. Assim a aparência fica inteira num lugar só, e o componente
+ * não carrega uma tabela de índices que ninguém conseguiria relacionar com o
+ * que aparece na tela.
+ *
+ * O passo avança com o foco: chegar no e-mail acende uma tecla, chegar na
+ * senha acende outra. A superfície acompanha o progresso da pessoa em vez de
+ * piscar por conta própria.
+ *
+ * O passo nunca deriva do que foi digitado — só de qual campo está em foco.
+ * Uma grade que reagisse a cada caractere mostraria o tamanho da senha para
+ * quem estivesse olhando a tela por cima do ombro, ou para uma gravação.
+ *
+ * As três posições estão numa lista só, e não em três blocos iguais: repetir a
+ * aparência por passo é como uma delas acabaria diferente das outras sem
+ * ninguém perceber.
+ */
+.s-palco__placa[data-passo="0"] .s-palco__tecla:nth-child(6),
+.s-palco__placa[data-passo="1"] .s-palco__tecla:nth-child(7),
+.s-palco__placa[data-passo="2"] .s-palco__tecla:nth-child(11) {
+  border-color: var(--s-accent);
+  background-image: linear-gradient(180deg, var(--s-accent), var(--s-accent-strong));
+  background-color: var(--s-accent);
+  transform: translateZ(1.15rem);
+  box-shadow:
+    var(--s-highlight-strong),
+    var(--s-palco-sombra-acesa),
+    var(--s-glow-accent);
+}
+
+/*
+ * O facho que a tecla acesa lança sobre a placa.
+ *
+ * É o que amarra a tecla à superfície: um objeto que levanta e não derrama luz
+ * em volta parece recortado e colado por cima. Fica abaixo dela no eixo Z e
+ * não recebe evento nenhum.
+ */
+.s-palco__placa[data-passo="0"] .s-palco__tecla:nth-child(6)::after,
+.s-palco__placa[data-passo="1"] .s-palco__tecla:nth-child(7)::after,
+.s-palco__placa[data-passo="2"] .s-palco__tecla:nth-child(11)::after {
+  content: "";
+  position: absolute;
+  inset: -1.25rem;
+  border-radius: var(--s-radius-lg);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--s-accent) 30%, transparent) 0%,
+    transparent 70%
+  );
+  transform: translateZ(-1.15rem);
+  pointer-events: none;
+}
+
+/*
+ * Entrando: a superfície inteira acende, uma tecla depois da outra.
+ *
+ * É a única vez que o palco se move sem o dedo da pessoa mandar, e tem motivo:
+ * é a resposta ao envio. O escalonamento reaproveita o mesmo índice da onda de
+ * entrada, então a luz corre na mesma direção em que as teclas surgiram.
+ */
+.s-palco__placa[data-passo="3"] .s-palco__tecla {
+  border-color: var(--s-accent);
+  background-image: linear-gradient(180deg, var(--s-accent), var(--s-accent-strong));
+  background-color: var(--s-accent);
+  transform: translateZ(0.75rem);
+  box-shadow:
+    var(--s-highlight-strong),
+    var(--s-palco-sombra-acesa),
+    var(--s-glow-accent);
+  transition-delay: calc(var(--i) * 40ms);
+}
+
+/*
+ * O palco fica; a onda de entrada é que sai.
+ *
+ * Apagar o palco tiraria a imagem que explica o produto justamente de quem só
+ * pediu para o movimento parar. As teclas aparecem prontas, na posição final,
+ * em vez de subirem em sequência. A inclinação pelo ponteiro é barrada no
+ * componente, que é onde ela é escrita — estilo embutido não passa por token
+ * de duração.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .s-palco__tecla {
+    animation: none;
+  }
 }

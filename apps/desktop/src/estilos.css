@@ -16,6 +16,59 @@
  * saiu.
  */
 
+/* ------------------------------------------------------------------------ */
+/* Tipografia servida pela própria janela                                    */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * Os arquivos ficam em `src/fontes/` e são referenciados por caminho relativo
+ * de propósito: assim o Vite os inclui no pacote e reescreve a URL para o
+ * arquivo com hash dentro de `dist/`. Apontar para uma pasta pública com
+ * caminho absoluto quebraria aqui, porque o Tauri não serve a interface pela
+ * raiz de um servidor — ele abre arquivo local, e `/fontes/...` procuraria na
+ * raiz do disco.
+ *
+ * Não existe alternativa remota: uma janela de controle precisa abrir com a
+ * própria cara sem depender de rede, e é offline que o Agente mais aparece.
+ */
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fontes/geist-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fontes/geist-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fontes/geist-mono-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fontes/geist-mono-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -43,6 +96,39 @@ body {
    */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/*
+ * Atmosfera da janela.
+ *
+ * Mesma ideia da PWA: um clarão frio no alto e um grão finíssimo por cima. Numa
+ * janela de 900px de largura o preenchimento chapado mostra o degrau entre um
+ * tom e o seguinte com clareza ainda maior que num celular, e é o que faz a
+ * janela parecer uma página web dentro de uma moldura nativa.
+ *
+ * As duas camadas ficam atrás de tudo e não recebem clique. `fixed` porque são
+ * cenário da janela, e não do conteúdo que rola dentro dela.
+ */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+body::before {
+  background: radial-gradient(
+    100% 55% at 50% -8%,
+    var(--s-accent-soft) 0%,
+    transparent 62%
+  );
+}
+
+body::after {
+  background-image: var(--s-grain);
+  opacity: var(--s-grain-opacidade);
 }
 
 /*
@@ -90,9 +176,18 @@ body {
   overflow: auto;
 }
 
+/*
+ * A marca em caixa alta espaçada, igual à da PWA.
+ *
+ * Agente e superfície de controle são o mesmo produto em dois aparelhos, e a
+ * assinatura precisa ser a mesma nos dois — é o que faz parear um com o outro
+ * parecer óbvio em vez de conectar dois programas diferentes.
+ */
 .marca {
+  font-family: var(--s-font-display);
   font-weight: var(--s-weight-semibold);
-  letter-spacing: var(--s-tracking-wide);
+  letter-spacing: var(--s-tracking-caps);
+  text-transform: uppercase;
   color: var(--s-text);
 }
 
@@ -170,8 +265,12 @@ body {
 }
 
 .lateral__aba.ativa {
-  background: var(--s-surface-raised);
-  border-color: var(--s-border);
+  background-image: linear-gradient(180deg, var(--s-grad-alto), var(--s-grad-baixo));
+  background-color: var(--s-surface-raised);
+  border-color: var(--s-border-strong);
+  /* A aba escolhida sobe da barra rebaixada: relevo, e não só um cinza
+     diferente, que é o que some primeiro no tema claro. */
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
   color: var(--s-text);
   font-weight: var(--s-weight-medium);
 }
@@ -322,7 +421,10 @@ body {
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-lg);
   background: var(--s-surface-raised);
-  box-shadow: var(--s-shadow-sm);
+  /* O fio de luz é o terceiro mecanismo, e o que faltava: no escuro, sombra e
+     troca de superfície ainda deixavam a aresta indefinida, e é a aresta que
+     o olho usa para julgar altura. */
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
 }
 
 .cartao__cabecalho {
@@ -350,7 +452,7 @@ body {
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-lg);
   background: var(--s-surface-raised);
-  box-shadow: var(--s-shadow-sm);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
 }
 
 .linha {
@@ -458,8 +560,9 @@ body {
   padding: var(--s-space-4);
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-lg);
-  background: var(--s-surface-raised);
-  box-shadow: var(--s-shadow-sm);
+  background-image: linear-gradient(180deg, var(--s-grad-alto), var(--s-grad-baixo));
+  background-color: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
   transition:
     border-color var(--s-duration-fast) var(--s-ease-out),
     box-shadow var(--s-duration-fast) var(--s-ease-out),
@@ -470,7 +573,7 @@ body {
    mais do que isso vira lista pulando sob o ponteiro. */
 .aparelho:hover {
   border-color: var(--s-border-strong);
-  box-shadow: var(--s-shadow-md);
+  box-shadow: var(--s-highlight-strong), var(--s-shadow-md);
   transform: translateY(-1px);
 }
 
@@ -523,8 +626,9 @@ body {
   padding: var(--s-space-3) var(--s-space-4);
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-lg);
-  background: var(--s-surface-raised);
-  box-shadow: var(--s-shadow-sm);
+  background-image: linear-gradient(180deg, var(--s-grad-alto), var(--s-grad-baixo));
+  background-color: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
   transition:
     border-color var(--s-duration-fast) var(--s-ease-out),
     box-shadow var(--s-duration-fast) var(--s-ease-out),
@@ -532,8 +636,13 @@ body {
 }
 
 .programa:hover {
-  border-color: var(--tom);
-  box-shadow: var(--s-shadow-md);
+  border-color: color-mix(in srgb, var(--tom) 60%, var(--s-border-strong));
+  /* O halo usa a cor do próprio programa: numa lista longa é o que diz qual
+     linha está sob o ponteiro sem precisar ler o nome. */
+  box-shadow:
+    var(--s-highlight-strong),
+    var(--s-shadow-md),
+    0 0 20px color-mix(in srgb, var(--tom) 12%, transparent);
   transform: translateY(-1px);
 }
 
@@ -604,7 +713,10 @@ body {
   padding: 0 var(--s-space-3);
   border: 1px solid var(--s-border-strong);
   border-radius: var(--s-radius-md);
-  background: var(--s-surface);
+  background: var(--s-surface-sunken);
+  /* Campo é buraco, não tecla: o afundamento é o que diferencia "aqui se
+     digita" de "aqui se aperta", sem depender de o cursor piscar. */
+  box-shadow: var(--s-inset-sutil);
   color: var(--s-text);
   font: inherit;
   transition:
@@ -657,16 +769,26 @@ body {
   box-shadow: var(--s-ring-focus);
 }
 
+/*
+ * O campo do código é o visor do aparelho: afundado, monoespaçado e aceso.
+ * É a peça central da tela de pareamento, e antes era uma caixa de texto
+ * grande — correta e indistinguível de qualquer formulário.
+ */
 .codigo {
   width: 100%;
   padding: var(--s-space-3);
   border: 1px solid var(--s-border-strong);
-  border-radius: var(--s-radius-md);
-  background: var(--s-surface);
-  color: var(--s-text);
+  border-radius: var(--s-radius-lg);
+  background: var(--s-surface-sunken);
+  box-shadow: var(--s-inset);
+  color: var(--s-accent);
   font-family: var(--s-font-mono);
   font-size: var(--s-text-2xl);
+  font-weight: var(--s-weight-semibold);
   letter-spacing: 0.5em;
+  /* O espaçamento sobra depois do último caractere; sem o recuo o conteúdo
+     fica visivelmente fora do centro. */
+  text-indent: 0.5em;
   text-align: center;
 }
 
@@ -686,6 +808,7 @@ body {
   padding: var(--s-space-1);
   border-radius: var(--s-radius-md);
   background: var(--s-surface-sunken);
+  box-shadow: var(--s-inset-sutil);
 }
 
 .seletor-modo__opcao {
@@ -704,9 +827,10 @@ body {
 }
 
 .seletor-modo__opcao.ativa {
-  background: var(--s-surface-raised);
+  background-image: linear-gradient(180deg, var(--s-grad-alto), var(--s-grad-baixo));
+  background-color: var(--s-surface-raised);
   color: var(--s-text);
-  box-shadow: var(--s-shadow-sm);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
 }
 
 .pareamento-qr,
@@ -774,9 +898,12 @@ body {
   border-color: var(--s-border-strong);
 }
 
+/* Escolhida ganha o halo do acento — o mesmo sinal de "ligado" que um controle
+   ativo usa no painel, para que os dois queiram dizer a mesma coisa. */
 .tema-opcao.ativa {
   border-color: var(--s-accent);
   background: var(--s-accent-soft);
+  box-shadow: var(--s-glow-accent);
 }
 
 .tema-opcao:focus-visible {
@@ -889,17 +1016,6 @@ body {
 /* Entrada na conta                                                          */
 /* ------------------------------------------------------------------------ */
 
-.entrada {
-  display: grid;
-  gap: var(--s-space-4);
-  width: min(22rem, calc(100vw - 3rem));
-  padding: var(--s-space-6);
-  border: 1px solid var(--s-border);
-  border-radius: var(--s-radius-xl);
-  background: var(--s-surface-raised);
-  box-shadow: var(--s-shadow-md);
-}
-
 .entrada h1 {
   margin: 0;
   font-size: var(--s-text-xl);
@@ -937,13 +1053,17 @@ body {
 }
 
 .botao.principal {
-  border-color: transparent;
-  background: var(--s-accent);
+  border-color: var(--s-accent-strong);
+  background-image: linear-gradient(180deg, var(--s-accent), var(--s-accent-strong));
+  background-color: var(--s-accent);
+  box-shadow: var(--s-highlight-strong), var(--s-shadow-sm);
   color: var(--s-on-accent);
+  font-weight: var(--s-weight-semibold);
 }
 
 .botao.principal:hover {
-  background: var(--s-accent-strong);
+  background-image: linear-gradient(180deg, var(--s-signal-300), var(--s-accent));
+  box-shadow: var(--s-highlight-strong), var(--s-shadow-md);
 }
 
 .botao:disabled {
@@ -1213,6 +1333,12 @@ body {
   --tom: var(--s-control-green);
 }
 
+/*
+ * O cartão de entrada ganha a mesma construção de altura que uma superfície
+ * "sobreposta": fio de luz no topo, sombra em duas camadas e uma borda um
+ * grau mais forte. É o que separa "cartão premium" de "div com borda" — o
+ * mesmo raciocínio do design system, só que esta janela tem folha própria.
+ */
 .entrada {
   display: grid;
   align-content: center;
@@ -1220,12 +1346,33 @@ body {
   width: min(24rem, 100%);
   justify-self: center;
   padding: var(--s-space-8);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--s-radius-xl);
+  background: var(--s-surface-raised);
+  box-shadow: var(--s-highlight-strong), var(--s-shadow-lg);
 }
 
 .entrada__cabecalho {
   display: grid;
   gap: var(--s-space-2);
   margin-bottom: var(--s-space-2);
+}
+
+/*
+ * O selo acima do título nomeia a tela antes de o olho chegar ao h1 — o
+ * mesmo papel que um "kicker" tem numa capa de revista: contexto em uma
+ * palavra, para quem só bateu o olho.
+ */
+.entrada__selo {
+  justify-self: start;
+  padding: 0.1875rem var(--s-space-2);
+  border-radius: var(--s-radius-full);
+  background: var(--s-accent-soft);
+  color: var(--s-accent);
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-caps);
+  text-transform: uppercase;
 }
 
 .entrada__rodape {
@@ -1237,6 +1384,70 @@ body {
 
 .campo input::placeholder {
   color: var(--s-text-subtle);
+}
+
+/*
+ * "ou", entre o caminho de senha e o de terceiros.
+ *
+ * Duas linhas com o texto no meio, e não um texto solto: sem elas a palavra
+ * "ou" flutua entre dois botões sem dizer a que se refere.
+ */
+.divisor {
+  display: flex;
+  align-items: center;
+  gap: var(--s-space-3);
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-xs);
+}
+
+.divisor::before,
+.divisor::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--s-border);
+}
+
+/*
+ * O botão do Google segue a convenção da própria marca — fundo claro,
+ * mesmo no tema escuro — porque é assim que a marca é reconhecida à
+ * primeira vista; um botão "Google" com as cores do produto por baixo do
+ * logo coloria justamente o que precisa ficar neutro.
+ */
+.botao-google {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-space-3);
+  background: var(--s-slate-0);
+  border-color: var(--s-slate-200);
+  color: var(--s-slate-900);
+  font-weight: var(--s-weight-medium);
+}
+
+.botao-google:hover {
+  border-color: var(--s-slate-200);
+}
+
+.botao-google:disabled {
+  /* Acinzentado, e não apagado: precisa continuar legível como "forma
+     final, ainda não ligada" em vez de parecer um botão quebrado. */
+  opacity: 0.85;
+  cursor: not-allowed;
+}
+
+.selo-em-breve {
+  position: absolute;
+  right: var(--s-space-3);
+  padding: 0.125rem var(--s-space-2);
+  border-radius: var(--s-radius-full);
+  background: var(--s-slate-100);
+  color: var(--s-slate-600);
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-wide);
+  text-transform: uppercase;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1484,5 +1695,436 @@ body {
   .aparelho .permissao,
   .programa__acoes {
     grid-column: 1 / -1;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Entrada premium                                                           */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * A entrada é um único canvas. A referência visual pede proximidade entre a
+ * promessa e a ação; a antiga divisão em metades criava duas páginas que por
+ * acaso ocupavam a mesma janela.
+ */
+.portal {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: clamp(var(--s-space-6), 5vw, var(--s-space-16));
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--s-accent-soft) 32%, transparent), transparent 38%),
+    var(--s-bg);
+}
+
+.portal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--s-border) 28%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--s-border) 28%, transparent) 1px, transparent 1px);
+  background-size: 4rem 4rem;
+  mask-image: radial-gradient(
+    ellipse 74% 64% at 50% 44%,
+    var(--s-slate-1000) 0%,
+    transparent 78%
+  );
+  opacity: 0.3;
+}
+
+.portal__brilho {
+  position: fixed;
+  z-index: -1;
+  width: 28rem;
+  height: 28rem;
+  border-radius: 50%;
+  filter: blur(7rem);
+  pointer-events: none;
+  opacity: 0.11;
+}
+
+.portal__brilho--violeta {
+  top: -10rem;
+  left: -8rem;
+  background: var(--s-control-violet);
+}
+
+.portal__brilho--ciano {
+  right: -10rem;
+  bottom: -12rem;
+  background: var(--s-accent);
+}
+
+.portal__casco {
+  display: grid;
+  grid-template-columns: minmax(20rem, 1fr) minmax(21rem, 23.5rem);
+  align-items: center;
+  gap: clamp(var(--s-space-10), 7vw, 6.5rem);
+  width: min(65rem, 100%);
+}
+
+.portal__vitrine {
+  display: grid;
+  align-content: center;
+  gap: var(--s-space-6);
+  min-width: 0;
+  padding: var(--s-space-4) 0;
+  border: 0;
+  background: transparent;
+}
+
+.portal__marca,
+.entrada__marca-compacta {
+  display: flex;
+  align-items: center;
+  gap: var(--s-space-3);
+}
+
+.marca-simbolo {
+  display: grid;
+  grid-template-columns: repeat(2, 0.45rem);
+  gap: 0.18rem;
+  width: 1.2rem;
+  transform: rotate(-8deg);
+}
+
+.marca-simbolo i {
+  display: block;
+  aspect-ratio: 1;
+  border: 1px solid var(--s-border-strong);
+  border-radius: 0.16rem;
+  background: var(--s-surface-raised);
+  box-shadow: var(--s-highlight);
+}
+
+.marca-simbolo i:nth-child(3) {
+  border-color: var(--s-accent);
+  background: var(--s-accent);
+  box-shadow: var(--s-glow-accent);
+}
+
+.portal__edicao {
+  padding: 0.15rem var(--s-space-2);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-full);
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-medium);
+  letter-spacing: var(--s-tracking-wide);
+  text-transform: uppercase;
+}
+
+.portal__palco {
+  position: relative;
+  width: min(22rem, 100%);
+  margin: calc(var(--s-space-2) * -1) 0;
+}
+
+.portal__palco .s-palco {
+  height: clamp(7rem, 18vh, 10rem);
+}
+
+.portal__palco .s-palco__placa {
+  transform: scale(0.82) rotateX(calc(54deg + var(--giro-x))) rotateZ(calc(-32deg + var(--giro-y)));
+}
+
+.portal__estado {
+  position: absolute;
+  right: 0;
+  bottom: var(--s-space-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-space-2);
+  padding: var(--s-space-2) var(--s-space-3);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius-full);
+  background: color-mix(in srgb, var(--s-surface-raised) 88%, transparent);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
+  color: var(--s-text-muted);
+  font-size: var(--s-text-xs);
+  backdrop-filter: blur(1rem);
+}
+
+.portal__estado i {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: var(--s-control-green);
+  box-shadow: 0 0 0 0.24rem color-mix(in srgb, var(--s-control-green) 14%, transparent);
+}
+
+.portal__texto {
+  display: grid;
+  gap: var(--s-space-3);
+  max-width: 31rem;
+}
+
+.portal__sobretitulo {
+  color: var(--s-accent);
+  font-size: var(--s-text-xs);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-caps);
+  text-transform: uppercase;
+}
+
+.portal__promessa {
+  max-width: 30rem;
+  font-size: clamp(2rem, 3.2vw, 3.35rem);
+  font-weight: var(--s-weight-semibold);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+
+.portal__descricao {
+  max-width: 29rem;
+  margin: 0;
+  color: var(--s-text-muted);
+  font-size: var(--s-text-md);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.portal__recursos {
+  grid-template-columns: 1fr;
+  gap: var(--s-space-3);
+  max-width: 31rem;
+}
+
+.portal__recursos li {
+  gap: var(--s-space-3);
+  min-width: 0;
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-xs);
+  line-height: var(--s-leading-normal);
+}
+
+.portal__recursos li > span:last-child {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.portal__recursos strong {
+  color: var(--s-text);
+  font-size: var(--s-text-sm);
+  font-weight: var(--s-weight-medium);
+}
+
+.portal__recursos .chip {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid color-mix(in srgb, var(--tom) 26%, var(--s-border));
+  border-radius: var(--s-radius-md);
+}
+
+.portal__recursos .chip svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.entrada {
+  align-content: initial;
+  gap: var(--s-space-4);
+  width: 100%;
+  padding: var(--s-space-8);
+  border-color: color-mix(in srgb, var(--s-border-strong) 76%, transparent);
+  border-radius: var(--s-radius-xl);
+  background: color-mix(in srgb, var(--s-surface-raised) 94%, transparent);
+  box-shadow: var(--s-highlight-strong), var(--s-shadow-lg);
+  backdrop-filter: blur(1.5rem);
+}
+
+.entrada__marca-compacta {
+  display: none;
+}
+
+.entrada__status {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--s-space-2);
+  color: var(--s-accent);
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-caps);
+  text-transform: uppercase;
+}
+
+.entrada__status svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.entrada__cabecalho {
+  gap: var(--s-space-2);
+  margin: 0 0 var(--s-space-2);
+}
+
+.entrada h1 {
+  font-size: clamp(1.5rem, 2vw, 1.8rem);
+  letter-spacing: var(--s-tracking-tight);
+}
+
+.entrada__cabecalho .atenuado {
+  max-width: 18rem;
+  line-height: 1.55;
+}
+
+.entrada .campo {
+  gap: var(--s-space-2);
+  color: var(--s-text-muted);
+  font-size: var(--s-text-xs);
+  font-weight: var(--s-weight-medium);
+}
+
+.entrada .campo input {
+  min-height: 2.9rem;
+  padding: 0 var(--s-space-4);
+  border-color: var(--s-border);
+  border-radius: var(--s-radius-md);
+  background: color-mix(in srgb, var(--s-surface-sunken) 92%, transparent);
+}
+
+.entrada .campo input:hover {
+  border-color: var(--s-border-strong);
+}
+
+.entrada__enviar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-space-2);
+  min-height: 2.9rem;
+  margin-top: var(--s-space-1);
+}
+
+.entrada__enviar svg {
+  width: 1rem;
+  height: 1rem;
+  transition: transform var(--s-duration-fast) var(--s-ease-out);
+}
+
+.entrada__enviar:hover svg {
+  transform: translateX(0.15rem);
+}
+
+.entrada .divisor {
+  margin: 0;
+  font-size: var(--s-text-2xs);
+}
+
+.entrada .botao-google {
+  min-height: 2.75rem;
+  padding-right: 5.5rem;
+  font-size: var(--s-text-sm);
+}
+
+.entrada .selo-em-breve {
+  right: var(--s-space-2);
+  font-size: 0.58rem;
+}
+
+.entrada__rodape {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: var(--s-space-2);
+  padding-top: var(--s-space-1);
+  color: var(--s-text-subtle);
+}
+
+.entrada__rodape svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-top: 0.1rem;
+  color: var(--s-text-subtle);
+}
+
+.entrada__rodape p {
+  font-size: var(--s-text-2xs);
+  line-height: 1.5;
+}
+
+@media (max-width: 55rem) {
+  .portal__casco {
+    grid-template-columns: minmax(17rem, 1fr) minmax(20rem, 22rem);
+    gap: var(--s-space-10);
+  }
+
+  .portal__palco {
+    display: none;
+  }
+
+  .portal__promessa {
+    font-size: clamp(2rem, 4vw, 2.7rem);
+  }
+}
+
+@media (max-width: 43rem) {
+  .portal {
+    padding: var(--s-space-5);
+  }
+
+  .portal__casco {
+    display: block;
+    width: min(23.5rem, 100%);
+  }
+
+  .portal__vitrine {
+    display: none;
+  }
+
+  .entrada__marca-compacta {
+    display: flex;
+    margin-bottom: var(--s-space-2);
+  }
+}
+
+@media (max-width: 27rem) {
+  .portal {
+    place-items: start center;
+    padding: var(--s-space-3);
+  }
+
+  .entrada {
+    padding: var(--s-space-6);
+  }
+
+  .entrada .botao-google {
+    justify-content: flex-start;
+    padding-left: var(--s-space-4);
+  }
+}
+
+@media (max-height: 46rem) and (min-width: 43.01rem) {
+  .portal {
+    place-items: start center;
+    padding-top: var(--s-space-6);
+    padding-bottom: var(--s-space-6);
+  }
+
+  .portal__palco {
+    display: none;
+  }
+
+  .portal__vitrine,
+  .entrada {
+    gap: var(--s-space-3);
+  }
+
+  .portal__recursos {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .portal__recursos li {
+    align-items: start;
   }
 }

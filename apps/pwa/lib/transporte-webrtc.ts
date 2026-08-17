@@ -13,6 +13,7 @@ import {
   deckEstado,
   hello,
   type AtalhoDeDeck,
+  type PerfilDeDeck,
   mensagemServidorSinalizacao,
   negociar,
   novoEstadoSessao,
@@ -46,9 +47,15 @@ export interface OpcoesTransporteWebRtc {
    * computador não pode sobreviver à conexão que o trouxe: ele viraria uma
    * grade de teclas de outra máquina, ou de uma permissão já retirada.
    */
-  aoReceberDeck?: (atalhos: readonly AtalhoDeDeck[]) => void;
+  aoReceberDeck?: (deck: DeckRecebido) => void;
   /** Usado pelo teste de relay; produção deixa o ICE escolher o melhor caminho. */
   politicaIce?: RTCIceTransportPolicy;
+}
+
+export interface DeckRecebido {
+  atalhos: readonly AtalhoDeDeck[];
+  perfis: readonly PerfilDeDeck[];
+  perfilPadraoId?: string;
 }
 
 export interface ResultadoExecucaoAcao {
@@ -81,6 +88,8 @@ export class TransporteWebRtc {
   private estadoRecepcao = novoEstadoSessao();
   /** Fatias de `deck.estado` recebidas até agora, nesta sessão. */
   private deckParcial: AtalhoDeDeck[] = [];
+  private perfisDeckParcial: readonly PerfilDeDeck[] = [];
+  private perfilPadraoParcial?: string;
   private pendentes = new Map<
     string,
     { resolver: (resultado: ResultadoExecucaoAcao) => void; limite: ReturnType<typeof setTimeout> }
@@ -523,19 +532,40 @@ export class TransporteWebRtc {
        * metade parecendo completo. Por isso só a última publica, e só quando a
        * contagem fecha.
        */
-      const { atalhos, parte, total } = estado.data;
+      const { atalhos, perfis, perfilPadraoId, parte, total } = estado.data;
       if (parte === undefined || total === undefined) {
         this.deckParcial = [];
-        this.opcoes.aoReceberDeck?.(atalhos);
+        this.perfisDeckParcial = [];
+        this.perfilPadraoParcial = undefined;
+        this.opcoes.aoReceberDeck?.({
+          atalhos,
+          perfis: perfis ?? [],
+          perfilPadraoId,
+        });
         return;
       }
 
-      if (parte === 1) this.deckParcial = [];
+      if (parte === 1) {
+        this.deckParcial = [];
+        this.perfisDeckParcial = perfis ?? [];
+        this.perfilPadraoParcial = perfilPadraoId;
+      } else {
+        if (perfis) this.perfisDeckParcial = perfis;
+        if (perfilPadraoId) this.perfilPadraoParcial = perfilPadraoId;
+      }
       this.deckParcial = [...this.deckParcial, ...atalhos];
       if (parte === total) {
         const completo = this.deckParcial;
+        const perfisCompletos = this.perfisDeckParcial;
+        const perfilPadraoCompleto = this.perfilPadraoParcial;
         this.deckParcial = [];
-        this.opcoes.aoReceberDeck?.(completo);
+        this.perfisDeckParcial = [];
+        this.perfilPadraoParcial = undefined;
+        this.opcoes.aoReceberDeck?.({
+          atalhos: completo,
+          perfis: perfisCompletos,
+          perfilPadraoId: perfilPadraoCompleto,
+        });
       }
       return;
     }
@@ -593,7 +623,9 @@ export class TransporteWebRtc {
     // O deck cai junto com as capacidades, e pelo mesmo motivo: ele descreve
     // aquele computador, naquela sessão, sob aquela permissão.
     this.deckParcial = [];
-    this.opcoes.aoReceberDeck?.([]);
+    this.perfisDeckParcial = [];
+    this.perfilPadraoParcial = undefined;
+    this.opcoes.aoReceberDeck?.({ atalhos: [], perfis: [] });
     for (const [id] of this.pendentes) {
       this.concluirPendente(id, {
         ok: false,

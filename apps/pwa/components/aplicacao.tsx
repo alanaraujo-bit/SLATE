@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Botao, Rotulo, Superficie } from "@slate/design-system";
-import type { AtalhoDeDeck } from "@slate/protocol";
+import type { AtalhoDeDeck, PerfilDeDeck } from "@slate/protocol";
 import {
   api,
   EVENTO_SEM_CONEXAO,
@@ -47,6 +47,8 @@ export function Aplicacao() {
   const [agenteLiberaAtalhos, setAgenteLiberaAtalhos] = useState(false);
   /** Atalhos de programa que aquele computador enviou nesta sessão. */
   const [programas, setProgramas] = useState<readonly AtalhoDeDeck[]>([]);
+  const [perfis, setPerfis] = useState<readonly PerfilDeDeck[]>([]);
+  const [perfilPadraoId, setPerfilPadraoId] = useState<string | undefined>();
   const [agentePrincipalId, setAgentePrincipalId] = useState<string | null>(null);
   const [removendoDispositivo, setRemovendoDispositivo] = useState<string | null>(null);
   const [tokenConvite, setTokenConvite] = useState<string | null>(null);
@@ -148,7 +150,11 @@ export function Aplicacao() {
           setAgenteTemGradeCompleta(capacidades.includes("action.media.completo"));
           setAgenteLiberaAtalhos(capacidades.includes("action.atalhos"));
         },
-        aoReceberDeck: setProgramas,
+        aoReceberDeck: (deck) => {
+          setProgramas(deck.atalhos);
+          setPerfis(deck.perfis);
+          setPerfilPadraoId(deck.perfilPadraoId);
+        },
       });
       transporteAtual.current = transporte;
       transporte.iniciar();
@@ -164,6 +170,8 @@ export function Aplicacao() {
       setAgenteTemGradeCompleta(false);
       setAgenteLiberaAtalhos(false);
       setProgramas([]);
+      setPerfis([]);
+      setPerfilPadraoId(undefined);
       if (transporteAtual.current === transporte) transporteAtual.current = null;
     };
   }, [situacao, dispositivos, tentativa]);
@@ -408,6 +416,9 @@ export function Aplicacao() {
               <ControlesBasicos
                 gradeCompleta={agenteTemGradeCompleta}
                 atalhosLiberados={agenteLiberaAtalhos}
+                programas={programas}
+                perfis={perfis}
+                perfilPadraoId={perfilPadraoId}
                 executar={(actionId) =>
                   transporteAtual.current?.executarAcao(actionId) ??
                   Promise.resolve({

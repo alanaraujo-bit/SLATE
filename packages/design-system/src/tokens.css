@@ -28,30 +28,50 @@
   /* ===================================================================== */
 
   /*
-   * Neutros de ardósia, levemente frios — o nome do produto é o ponto de
-   * partida da identidade, e não uma escolha arbitrária de cinza.
+   * Neutros de ardósia.
+   *
+   * A pedra que dá nome ao produto não é cinza: é um cinza com tinta
+   * azul-violeta, e é de onde vem o caráter da interface. A versão anterior
+   * desta escala era dessaturada, e o resultado era o cinza-azulado de qualquer
+   * painel administrativo — correto e sem identidade nenhuma.
+   *
+   * A tinta é discreta de propósito (matiz ~232°, croma baixo). O suficiente
+   * para o olho registrar que o preto tem temperatura; não o bastante para
+   * competir com a cor de um controle, que é o que precisa ser visto.
    */
   --s-slate-0: #ffffff;
-  --s-slate-50: #f6f7f9;
-  --s-slate-100: #eceef2;
-  --s-slate-200: #d8dce4;
-  --s-slate-300: #b4bcc9;
-  --s-slate-400: #8c96a7;
-  --s-slate-500: #6b7688;
-  --s-slate-600: #505a6b;
-  --s-slate-700: #3a4250;
-  --s-slate-800: #262c37;
-  --s-slate-850: #1c212a;
-  --s-slate-900: #141820;
-  --s-slate-950: #0c0f15;
-  --s-slate-1000: #06080c;
+  --s-slate-50: #f4f5f8;
+  --s-slate-100: #eceef3;
+  --s-slate-200: #d7dae3;
+  --s-slate-300: #b3b8c7;
+  --s-slate-400: #8b91a4;
+  --s-slate-500: #666e83;
+  --s-slate-600: #4d5568;
+  --s-slate-700: #363c4e;
+  --s-slate-800: #232838;
+  --s-slate-850: #1a1e2c;
+  --s-slate-900: #131622;
+  --s-slate-950: #0d0f18;
+  --s-slate-1000: #08090f;
 
-  /* Acento: azul frio e preciso. Sinaliza ação, nunca decora. */
-  --s-blue-300: #93c4ff;
-  --s-blue-400: #5fa8ff;
-  --s-blue-500: #3b8df5;
-  --s-blue-600: #2b6fd6;
-  --s-blue-700: #1f54a8;
+  /*
+   * Acento: ciano de sinal — o traço luminoso de um instrumento de medição.
+   *
+   * Trocou o azul por um motivo concreto, não por gosto: o acento antigo
+   * (#5fa8ff) era o mesmo valor de `--s-control-blue`, então a cor da marca era
+   * indistinguível de uma das doze cores que o usuário atribui aos próprios
+   * botões. O acento precisa dizer "isto é do sistema"; se ele é uma das cores
+   * de controle, não diz nada.
+   *
+   * A separação aqui não é de matiz — as doze cores de controle já cobrem a
+   * roda inteira — e sim de luminosidade: este ciano é mais claro que qualquer
+   * cor de controle, o que o mantém reconhecível mesmo ao lado da mais próxima.
+   */
+  --s-signal-300: #a8f2f8;
+  --s-signal-400: #6ee7f0;
+  --s-signal-500: #3fd0dd;
+  --s-signal-600: #0e7f92;
+  --s-signal-700: #0a6274;
 
   --s-green-400: #4ade80;
   --s-green-500: #22c55e;
@@ -68,14 +88,19 @@
   --s-violet-400: #a78bfa;
   --s-violet-500: #8b5cf6;
 
-  --s-cyan-400: #22d3ee;
-  --s-cyan-500: #06b6d4;
   /*
-   * Existe porque o ciano-500 reprova sobre branco (2,4:1). Ciano é a matiz
-   * mais traiçoeira num tema claro: parece forte e não é. Detectado pelo teste
-   * de contraste, não a olho.
+   * Informação usa azul-céu, e não ciano, desde que o ciano virou o acento da
+   * marca: dois papéis diferentes com a mesma cor fazem o usuário ler estado
+   * onde existe apenas ênfase.
    */
-  --s-cyan-600: #0891b2;
+  --s-sky-300: #7dd3fc;
+  --s-sky-500: #0ea5e9;
+  /*
+   * O tom escuro existe porque os azuis claros reprovam sobre branco. Ciano e
+   * azul-céu são as matizes mais traiçoeiras num tema claro: parecem fortes e
+   * não são. Detectado pelo teste de contraste, não a olho.
+   */
+  --s-sky-600: #0284c7;
 
   /* ===================================================================== */
   /* PRIMITIVAS — paleta de controles                                       */
@@ -102,6 +127,20 @@
   --s-control-indigo: #6b6ef0;
   --s-control-violet: #9b6ef3;
   --s-control-pink: #ee5fa7;
+
+  /*
+   * A tinta que vai por cima de uma cor de controle preenchida.
+   *
+   * Não é semântica de tema, e por isso não aparece nos blocos de tema claro:
+   * as doze cores acima são as mesmas nos dois temas, então o rótulo por cima
+   * delas também precisa ser. Usar `--s-bg` aqui parecia mais limpo e estava
+   * errado — no tema claro daria texto quase branco sobre o amarelo e o lima,
+   * que é exatamente o par que a paleta foi desenhada para evitar.
+   *
+   * O valor é o mesmo que `textoSobre()` usa como tinta escura, e o teste que
+   * verifica as doze cores mede contra ele.
+   */
+  --s-on-control: #0d0f18;
 
   /* ===================================================================== */
   /* ESCALAS                                                                */
@@ -131,9 +170,31 @@
   --s-radius-xl: 1rem;
   --s-radius-full: 9999px;
 
-  /* Tipografia */
-  --s-font-sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
-  --s-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, monospace;
+  /*
+   * Tipografia
+   *
+   * A pilha do sistema era o maior motivo isolado de a interface parecer
+   * genérica: "Segoe UI" no Windows e "-apple-system" no iPhone significam que
+   * o SLATE tem a cara do aparelho, e não a sua. Nenhum produto com identidade
+   * própria delega a tipografia ao sistema operacional.
+   *
+   * Geist (licença OFL) é servida pelo próprio app — arquivo local, nunca CDN.
+   * A PWA precisa funcionar offline e a janela do Tauri não tem garantia de
+   * rede: uma fonte remota viraria um salto de layout no pior momento, que é
+   * quando o computador caiu e a pessoa está tentando reconectar.
+   *
+   * As pilhas mantêm a fonte do sistema como reserva, então uma superfície que
+   * ainda não vendorizou os arquivos continua legível em vez de quebrar.
+   */
+  --s-font-sans: "Geist", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --s-font-mono: "Geist Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+  /*
+   * A fonte de exibição é a mesma família, e isso é escolha e não economia.
+   * Duas famílias brigam numa tela de 6 polegadas; o que separa título de
+   * corpo aqui é peso e espaçamento, medidos abaixo, não um segundo desenho.
+   */
+  --s-font-display: var(--s-font-sans);
 
   --s-text-2xs: 0.6875rem;
   --s-text-xs: 0.75rem;
@@ -178,10 +239,84 @@
   /* ELEVAÇÃO                                                               */
   /* ===================================================================== */
 
+  /*
+   * Sombras em duas camadas: um contato curto e escuro logo abaixo da borda,
+   * mais uma difusão larga. Uma sombra só, com desfoque médio, é o que dá o
+   * aspecto de caixa flutuando em PowerPoint; a camada de contato é o que faz
+   * a superfície parecer apoiada em alguma coisa.
+   */
   --s-shadow-none: none;
-  --s-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
-  --s-shadow-md: 0 4px 12px rgb(0 0 0 / 0.3);
-  --s-shadow-lg: 0 12px 32px rgb(0 0 0 / 0.36);
+  --s-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 1px 1px rgb(0 0 0 / 0.24);
+  --s-shadow-md: 0 2px 4px rgb(0 0 0 / 0.32), 0 8px 20px rgb(0 0 0 / 0.36);
+  --s-shadow-lg: 0 4px 8px rgb(0 0 0 / 0.36), 0 20px 48px rgb(0 0 0 / 0.48);
+
+  /*
+   * O fio de luz no topo da superfície.
+   *
+   * Num tema escuro a sombra sozinha não constrói relevo: escuro sobre escuro
+   * some. O que informa a altura é a aresta de cima capturar luz — é assim que
+   * um objeto real se apresenta, e é o detalhe que separa "cartão premium" de
+   * "div com borda". Um pixel, aplicado com `inset`, nunca mais que isso.
+   */
+  --s-highlight: inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --s-highlight-strong: inset 0 1px 0 rgb(255 255 255 / 0.1);
+
+  /*
+   * Halo do acento, para o controle em execução e para o foco de teclado.
+   * Estático: um brilho que pulsa em laço contradiz o teto de movimento (§36)
+   * e faz um painel aberto o dia inteiro cansar.
+   */
+  --s-glow-accent: 0 0 0 1px rgb(110 231 240 / 0.35), 0 0 16px rgb(110 231 240 / 0.22);
+
+  /*
+   * As duas pontas do degradê de um objeto apertável — tecla, botão, aba ativa.
+   *
+   * São tokens próprios e não `--s-surface-overlay` / `--s-surface-raised`
+   * porque no tema claro os dois valem branco: a escada de elevação clara
+   * funciona deixando o cartão branco sobre um fundo cinza, e não empilhando
+   * brancos. Usar a escada direto aqui deu exatamente isso — teclas de topo e
+   * base idênticos, sem relevo nenhum, que foi o que a conferência no tema
+   * claro mostrou. Com par próprio, cada tema declara sua inclinação de luz.
+   */
+  --s-grad-alto: var(--s-surface-overlay);
+  --s-grad-baixo: var(--s-surface-raised);
+
+  /*
+   * Afundamento, para o que é trilho ou visor em vez de tecla. Vira token pelo
+   * mesmo motivo: uma sombra interna preta a 35% é certa no escuro e vira uma
+   * mancha cinza no claro.
+   */
+  --s-inset: inset 0 2px 8px rgb(0 0 0 / 0.35);
+  --s-inset-sutil: inset 0 1px 3px rgb(0 0 0 / 0.25);
+
+  /*
+   * As teclas do palco têm tons próprios, e não os do botão.
+   *
+   * O palco fica sobre a superfície mais alta da tela — o cartão de entrada —,
+   * enquanto um botão fica sobre a superfície comum. Herdar o par do botão fazia
+   * as teclas apagadas nascerem da mesma cor do que está atrás delas: no tema
+   * claro, branco sobre branco, e a grade sumia deixando só a tecla acesa
+   * flutuando sozinha. Estes tons são medidos contra o cartão, não contra o
+   * fundo da página.
+   */
+  --s-palco-alto: var(--s-slate-800);
+  --s-palco-baixo: var(--s-slate-900);
+  --s-palco-borda: var(--s-slate-700);
+  --s-palco-sombra: 0 6px 10px rgb(0 0 0 / 0.45);
+  --s-palco-sombra-acesa: 0 16px 24px rgb(0 0 0 / 0.5);
+
+  /*
+   * Grão.
+   *
+   * Um preenchimento chapado num painel grande revela o degrau entre um valor e
+   * o seguinte (banding) e denuncia que é uma cor de CSS e não uma superfície.
+   * O ruído quebra isso. Fica em 3,5% e só sobre `--s-bg` — nunca por cima de
+   * cartão ou de rótulo, porque textura sob texto pequeno derruba a
+   * legibilidade sem que nenhum teste de contraste perceba.
+   */
+  --s-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23r)'/%3E%3C/svg%3E");
+  --s-grain-opacidade: 0.035;
+
   /* Anel de foco. Nunca removido — apenas redesenhado (§9, acessibilidade). */
   --s-ring-focus: 0 0 0 2px var(--s-bg), 0 0 0 4px var(--s-accent);
 
@@ -201,28 +336,50 @@
   /* SEMÂNTICOS — tema escuro (padrão)                                      */
   /* ===================================================================== */
 
+  /*
+   * A escada de elevação.
+   *
+   * Os quatro níveis antes existiam como nomes, mas os valores estavam quase
+   * juntos demais para o olho registrar ordem — o resultado era uma tela plana
+   * com bordas, que é a aparência de protótipo. Agora cada degrau é um passo
+   * perceptível e sempre na mesma direção: mais alto, mais claro, mais quente
+   * dentro da mesma tinta. Fundo → superfície → elevada → sobreposta.
+   */
   --s-bg: var(--s-slate-1000);
   --s-surface: var(--s-slate-950);
   --s-surface-raised: var(--s-slate-900);
   --s-surface-overlay: var(--s-slate-850);
-  --s-surface-sunken: #04050a;
+  --s-surface-sunken: #050609;
 
-  --s-border: #232a35;
-  --s-border-strong: #333c4a;
+  /*
+   * Bordas derivadas do texto, e não hex avulso.
+   *
+   * São o texto misturado à superfície a 8% e a 16% — o cálculo está resolvido
+   * aqui em hexadecimal de propósito: os testes leem este arquivo e medem
+   * contraste com um parser de hex, então um `color-mix()` neste ponto passaria
+   * como string e a verificação morreria em silêncio. Fica `color-mix()` só
+   * onde nada é medido.
+   *
+   * Derivar em vez de escolher é o que mantém a borda na mesma família do tema
+   * quando a tinta do fundo muda; o valor anterior (#232a35) era de outra
+   * escala e por isso a separação nunca parecia da mesma peça.
+   */
+  --s-border: #1f2231;
+  --s-border-strong: #2f3446;
 
   /*
    * Os três níveis de texto passam em WCAG AA sobre --s-surface como texto
    * normal, não apenas como texto grande. O nível terciário é o que costuma
    * reprovar: foi escolhido por medição, não por aparência.
    */
-  --s-text: #eef1f6;
-  --s-text-muted: #a2acbb;
-  --s-text-subtle: #7d8798;
+  --s-text: #eef0f7;
+  --s-text-muted: #a6adc0;
+  --s-text-subtle: #868ea4;
 
-  --s-accent: var(--s-blue-400);
-  --s-accent-strong: var(--s-blue-500);
-  --s-accent-soft: rgb(95 168 255 / 0.14);
-  --s-on-accent: #04121f;
+  --s-accent: var(--s-signal-400);
+  --s-accent-strong: var(--s-signal-500);
+  --s-accent-soft: rgb(110 231 240 / 0.14);
+  --s-on-accent: #04141a;
 
   --s-success: var(--s-green-400);
   --s-success-soft: rgb(74 222 128 / 0.14);
@@ -230,8 +387,8 @@
   --s-warning-soft: rgb(251 191 36 / 0.14);
   --s-danger: var(--s-red-400);
   --s-danger-soft: rgb(248 113 113 / 0.14);
-  --s-info: var(--s-cyan-400);
-  --s-info-soft: rgb(34 211 238 / 0.14);
+  --s-info: var(--s-sky-300);
+  --s-info-soft: rgb(125 211 252 / 0.14);
 
   /* Estados de conexão — os mesmos nomes do protocolo (§37). */
   --s-state-connected: var(--s-success);
@@ -257,16 +414,16 @@
     --s-surface-overlay: var(--s-slate-0);
     --s-surface-sunken: var(--s-slate-100);
 
-    --s-border: var(--s-slate-200);
-    --s-border-strong: var(--s-slate-300);
+    --s-border: #e5e7ed;
+    --s-border-strong: #cfd2dc;
 
     --s-text: var(--s-slate-900);
     --s-text-muted: var(--s-slate-600);
     --s-text-subtle: var(--s-slate-500);
 
-    --s-accent: var(--s-blue-600);
-    --s-accent-strong: var(--s-blue-700);
-    --s-accent-soft: rgb(43 111 214 / 0.1);
+    --s-accent: var(--s-signal-600);
+    --s-accent-strong: var(--s-signal-700);
+    --s-accent-soft: rgb(14 127 146 / 0.1);
     --s-on-accent: #ffffff;
 
     --s-success: var(--s-green-600);
@@ -275,12 +432,43 @@
     --s-warning-soft: rgb(217 119 6 / 0.1);
     --s-danger: var(--s-red-600);
     --s-danger-soft: rgb(220 38 38 / 0.1);
-    --s-info: var(--s-cyan-600);
-    --s-info-soft: rgb(8 145 178 / 0.1);
+    --s-info: var(--s-sky-600);
+    --s-info-soft: rgb(2 132 199 / 0.1);
 
-    --s-shadow-sm: 0 1px 2px rgb(15 23 42 / 0.08);
-    --s-shadow-md: 0 4px 12px rgb(15 23 42 / 0.08);
-    --s-shadow-lg: 0 12px 32px rgb(15 23 42 / 0.12);
+    --s-shadow-sm: 0 1px 2px rgb(19 22 34 / 0.06), 0 1px 1px rgb(19 22 34 / 0.04);
+    --s-shadow-md: 0 2px 4px rgb(19 22 34 / 0.05), 0 8px 20px rgb(19 22 34 / 0.08);
+    --s-shadow-lg: 0 4px 8px rgb(19 22 34 / 0.06), 0 20px 48px rgb(19 22 34 / 0.12);
+
+    /*
+     * Sem fio de luz no tema claro: a aresta de cima de um cartão branco não
+     * tem como capturar mais luz que o fundo branco atrás dela. Aqui quem
+     * constrói altura é a sombra, e insistir no realce só deixaria a borda
+     * suja.
+     */
+    --s-highlight: none;
+    --s-highlight-strong: none;
+
+    --s-glow-accent: 0 0 0 1px rgb(14 127 146 / 0.3), 0 0 16px rgb(14 127 146 / 0.14);
+
+    /* Branco no topo descendo para um cinza pálido: a inclinação de luz do
+       tema escuro, invertida para funcionar sobre papel. */
+    --s-grad-alto: #ffffff;
+    --s-grad-baixo: #f5f6f9;
+
+    --s-inset: inset 0 2px 6px rgb(19 22 34 / 0.09);
+    --s-inset-sutil: inset 0 1px 3px rgb(19 22 34 / 0.07);
+
+    /* Cinza definido sobre o cartão branco: no claro a tecla apagada precisa
+       ser mais escura que o que está atrás, e não mais clara. */
+    --s-palco-alto: #eef0f5;
+    --s-palco-baixo: #dfe2ea;
+    --s-palco-borda: #c8ccd8;
+    --s-palco-sombra: 0 6px 10px rgb(19 22 34 / 0.12);
+    --s-palco-sombra-acesa: 0 16px 24px rgb(19 22 34 / 0.18);
+
+    /* Papel, não fundo de vídeo: no claro o grão sugere sujeira antes de
+       sugerir textura, então cai para quase nada. */
+    --s-grain-opacidade: 0.015;
   }
 }
 
@@ -292,16 +480,16 @@
   --s-surface-overlay: var(--s-slate-0);
   --s-surface-sunken: var(--s-slate-100);
 
-  --s-border: var(--s-slate-200);
-  --s-border-strong: var(--s-slate-300);
+  --s-border: #e5e7ed;
+  --s-border-strong: #cfd2dc;
 
   --s-text: var(--s-slate-900);
   --s-text-muted: var(--s-slate-600);
   --s-text-subtle: var(--s-slate-500);
 
-  --s-accent: var(--s-blue-600);
-  --s-accent-strong: var(--s-blue-700);
-  --s-accent-soft: rgb(43 111 214 / 0.1);
+  --s-accent: var(--s-signal-600);
+  --s-accent-strong: var(--s-signal-700);
+  --s-accent-soft: rgb(14 127 146 / 0.1);
   --s-on-accent: #ffffff;
 
   --s-success: var(--s-green-600);
@@ -310,12 +498,33 @@
   --s-warning-soft: rgb(217 119 6 / 0.1);
   --s-danger: var(--s-red-600);
   --s-danger-soft: rgb(220 38 38 / 0.1);
-  --s-info: var(--s-cyan-600);
-  --s-info-soft: rgb(8 145 178 / 0.1);
+  --s-info: var(--s-sky-600);
+  --s-info-soft: rgb(2 132 199 / 0.1);
 
-  --s-shadow-sm: 0 1px 2px rgb(15 23 42 / 0.08);
-  --s-shadow-md: 0 4px 12px rgb(15 23 42 / 0.08);
-  --s-shadow-lg: 0 12px 32px rgb(15 23 42 / 0.12);
+  --s-shadow-sm: 0 1px 2px rgb(19 22 34 / 0.06), 0 1px 1px rgb(19 22 34 / 0.04);
+  --s-shadow-md: 0 2px 4px rgb(19 22 34 / 0.05), 0 8px 20px rgb(19 22 34 / 0.08);
+  --s-shadow-lg: 0 4px 8px rgb(19 22 34 / 0.06), 0 20px 48px rgb(19 22 34 / 0.12);
+
+  --s-highlight: none;
+  --s-highlight-strong: none;
+
+  --s-glow-accent: 0 0 0 1px rgb(14 127 146 / 0.3), 0 0 16px rgb(14 127 146 / 0.14);
+
+  --s-grad-alto: #ffffff;
+  --s-grad-baixo: #f5f6f9;
+
+  --s-inset: inset 0 2px 6px rgb(19 22 34 / 0.09);
+  --s-inset-sutil: inset 0 1px 3px rgb(19 22 34 / 0.07);
+
+  /* Cinza definido sobre o cartão branco: no claro a tecla apagada precisa
+   ser mais escura que o que está atrás, e não mais clara. */
+  --s-palco-alto: #eef0f5;
+  --s-palco-baixo: #dfe2ea;
+  --s-palco-borda: #c8ccd8;
+  --s-palco-sombra: 0 6px 10px rgb(19 22 34 / 0.12);
+  --s-palco-sombra-acesa: 0 16px 24px rgb(19 22 34 / 0.18);
+
+  --s-grain-opacidade: 0.015;
 }
 
 /* ======================================================================= */

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icone, Rotulo } from "@slate/design-system";
-import type { AtalhoDeDeck } from "@slate/protocol";
+import type { AtalhoDeDeck, ItemDePerfilDeck, PerfilDeDeck } from "@slate/protocol";
 import {
   CONTROLES_ATALHOS,
   CONTROLES_MIDIA,
@@ -18,6 +18,8 @@ export function ControlesBasicos({
   gradeCompleta = false,
   atalhosLiberados = false,
   programas = [],
+  perfis = [],
+  perfilPadraoId,
 }: {
   executar: (actionId: string) => Promise<ResultadoExecucaoAcao>;
   /**
@@ -27,6 +29,9 @@ export function ControlesBasicos({
    * alguém cadastrar programas na janela do Agente.
    */
   programas?: readonly AtalhoDeDeck[];
+  /** Perfis criados no desktop. Ausente mantém a grade clássica. */
+  perfis?: readonly PerfilDeDeck[];
+  perfilPadraoId?: string;
   /** O Agente anunciou `action.media.completo` no handshake. */
   gradeCompleta?: boolean;
   /**
@@ -57,6 +62,19 @@ export function ControlesBasicos({
   const midia = visiveis(CONTROLES_MIDIA, gradeCompleta);
   const volume = visiveis(CONTROLES_VOLUME, gradeCompleta);
 
+  if (perfis.length > 0) {
+    return (
+      <PainelDePerfis
+        perfis={perfis}
+        perfilPadraoId={perfilPadraoId}
+        programas={programas}
+        gradeCompleta={gradeCompleta}
+        acionar={acionar}
+        erro={erro}
+      />
+    );
+  }
+
   const botao = (controle: Controle) => (
     <button
       key={controle.actionId}
@@ -66,7 +84,7 @@ export function ControlesBasicos({
       // `:active` do CSS, que é imediato e não depende da rede.
       onClick={() => acionar(controle.actionId)}
     >
-      <Icone nome={controle.icone} aria-hidden />
+      <Representacao controle={controle} />
       <span>{controle.rotulo}</span>
     </button>
   );
@@ -169,6 +187,207 @@ export function ControlesBasicos({
         <p className="controle-resultado controle-resultado--erro" role="alert">
           {erro}
         </p>
+      )}
+    </section>
+  );
+}
+
+function Representacao({ controle }: { controle: Controle }) {
+  if (controle.marca) {
+    const simbolos = {
+      youtube: "▶",
+      twitch: "T",
+      netflix: "N",
+      prime: "prime",
+      disney: "D+",
+      spotify: "≋",
+    } as const;
+    return (
+      <span className={`marca-servico marca-servico--${controle.marca}`} aria-hidden>
+        {simbolos[controle.marca]}
+      </span>
+    );
+  }
+  return <Icone nome={controle.icone} aria-hidden />;
+}
+
+function PainelDePerfis({
+  perfis,
+  perfilPadraoId,
+  programas,
+  gradeCompleta,
+  acionar,
+  erro,
+}: {
+  perfis: readonly PerfilDeDeck[];
+  perfilPadraoId?: string;
+  programas: readonly AtalhoDeDeck[];
+  gradeCompleta: boolean;
+  acionar: (actionId: string) => void;
+  erro: string | null;
+}) {
+  const perfilInicial =
+    perfis.find((perfil) => perfil.id === perfilPadraoId)?.id ?? perfis[0]?.id ?? "";
+  const [perfilId, setPerfilId] = useState(perfilInicial);
+  const [pagina, setPagina] = useState(0);
+  const inicioArraste = useRef<number | null>(null);
+  const ignorarCliqueAte = useRef(0);
+
+  useEffect(() => {
+    if (!perfis.some((perfil) => perfil.id === perfilId)) setPerfilId(perfilInicial);
+  }, [perfilId, perfilInicial, perfis]);
+
+  useEffect(() => setPagina(0), [perfilId]);
+
+  const perfil = perfis.find((item) => item.id === perfilId) ?? perfis[0];
+  const controles = useMemo(
+    () =>
+      new Map(
+        [...visiveis(CONTROLES_MIDIA, gradeCompleta), ...visiveis(CONTROLES_VOLUME, gradeCompleta), ...CONTROLES_ATALHOS].map(
+          (controle) => [controle.actionId, controle] as const,
+        ),
+      ),
+    [gradeCompleta],
+  );
+  const programasPorAcao = useMemo(
+    () => new Map(programas.map((programa) => [acaoDoPrograma(programa.id), programa] as const)),
+    [programas],
+  );
+
+  if (!perfil) return null;
+
+  const totalPaginas = Math.max(1, ...perfil.itens.map((item) => item.pagina + 1));
+  const itens = perfil.itens
+    .filter((item) => item.pagina === pagina)
+    .sort((a, b) => a.ordem - b.ordem)
+    .filter((item) => controles.has(item.actionId) || programasPorAcao.has(item.actionId));
+
+  const mudarPagina = (direcao: -1 | 1) => {
+    setPagina((atual) => Math.min(totalPaginas - 1, Math.max(0, atual + direcao)));
+  };
+
+  const terminarArraste = (x: number) => {
+    if (inicioArraste.current === null) return;
+    const distancia = x - inicioArraste.current;
+    inicioArraste.current = null;
+    if (Math.abs(distancia) < 52) return;
+    ignorarCliqueAte.current = Date.now() + 300;
+    mudarPagina(distancia < 0 ? 1 : -1);
+  };
+
+  const executar = (actionId: string) => {
+    if (Date.now() >= ignorarCliqueAte.current) acionar(actionId);
+  };
+
+  const renderizarItem = (item: ItemDePerfilDeck) => {
+    const controle = controles.get(item.actionId);
+    const programa = programasPorAcao.get(item.actionId);
+    const cor = item.cor ?? perfil.cor;
+    return (
+      <button
+        key={`${item.pagina}:${item.ordem}:${item.actionId}`}
+        type="button"
+        className={`tecla tecla--perfil${item.tamanho === "largo" ? " tecla--larga" : ""}`}
+        style={{ "--tom": `var(--s-control-${cor})` } as React.CSSProperties}
+        onClick={() => executar(item.actionId)}
+      >
+        {programa ? (
+          programa.icone ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="tecla__icone" src={programa.icone} alt="" aria-hidden />
+          ) : (
+            <Icone nome="Monitor" aria-hidden />
+          )
+        ) : controle ? (
+          <Representacao controle={controle} />
+        ) : null}
+        <span>{programa?.nome ?? controle?.rotulo}</span>
+      </button>
+    );
+  };
+
+  return (
+    <section className="painel-perfis" aria-label="Painel de controle">
+      <header className="seletor-perfis">
+        <div className="seletor-perfis__trilha" role="tablist" aria-label="Perfis">
+          {perfis.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={item.id === perfil.id}
+              className={`perfil-chip${item.id === perfil.id ? " perfil-chip--ativo" : ""}`}
+              style={{ "--perfil-cor": `var(--s-control-${item.cor})` } as React.CSSProperties}
+              onClick={() => setPerfilId(item.id)}
+            >
+              <i aria-hidden />
+              {item.nome}
+            </button>
+          ))}
+        </div>
+        <span className="seletor-perfis__pagina">
+          {totalPaginas > 1 ? `${pagina + 1} / ${totalPaginas}` : "Painel pronto"}
+        </span>
+      </header>
+
+      <div
+        className="pagina-perfil"
+        onPointerDown={(evento) => {
+          if (evento.pointerType !== "mouse" || evento.buttons === 1) {
+            inicioArraste.current = evento.clientX;
+          }
+        }}
+        onPointerUp={(evento) => terminarArraste(evento.clientX)}
+        onPointerCancel={() => {
+          inicioArraste.current = null;
+        }}
+      >
+        <div
+          className="grade-perfil"
+          style={
+            {
+              "--colunas-retrato": perfil.colunasRetrato,
+              "--colunas-paisagem": perfil.colunasPaisagem,
+            } as React.CSSProperties
+          }
+        >
+          {itens.map(renderizarItem)}
+        </div>
+
+        {itens.length === 0 && (
+          <div className="pagina-perfil__vazia">
+            <Icone nome="Grade" aria-hidden />
+            <strong>Página vazia</strong>
+            <span>Adicione controles pelo SLATE no computador.</span>
+          </div>
+        )}
+      </div>
+
+      {totalPaginas > 1 && (
+        <nav className="paginacao-perfil" aria-label="Páginas do perfil">
+          <button type="button" onClick={() => mudarPagina(-1)} disabled={pagina === 0} aria-label="Página anterior">
+            <Icone nome="Voltar" aria-hidden />
+          </button>
+          <span>
+            {Array.from({ length: totalPaginas }, (_, indice) => (
+              <button
+                key={indice}
+                type="button"
+                className={indice === pagina ? "ativo" : ""}
+                aria-label={`Página ${indice + 1}`}
+                aria-current={indice === pagina ? "page" : undefined}
+                onClick={() => setPagina(indice)}
+              />
+            ))}
+          </span>
+          <button type="button" onClick={() => mudarPagina(1)} disabled={pagina === totalPaginas - 1} aria-label="Próxima página">
+            <Icone nome="Avancar" aria-hidden />
+          </button>
+        </nav>
+      )}
+
+      {erro && (
+        <p className="controle-resultado controle-resultado--erro" role="alert">{erro}</p>
       )}
     </section>
   );

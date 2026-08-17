@@ -60,6 +60,9 @@ importers:
       '@slate/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
+      '@slate/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@tauri-apps/api':
         specifier: ^2
         version: 2.11.1

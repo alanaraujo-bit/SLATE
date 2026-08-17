@@ -169,6 +169,34 @@ export const atalhoDeDeck = z.object({
 export type AtalhoDeDeck = z.infer<typeof atalhoDeDeck>;
 
 /**
+ * Uma posição dentro de um perfil do painel.
+ *
+ * O item carrega somente o identificador da ação. Nome, ícone e alvo continuam
+ * vindo dos catálogos fechados ou da lista segura de programas do Agente.
+ */
+export const itemDePerfilDeck = z.object({
+  actionId: z.string().min(1).max(128),
+  pagina: z.number().int().min(0).max(9),
+  ordem: z.number().int().min(0).max(199),
+  cor: z.enum(CORES_ATALHO).optional(),
+  tamanho: z.enum(["normal", "largo"]).optional(),
+});
+
+export type ItemDePerfilDeck = z.infer<typeof itemDePerfilDeck>;
+
+/** Um painel salvo no computador e espelhado para a superfície móvel. */
+export const perfilDeDeck = z.object({
+  id: z.string().min(1).max(64),
+  nome: z.string().min(1).max(28),
+  cor: z.enum(CORES_ATALHO),
+  colunasRetrato: z.number().int().min(2).max(3),
+  colunasPaisagem: z.number().int().min(4).max(6),
+  itens: z.array(itemDePerfilDeck).max(200),
+});
+
+export type PerfilDeDeck = z.infer<typeof perfilDeDeck>;
+
+/**
  * A lista de atalhos cadastrados no computador.
  *
  * Enviada pelo Agente logo depois do hello, e só a quem tem a concessão de
@@ -182,6 +210,12 @@ export type AtalhoDeDeck = z.infer<typeof atalhoDeDeck>;
  */
 export const deckEstado = z.object({
   atalhos: z.array(atalhoDeDeck).max(100),
+  /**
+   * Ausente em Agentes antigos. A PWA preserva a grade clássica nesse caso,
+   * então atualizar o site nunca quebra uma instalação que ficou para trás.
+   */
+  perfis: z.array(perfilDeDeck).max(12).optional(),
+  perfilPadraoId: z.string().min(1).max(64).optional(),
   /** Fatia atual, começando em 1. Ausente quando a lista coube inteira. */
   parte: z.number().int().positive().max(100).optional(),
   total: z.number().int().positive().max(100).optional(),

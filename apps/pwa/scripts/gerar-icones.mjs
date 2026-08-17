@@ -44,7 +44,7 @@ const conteudo = Math.round(512 * 0.62);
 const margem = Math.round((512 - conteudo) / 2);
 
 await sharp({
-  create: { width: 512, height: 512, channels: 4, background: "#0c0f15" },
+  create: { width: 512, height: 512, channels: 4, background: "#0d0f18" },
 })
   .composite([
     {

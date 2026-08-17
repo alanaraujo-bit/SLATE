@@ -9,6 +9,68 @@
  * seguras, supressão de gestos do navegador e o comportamento de tela cheia.
  */
 
+/* ======================================================================= */
+/* Tipografia servida pelo app                                             */
+/* ======================================================================= */
+
+/*
+ * Os arquivos vivem em `public/fontes/` e são servidos pela própria origem.
+ * Nada de CDN: o service worker precisa conseguir guardar a fonte para a tela
+ * abrir certa sem rede, e uma fonte remota é exatamente o recurso que falta
+ * quando a conexão caiu — que é o momento em que a pessoa mais precisa ler o
+ * que a tela diz.
+ *
+ * São arquivos variáveis: um por família cobre 100–900, então os pesos 400,
+ * 500 e 600 que o design system usa não custam três downloads.
+ *
+ * `font-display: swap` porque numa superfície de controle esperar a fonte para
+ * mostrar o botão é pior que trocar a fonte com o botão já na tela.
+ */
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fontes/geist-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* O acervo estendido carrega só se aparecer um caractere que o exija. */
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fontes/geist-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fontes/geist-mono-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fontes/geist-mono-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 *,
 *::before,
 *::after {
@@ -57,6 +119,52 @@ body {
   -webkit-user-select: text;
 }
 
+/* ======================================================================= */
+/* Atmosfera do fundo                                                      */
+/* ======================================================================= */
+
+/*
+ * Duas camadas fixas atrás de tudo, e nenhuma delas recebe toque.
+ *
+ * A primeira é um clarão frio no alto da tela: um preenchimento chapado numa
+ * área grande revela o degrau entre um tom e o seguinte e denuncia que aquilo
+ * é uma cor de CSS. O clarão dá direção à luz — a mesma de cima que o fio de
+ * luz das superfícies pressupõe — e faz o resto da tela parecer ter
+ * profundidade em vez de ser um retângulo pintado.
+ *
+ * A segunda é o grão, que quebra o degrau que sobrar.
+ *
+ * `position: fixed` porque as duas são cenário: se rolassem junto com o
+ * conteúdo, o clarão passearia pela tela e viraria o assunto.
+ */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+body::before {
+  background:
+    radial-gradient(
+      120% 60% at 50% -10%,
+      var(--s-accent-soft) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      80% 50% at 100% 0%,
+      color-mix(in srgb, var(--s-accent) 5%, transparent) 0%,
+      transparent 70%
+    );
+}
+
+body::after {
+  background-image: var(--s-grain);
+  opacity: var(--s-grain-opacidade);
+}
+
 h1,
 h2,
 h3,
@@ -94,12 +202,28 @@ button {
   min-height: 100dvh;
 }
 
+/*
+ * O cabeçalho fica no topo enquanto o painel rola.
+ *
+ * O estado da conexão é a informação que não pode sumir de vista: é ela que
+ * responde "o comando saiu?" quando nada acontece no computador. Rolar até em
+ * cima para conferir é justamente o que não dá para pedir de quem está com a
+ * atenção no jogo.
+ *
+ * O fundo é sólido, e não desfocado. Desfoque de fundo é bonito e custa GPU a
+ * cada quadro rolado; num celular mediano isso aparece como travada no rolar,
+ * que numa superfície de controle é pior do que qualquer ganho estético.
+ */
 .app__cabecalho {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s-space-3);
   padding: var(--s-space-3) var(--s-space-4);
+  background: var(--s-bg);
   border-bottom: 1px solid var(--s-border);
 }
 
@@ -111,18 +235,39 @@ button {
   gap: var(--s-space-4);
 }
 
+/*
+ * A marca em caixa alta espaçada.
+ *
+ * "SLATE" em caixa baixa com espaçamento negativo era um rótulo; em caixa alta
+ * com espaçamento aberto vira gravação de painel de equipamento — que é o que
+ * o produto é. Cinco letras é curto o bastante para o espaçamento não atrapalhar
+ * a leitura, e é o único texto da interface que recebe este tratamento: se
+ * outros títulos ganhassem o mesmo, deixaria de marcar coisa alguma.
+ */
 .marca {
   display: flex;
   align-items: center;
   gap: var(--s-space-2);
+  font-family: var(--s-font-display);
+  font-size: var(--s-text-sm);
   font-weight: var(--s-weight-semibold);
-  letter-spacing: var(--s-tracking-tight);
+  letter-spacing: var(--s-tracking-caps);
+  text-transform: uppercase;
 }
 
+/*
+ * O ícone é o do app, e ganha o mesmo tratamento de altura das outras
+ * superfícies — assoalhado na tela em vez de colado nela. O anel finíssimo
+ * resolve o caso em que o ícone tem fundo próprio quase da cor do cabeçalho
+ * e some sem contorno nenhum.
+ */
 .marca__simbolo {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: var(--s-radius-sm);
+  box-shadow:
+    0 0 0 1px var(--s-border-strong),
+    var(--s-shadow-sm);
 }
 
 /* ======================================================================= */
@@ -173,10 +318,56 @@ button {
   gap: var(--s-space-4);
 }
 
+.conta__cabecalho {
+  display: grid;
+  gap: var(--s-space-2);
+  text-align: center;
+  justify-items: center;
+}
+
 .conta__titulo {
-  font-size: var(--s-text-xl);
+  font-family: var(--s-font-display);
+  font-size: var(--s-text-2xl);
   font-weight: var(--s-weight-semibold);
   letter-spacing: var(--s-tracking-tight);
+  line-height: var(--s-leading-tight);
+}
+
+/*
+ * A promessa, sob o título.
+ *
+ * Esta é a primeira tela de quem acabou de instalar, e ela precisa responder
+ * "o que isto faz?" antes de pedir e-mail e senha — é a mesma frase que a
+ * vitrine do Agente carrega, pelo mesmo motivo. `max-width` em ch porque o que
+ * governa leitura é a contagem de caracteres na linha, não a largura do
+ * aparelho.
+ */
+.conta__promessa {
+  max-width: 30ch;
+  color: var(--s-text-muted);
+  font-size: var(--s-text-sm);
+  line-height: var(--s-leading-normal);
+}
+
+/*
+ * O palco cede a altura antes de qualquer outra coisa.
+ *
+ * Quando o teclado virtual sobe, a área visível cai para perto de metade da
+ * tela. Aqui o que precisa continuar visível é o campo em foco e o botão —
+ * a marca é a primeira a encolher, e nessa faixa ela some de vez: uma imagem
+ * espremida a trinta pixels não é marca, é ruído entre o rótulo e a entrada.
+ *
+ * A régua é a altura da janela, e não `orientation`, pelo mesmo motivo do
+ * painel: o que decide é quanto espaço vertical existe.
+ */
+@media (max-height: 34rem) {
+  .conta .s-palco {
+    display: none;
+  }
+
+  .conta__promessa {
+    display: none;
+  }
 }
 
 .conta__erro {
@@ -218,6 +409,9 @@ button {
   border: 1px solid var(--s-border-strong);
   border-radius: var(--s-radius-md);
   background: var(--s-surface-sunken);
+  /* Campo é buraco, não tecla: o afundamento diferencia "aqui se digita" de
+     "aqui se aperta" sem depender de o cursor estar piscando. */
+  box-shadow: var(--s-inset-sutil);
   color: var(--s-text);
   font-family: var(--s-font-sans);
   /*
@@ -259,10 +453,22 @@ button {
  * espaçamento entre caracteres.
  */
 .pareamento__codigo {
+  /* Ele é a peça central da tela, então recebe a moldura de instrumento:
+     rebaixada, monoespaçada e acesa — um visor, não um parágrafo. */
+  padding: var(--s-space-3) var(--s-space-5);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--s-radius-lg);
+  background: var(--s-surface-sunken);
+  box-shadow:
+    var(--s-inset),
+    0 0 24px var(--s-accent-soft);
   font-family: var(--s-font-mono);
   font-size: var(--s-text-3xl);
   font-weight: var(--s-weight-semibold);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.16em;
+  /* O espaçamento é aplicado depois de cada caractere, inclusive o último, e
+     sem isso o conteúdo fica visivelmente descentralizado na moldura. */
+  text-indent: 0.16em;
   font-variant-numeric: tabular-nums;
   color: var(--s-accent);
   user-select: text;
@@ -361,7 +567,9 @@ button {
   padding: var(--s-space-3);
   border: 1px solid var(--s-border-strong);
   border-radius: var(--s-radius-md);
-  background: var(--s-surface-raised);
+  background-image: linear-gradient(180deg, var(--s-grad-alto), var(--s-grad-baixo));
+  background-color: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
   color: var(--s-text);
   font-size: var(--s-text-sm);
   font-weight: var(--s-weight-medium);
@@ -393,7 +601,7 @@ button {
   background: var(--s-success-soft);
   color: var(--s-success);
   font-size: var(--s-text-2xl);
-  font-weight: var(--s-weight-bold);
+  font-weight: var(--s-weight-semibold);
 }
 
 .convite-qr__acoes {
@@ -424,6 +632,7 @@ button {
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-md);
   background: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
   text-align: left;
 }
 
@@ -483,6 +692,14 @@ button {
   min-height: 0;
 }
 
+/*
+ * A trilha das abas é afundada e a aba ativa é elevada.
+ *
+ * É a inversão da escada: o trilho desce para a superfície rebaixada, a aba
+ * escolhida sobe com sombra e fio de luz. Assim a seleção se lê pelo relevo e
+ * não só por uma diferença de cinza — que, num celular no sol, é a primeira
+ * coisa que se perde.
+ */
 .abas {
   display: inline-flex;
   align-self: flex-start;
@@ -490,7 +707,8 @@ button {
   gap: 2px;
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-md);
-  background: var(--s-surface);
+  background: var(--s-surface-sunken);
+  box-shadow: var(--s-inset-sutil);
 }
 
 .aba {
@@ -513,7 +731,9 @@ button {
 }
 
 .aba--ativa {
-  background: var(--s-surface-raised);
+  background-image: linear-gradient(180deg, var(--s-grad-alto), var(--s-grad-baixo));
+  background-color: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
   color: var(--s-text);
 }
 
@@ -602,19 +822,32 @@ button {
   min-height: 4.5rem;
   padding: var(--s-space-3) var(--s-space-2);
   overflow: hidden;
-  border: 1px solid var(--s-border);
+  border: 1px solid var(--s-border-strong);
   border-radius: var(--s-radius-md);
-  background: var(--s-surface-raised);
+  /*
+   * A tecla é um objeto, não uma célula de tabela.
+   *
+   * O degradê entre dois degraus da escada, mais o fio de luz na aresta de
+   * cima e a sombra de contato embaixo, é o que faz o dedo reconhecer que ali
+   * se aperta. Antes era um retângulo de cor chapada com borda — a mesma
+   * aparência de um campo de formulário, que é exatamente o que uma superfície
+   * de controle não pode parecer.
+   */
+  background-image: linear-gradient(180deg, var(--s-grad-alto), var(--s-grad-baixo));
+  background-color: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
   color: var(--s-text);
   font: inherit;
   font-size: var(--s-text-2xs);
   font-weight: var(--s-weight-medium);
   line-height: var(--s-leading-tight);
+  letter-spacing: var(--s-tracking-wide);
   text-align: center;
   cursor: pointer;
   transition:
     border-color var(--s-duration-instant) var(--s-ease-out),
     background var(--s-duration-instant) var(--s-ease-out),
+    box-shadow var(--s-duration-instant) var(--s-ease-out),
     transform var(--s-duration-instant) var(--s-ease-out);
   /* Sem isto, tocar repetidamente seleciona o rótulo e o Android abre o menu
      de copiar por cima do painel. */
@@ -623,14 +856,27 @@ button {
   touch-action: manipulation;
 }
 
-/* A faixa superior dá identidade à tecla sem cansar a vista. */
+/*
+ * A faixa superior dá identidade à tecla sem cansar a vista.
+ *
+ * Ela some nas pontas em vez de cortar reto: uma barra de ponta a ponta lê
+ * como divisória de tabela, e a mesma cor esmaecendo nas bordas lê como luz
+ * acesa atrás da tecla — que é a leitura certa, já que a cor aqui indica a
+ * qual grupo o controle pertence.
+ */
 .tecla::before {
   content: "";
   position: absolute;
   inset: 0 0 auto;
   height: 2px;
-  background: var(--tom);
-  opacity: 0.55;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--tom) 20%,
+    var(--tom) 80%,
+    transparent
+  );
+  opacity: 0.65;
   transition: opacity var(--s-duration-instant) var(--s-ease-out);
 }
 
@@ -660,7 +906,11 @@ button {
 }
 
 .tecla:hover {
-  border-color: var(--tom);
+  border-color: color-mix(in srgb, var(--tom) 60%, var(--s-border-strong));
+  box-shadow:
+    var(--s-highlight-strong),
+    var(--s-shadow-md),
+    0 0 20px color-mix(in srgb, var(--tom) 14%, transparent);
 }
 
 /*
@@ -673,7 +923,11 @@ button {
 .tecla:active {
   transform: scale(0.96);
   border-color: var(--tom);
-  background: color-mix(in srgb, var(--tom) 14%, var(--s-surface-raised));
+  background-image: none;
+  background-color: color-mix(in srgb, var(--tom) 16%, var(--s-surface-raised));
+  /* O relevo e a sombra somem juntos: a tecla desceu, e uma tecla afundada
+     que continua projetando sombra desmente o próprio recuo. */
+  box-shadow: var(--s-inset);
 }
 
 .tecla:active::before {
@@ -748,6 +1002,7 @@ button {
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-lg);
   background: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
 }
 
 .ajustes__titulo {
@@ -783,7 +1038,8 @@ button {
   padding: var(--s-space-3);
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius-md);
-  background: var(--s-surface);
+  background: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
 }
 
 .aparelho__identidade {
@@ -891,5 +1147,269 @@ button {
      outras — duas colunas aqui desalinhariam a grade sem ganho. */
   .tecla--destaque {
     grid-column: auto;
+  }
+}
+
+/* ======================================================================= */
+/* Perfis e páginas                                                        */
+/* ======================================================================= */
+
+.painel-perfis {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--s-space-4);
+}
+
+.seletor-perfis {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-space-3);
+  min-width: 0;
+}
+
+.seletor-perfis__trilha {
+  display: flex;
+  min-width: 0;
+  gap: var(--s-space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.seletor-perfis__trilha::-webkit-scrollbar {
+  display: none;
+}
+
+.perfil-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s-space-2);
+  min-height: 2.25rem;
+  padding: 0 var(--s-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--s-radius-full);
+  background: transparent;
+  color: var(--s-text-muted);
+  font: inherit;
+  font-size: var(--s-text-xs);
+  font-weight: var(--s-weight-medium);
+  cursor: pointer;
+}
+
+.perfil-chip i {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--perfil-cor);
+  box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--perfil-cor) 12%, transparent);
+}
+
+.perfil-chip--ativo {
+  border-color: color-mix(in srgb, var(--perfil-cor) 38%, var(--s-border));
+  background: color-mix(in srgb, var(--perfil-cor) 10%, var(--s-surface-raised));
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
+  color: var(--s-text);
+}
+
+.perfil-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+}
+
+.seletor-perfis__pagina {
+  flex: none;
+  color: var(--s-text-subtle);
+  font-family: var(--s-font-mono);
+  font-size: var(--s-text-2xs);
+}
+
+.pagina-perfil {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  touch-action: pan-y;
+}
+
+.grade-perfil,
+.pagina-perfil__vazia {
+  grid-area: 1 / 1;
+}
+
+.grade-perfil {
+  display: grid;
+  grid-template-columns: repeat(var(--colunas-retrato), minmax(0, 1fr));
+  align-content: start;
+  gap: var(--s-space-3);
+}
+
+.tecla--perfil {
+  --tom: var(--s-accent);
+  min-width: 0;
+}
+
+.tecla--larga {
+  grid-column: span 2;
+  flex-direction: row;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.pagina-perfil__vazia {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--s-space-2);
+  min-height: 12rem;
+  border: 1px dashed var(--s-border-strong);
+  border-radius: var(--s-radius-lg);
+  color: var(--s-text-subtle);
+  text-align: center;
+}
+
+.pagina-perfil__vazia svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--s-accent);
+}
+
+.pagina-perfil__vazia strong {
+  color: var(--s-text);
+  font-size: var(--s-text-sm);
+  font-weight: var(--s-weight-medium);
+}
+
+.pagina-perfil__vazia span {
+  font-size: var(--s-text-xs);
+}
+
+.paginacao-perfil {
+  display: grid;
+  grid-template-columns: var(--s-touch-min) 1fr var(--s-touch-min);
+  align-items: center;
+  justify-items: center;
+}
+
+.paginacao-perfil > button {
+  display: grid;
+  place-items: center;
+  width: var(--s-touch-min);
+  height: var(--s-touch-min);
+  border: 0;
+  border-radius: var(--s-radius-full);
+  background: transparent;
+  color: var(--s-text-muted);
+  cursor: pointer;
+}
+
+.paginacao-perfil > button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.paginacao-perfil > button:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+}
+
+.paginacao-perfil > span {
+  display: flex;
+  align-items: center;
+  gap: var(--s-space-2);
+}
+
+.paginacao-perfil > span button {
+  width: 0.42rem;
+  height: 0.42rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--s-border-strong);
+  cursor: pointer;
+  transition:
+    width var(--s-duration-fast) var(--s-ease-out),
+    background var(--s-duration-fast) var(--s-ease-out);
+}
+
+.paginacao-perfil > span button.ativo {
+  width: 1.25rem;
+  border-radius: var(--s-radius-full);
+  background: var(--s-accent);
+  box-shadow: var(--s-glow-accent);
+}
+
+.marca-servico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  font-family: var(--s-font-display);
+  font-size: var(--s-text-sm);
+  font-weight: var(--s-weight-bold);
+  line-height: 1;
+  letter-spacing: var(--s-tracking-tight);
+}
+
+.marca-servico--youtube,
+.marca-servico--netflix {
+  color: var(--s-control-red);
+}
+
+.marca-servico--twitch,
+.marca-servico--disney {
+  color: var(--s-control-violet);
+}
+
+.marca-servico--prime {
+  color: var(--s-control-cyan);
+  font-size: var(--s-text-2xs);
+  letter-spacing: normal;
+}
+
+.marca-servico--spotify {
+  color: var(--s-control-green);
+  font-size: var(--s-text-xl);
+}
+
+@media (orientation: landscape) {
+  .grade-perfil {
+    grid-template-columns: repeat(var(--colunas-paisagem), minmax(0, 1fr));
+  }
+}
+
+@media (max-height: 30rem) {
+  .painel-perfis {
+    gap: var(--s-space-2);
+  }
+
+  .seletor-perfis__pagina {
+    display: none;
+  }
+
+  .grade-perfil {
+    gap: var(--s-space-2);
+  }
+
+  .tecla--perfil,
+  .tecla--larga {
+    min-height: 3.25rem;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: var(--s-space-2);
+    text-align: left;
+  }
+
+  .paginacao-perfil {
+    position: absolute;
+    right: var(--s-space-3);
+    bottom: var(--s-space-2);
+    grid-template-columns: auto;
+  }
+
+  .paginacao-perfil > button {
+    display: none;
   }
 }

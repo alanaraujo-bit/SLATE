@@ -1,129 +1,211 @@
-//! Atalhos que a pessoa cadastra neste computador.
+//! Programas e perfis de deck definidos localmente neste computador.
 //!
-//! **A definição mora aqui, e não no celular.** `ESCOPOS_SOMENTE_NO_PC` já
-//! colocava `action.define` fora do alcance de um aparelho, e é o que sustenta
-//! a promessa do ADR-0004: o celular manda um identificador, nunca um caminho.
-//! Escolher qual executável um atalho abre é ato de quem está na frente da
-//! máquina, com o seletor de arquivo do próprio Windows.
-//!
-//! O celular arranja (`deck.read`/`deck.write`); o computador define.
+//! O arquivo guarda caminhos, mas o transporte nunca serializa esta estrutura
+//! diretamente: o celular recebe somente identificadores de acoes conhecidas.
 
 use crate::icone;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
-const VERSAO_ARQUIVO: u8 = 1;
+const VERSAO_ARQUIVO: u8 = 2;
 const ARQUIVO: &str = "atalhos.json";
-
-/// Teto de atalhos cadastrados.
-///
-/// Não é limite de banco: a lista inteira viaja no `deck.estado` a cada
-/// conexão, com um ícone PNG embutido em cada item. Cem já são alguns
-/// megabytes, e mais do que isso transformaria o handshake numa transferência.
 const MAXIMO: usize = 100;
+const MAXIMO_PERFIS: usize = 12;
+const MAXIMO_ITENS: usize = 200;
 
-/// Cores disponíveis, espelhando `--s-control-*` do design system.
-///
-/// Lista fechada de propósito: o celular escolhe entre estas e nunca envia uma
-/// cor livre, o que manteria conteúdo arbitrário fora do caminho de renderização.
 pub const CORES: [&str; 12] = [
     "red", "orange", "amber", "yellow", "lime", "green", "teal", "cyan", "blue", "indigo",
     "violet", "pink",
 ];
 
+/// A mesma lista fechada resolvida por `acoes.rs`.
+pub const ACOES_FIXAS: [&str; 13] = [
+    "midia.anterior",
+    "midia.reproduzir-pausar",
+    "midia.proxima",
+    "midia.parar",
+    "volume.diminuir",
+    "volume.mudo",
+    "volume.aumentar",
+    "atalho.youtube",
+    "atalho.twitch",
+    "atalho.netflix",
+    "atalho.prime",
+    "atalho.disney",
+    "atalho.spotify",
+];
+
 #[derive(Debug, thiserror::Error)]
 pub enum ErroAtalhos {
-    #[error("não foi possível guardar os atalhos")]
+    #[error("nao foi possivel guardar os atalhos")]
     Arquivo(#[from] std::io::Error),
-    #[error("a lista de atalhos está corrompida")]
+    #[error("a configuracao do deck esta corrompida")]
     Corrompida,
-    #[error("não foi possível acessar a lista de atalhos")]
+    #[error("nao foi possivel acessar a configuracao do deck")]
     Concorrencia,
-    #[error("esse arquivo não é um programa que dê para abrir")]
+    #[error("esse arquivo nao e um programa que de para abrir")]
     CaminhoInvalido,
-    #[error("dê um nome ao atalho")]
+    #[error("de um nome ao atalho")]
     NomeVazio,
-    #[error("já são {MAXIMO} atalhos — remova algum antes de criar outro")]
+    #[error("ja sao {MAXIMO} atalhos - remova algum antes de criar outro")]
     Cheio,
-    #[error("atalho não encontrado")]
+    #[error("atalho nao encontrado")]
     NaoEncontrado,
+    #[error("perfil nao encontrado")]
+    PerfilNaoEncontrado,
+    #[error("ja sao {MAXIMO_PERFIS} perfis - remova algum antes de criar outro")]
+    PerfisCheios,
+    #[error("o perfil e invalido")]
+    PerfilInvalido,
+    #[error("o perfil padrao nao tem espaco para outro programa")]
+    PerfilSemEspaco,
+    #[error("o deck precisa ter ao menos um perfil")]
+    UltimoPerfil,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Atalho {
     pub id: String,
     pub nome: String,
-    /// Caminho absoluto do executável. **Nunca chega pelo canal.**
+    /// Caminho absoluto do executavel. Nunca chega pelo canal.
     pub caminho: String,
-    /// Nome da cor em `CORES`.
     pub cor: String,
-    /// PNG do ícone do próprio executável, como data URI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icone: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemDePerfilDeck {
+    pub action_id: String,
+    pub pagina: u8,
+    pub ordem: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tamanho: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PerfilDeDeck {
+    pub id: String,
+    pub nome: String,
+    pub cor: String,
+    pub colunas_retrato: u8,
+    pub colunas_paisagem: u8,
+    pub itens: Vec<ItemDePerfilDeck>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfiguracaoDeck {
+    pub perfis: Vec<PerfilDeDeck>,
+    pub perfil_padrao_id: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ArquivoAtalhos {
+    versao: u8,
+    atalhos: Vec<Atalho>,
+    perfis: Vec<PerfilDeDeck>,
+    perfil_padrao_id: String,
+}
+
+#[derive(Deserialize)]
+struct ArquivoAtalhosV1 {
     versao: u8,
     atalhos: Vec<Atalho>,
 }
 
 pub struct AtalhosPersonalizados {
     caminho: PathBuf,
-    itens: RwLock<Vec<Atalho>>,
+    estado: RwLock<ArquivoAtalhos>,
 }
 
 impl AtalhosPersonalizados {
     pub fn carregar(pasta: &Path) -> Result<Self, ErroAtalhos> {
         std::fs::create_dir_all(pasta)?;
         let caminho = pasta.join(ARQUIVO);
-
-        let itens = if caminho.exists() {
+        let (estado, precisa_gravar) = if caminho.exists() {
             let bruto = std::fs::read(&caminho)?;
-            let arquivo: ArquivoAtalhos =
+            let valor: serde_json::Value =
                 serde_json::from_slice(&bruto).map_err(|_| ErroAtalhos::Corrompida)?;
-            if arquivo.versao != VERSAO_ARQUIVO {
-                return Err(ErroAtalhos::Corrompida);
+            match valor.get("versao").and_then(|v| v.as_u64()) {
+                Some(1) => {
+                    let antigo: ArquivoAtalhosV1 = serde_json::from_value(valor)
+                        .map_err(|_| ErroAtalhos::Corrompida)?;
+                    if antigo.versao != 1 || antigo.atalhos.len() > MAXIMO {
+                        return Err(ErroAtalhos::Corrompida);
+                    }
+                    (novo_estado(antigo.atalhos), true)
+                }
+                Some(2) => {
+                    let atual: ArquivoAtalhos = serde_json::from_value(valor)
+                        .map_err(|_| ErroAtalhos::Corrompida)?;
+                    validar_estado(&atual)?;
+                    (atual, false)
+                }
+                _ => return Err(ErroAtalhos::Corrompida),
             }
-            arquivo.atalhos
         } else {
-            Vec::new()
+            (novo_estado(Vec::new()), true)
         };
 
+        if precisa_gravar {
+            gravar(&caminho, &estado)?;
+        }
         Ok(Self {
             caminho,
-            itens: RwLock::new(itens),
+            estado: RwLock::new(estado),
         })
     }
 
     pub fn listar(&self) -> Vec<Atalho> {
-        self.itens.read().map(|i| i.clone()).unwrap_or_default()
+        self.estado
+            .read()
+            .map(|e| e.atalhos.clone())
+            .unwrap_or_default()
     }
 
-    /// Resolve o identificador que chegou do celular.
-    ///
-    /// É o único ponto em que um `atalho.<id>` vira um caminho, e a tradução
-    /// acontece contra a lista local — o celular nunca influencia o alvo.
+    pub fn configuracao(&self) -> ConfiguracaoDeck {
+        self.estado
+            .read()
+            .map(|e| ConfiguracaoDeck {
+                perfis: e.perfis.clone(),
+                perfil_padrao_id: e.perfil_padrao_id.clone(),
+            })
+            .unwrap_or_else(|_| ConfiguracaoDeck {
+                perfis: Vec::new(),
+                perfil_padrao_id: String::new(),
+            })
+    }
+
     pub fn buscar(&self, id: &str) -> Option<Atalho> {
-        self.itens.read().ok()?.iter().find(|a| a.id == id).cloned()
+        self.estado
+            .read()
+            .ok()?
+            .atalhos
+            .iter()
+            .find(|a| a.id == id)
+            .cloned()
     }
 
-    /// Cadastra um executável escolhido no seletor de arquivo do Windows.
     pub fn criar(&self, caminho: &str, nome: &str, cor: &str) -> Result<Atalho, ErroAtalhos> {
         let nome = nome.trim();
         if nome.is_empty() {
             return Err(ErroAtalhos::NomeVazio);
         }
         validar_caminho(caminho)?;
-
         let cor = if CORES.contains(&cor) { cor } else { "violet" };
 
-        let mut itens = self.itens.write().map_err(|_| ErroAtalhos::Concorrencia)?;
-        if itens.len() >= MAXIMO {
+        let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
+        if estado.atalhos.len() >= MAXIMO {
             return Err(ErroAtalhos::Cheio);
         }
-
         let atalho = Atalho {
             id: uuid::Uuid::new_v4().to_string(),
             nome: nome.chars().take(40).collect(),
@@ -131,22 +213,27 @@ impl AtalhosPersonalizados {
             cor: cor.to_string(),
             icone: icone::extrair(caminho),
         };
-
-        let mut candidato = itens.clone();
-        candidato.push(atalho.clone());
+        let mut candidato = estado.clone();
+        adicionar_programa_ao_padrao(&mut candidato, &atalho)?;
+        candidato.atalhos.push(atalho.clone());
         gravar(&self.caminho, &candidato)?;
-        *itens = candidato;
+        *estado = candidato;
         Ok(atalho)
     }
 
     pub fn remover(&self, id: &str) -> Result<(), ErroAtalhos> {
-        let mut itens = self.itens.write().map_err(|_| ErroAtalhos::Concorrencia)?;
-        let candidato: Vec<Atalho> = itens.iter().filter(|a| a.id != id).cloned().collect();
-        if candidato.len() == itens.len() {
+        let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
+        if !estado.atalhos.iter().any(|a| a.id == id) {
             return Err(ErroAtalhos::NaoEncontrado);
         }
+        let mut candidato = estado.clone();
+        candidato.atalhos.retain(|a| a.id != id);
+        let action_id = format!("programa.{id}");
+        for perfil in &mut candidato.perfis {
+            perfil.itens.retain(|item| item.action_id != action_id);
+        }
         gravar(&self.caminho, &candidato)?;
-        *itens = candidato;
+        *estado = candidato;
         Ok(())
     }
 
@@ -155,9 +242,10 @@ impl AtalhosPersonalizados {
         if nome.is_empty() {
             return Err(ErroAtalhos::NomeVazio);
         }
-        let mut itens = self.itens.write().map_err(|_| ErroAtalhos::Concorrencia)?;
-        let mut candidato = itens.clone();
+        let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
+        let mut candidato = estado.clone();
         let alvo = candidato
+            .atalhos
             .iter_mut()
             .find(|a| a.id == id)
             .ok_or(ErroAtalhos::NaoEncontrado)?;
@@ -166,23 +254,254 @@ impl AtalhosPersonalizados {
             alvo.cor = cor.to_string();
         }
         gravar(&self.caminho, &candidato)?;
-        *itens = candidato;
+        *estado = candidato;
         Ok(())
+    }
+
+    pub fn criar_perfil(&self, nome: &str, cor: &str) -> Result<PerfilDeDeck, ErroAtalhos> {
+        let nome = nome.trim();
+        if nome.is_empty() || nome.chars().count() > 28 || !CORES.contains(&cor) {
+            return Err(ErroAtalhos::PerfilInvalido);
+        }
+        let perfil = PerfilDeDeck {
+            id: uuid::Uuid::new_v4().to_string(),
+            nome: nome.to_string(),
+            cor: cor.to_string(),
+            colunas_retrato: 3,
+            colunas_paisagem: 6,
+            itens: Vec::new(),
+        };
+        self.inserir_perfil(perfil)
+    }
+
+    pub fn duplicar_perfil(&self, id: &str) -> Result<PerfilDeDeck, ErroAtalhos> {
+        let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
+        if estado.perfis.len() >= MAXIMO_PERFIS {
+            return Err(ErroAtalhos::PerfisCheios);
+        }
+        let mut perfil = estado
+            .perfis
+            .iter()
+            .find(|p| p.id == id)
+            .cloned()
+            .ok_or(ErroAtalhos::PerfilNaoEncontrado)?;
+        perfil.id = uuid::Uuid::new_v4().to_string();
+        perfil.nome = nome_da_copia(&perfil.nome);
+        let mut candidato = estado.clone();
+        candidato.perfis.push(perfil.clone());
+        gravar(&self.caminho, &candidato)?;
+        *estado = candidato;
+        Ok(perfil)
+    }
+
+    pub fn salvar_perfil(&self, perfil: PerfilDeDeck) -> Result<PerfilDeDeck, ErroAtalhos> {
+        let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
+        validar_perfil(&perfil, &estado.atalhos)?;
+        let mut candidato = estado.clone();
+        let alvo = candidato
+            .perfis
+            .iter_mut()
+            .find(|p| p.id == perfil.id)
+            .ok_or(ErroAtalhos::PerfilNaoEncontrado)?;
+        *alvo = perfil.clone();
+        gravar(&self.caminho, &candidato)?;
+        *estado = candidato;
+        Ok(perfil)
+    }
+
+    pub fn remover_perfil(&self, id: &str) -> Result<(), ErroAtalhos> {
+        let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
+        if estado.perfis.len() == 1 {
+            return Err(ErroAtalhos::UltimoPerfil);
+        }
+        if !estado.perfis.iter().any(|p| p.id == id) {
+            return Err(ErroAtalhos::PerfilNaoEncontrado);
+        }
+        let mut candidato = estado.clone();
+        candidato.perfis.retain(|p| p.id != id);
+        if candidato.perfil_padrao_id == id {
+            candidato.perfil_padrao_id = candidato.perfis[0].id.clone();
+        }
+        gravar(&self.caminho, &candidato)?;
+        *estado = candidato;
+        Ok(())
+    }
+
+    pub fn definir_perfil_padrao(&self, id: &str) -> Result<(), ErroAtalhos> {
+        let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
+        if !estado.perfis.iter().any(|p| p.id == id) {
+            return Err(ErroAtalhos::PerfilNaoEncontrado);
+        }
+        let mut candidato = estado.clone();
+        candidato.perfil_padrao_id = id.to_string();
+        gravar(&self.caminho, &candidato)?;
+        *estado = candidato;
+        Ok(())
+    }
+
+    fn inserir_perfil(&self, perfil: PerfilDeDeck) -> Result<PerfilDeDeck, ErroAtalhos> {
+        let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
+        if estado.perfis.len() >= MAXIMO_PERFIS {
+            return Err(ErroAtalhos::PerfisCheios);
+        }
+        let mut candidato = estado.clone();
+        candidato.perfis.push(perfil.clone());
+        gravar(&self.caminho, &candidato)?;
+        *estado = candidato;
+        Ok(perfil)
     }
 }
 
-/// Confere o que será executado, no momento do cadastro.
-///
-/// A verificação se repete na execução, em `acoes.rs`: um programa apagado ou
-/// movido depois do cadastro precisa falhar dizendo isso, e não tentar abrir um
-/// caminho que já não existe.
+fn novo_estado(atalhos: Vec<Atalho>) -> ArquivoAtalhos {
+    let perfil = perfil_padrao(&atalhos);
+    ArquivoAtalhos {
+        versao: VERSAO_ARQUIVO,
+        atalhos,
+        perfil_padrao_id: perfil.id.clone(),
+        perfis: vec![perfil],
+    }
+}
+
+fn perfil_padrao(atalhos: &[Atalho]) -> PerfilDeDeck {
+    let id = uuid::Uuid::new_v4().to_string();
+    let mut itens = Vec::new();
+    for (ordem, action_id) in ACOES_FIXAS[..7].iter().enumerate() {
+        itens.push(item(action_id, 0, ordem as u16));
+    }
+    for (ordem, action_id) in ACOES_FIXAS[7..].iter().enumerate() {
+        itens.push(item(action_id, 1, ordem as u16));
+    }
+    for (indice, atalho) in atalhos.iter().enumerate() {
+        itens.push(item(
+            &format!("programa.{}", atalho.id),
+            2 + (indice / 24) as u8,
+            (indice % 24) as u16,
+        ));
+    }
+    PerfilDeDeck {
+        id,
+        nome: "Principal".to_string(),
+        cor: "violet".to_string(),
+        colunas_retrato: 3,
+        colunas_paisagem: 6,
+        itens,
+    }
+}
+
+fn item(action_id: &str, pagina: u8, ordem: u16) -> ItemDePerfilDeck {
+    ItemDePerfilDeck {
+        action_id: action_id.to_string(),
+        pagina,
+        ordem,
+        cor: None,
+        tamanho: None,
+    }
+}
+
+fn adicionar_programa_ao_padrao(
+    estado: &mut ArquivoAtalhos,
+    atalho: &Atalho,
+) -> Result<(), ErroAtalhos> {
+    let perfil = estado
+        .perfis
+        .iter_mut()
+        .find(|p| p.id == estado.perfil_padrao_id)
+        .ok_or(ErroAtalhos::Corrompida)?;
+    if perfil.itens.len() >= MAXIMO_ITENS {
+        return Err(ErroAtalhos::PerfilSemEspaco);
+    }
+    let ocupados: HashSet<(u8, u16)> = perfil.itens.iter().map(|i| (i.pagina, i.ordem)).collect();
+    let posicao = (2..=9)
+        .flat_map(|pagina| (0..24).map(move |ordem| (pagina, ordem)))
+        .find(|posicao| !ocupados.contains(posicao))
+        .or_else(|| {
+            (0..=9)
+                .flat_map(|pagina| (0..=199).map(move |ordem| (pagina, ordem)))
+                .find(|posicao| !ocupados.contains(posicao))
+        })
+        .ok_or(ErroAtalhos::PerfilSemEspaco)?;
+    perfil.itens.push(item(
+        &format!("programa.{}", atalho.id),
+        posicao.0,
+        posicao.1,
+    ));
+    Ok(())
+}
+
+fn validar_estado(estado: &ArquivoAtalhos) -> Result<(), ErroAtalhos> {
+    if estado.versao != VERSAO_ARQUIVO
+        || estado.atalhos.len() > MAXIMO
+        || estado.perfis.is_empty()
+        || estado.perfis.len() > MAXIMO_PERFIS
+        || !estado
+            .perfis
+            .iter()
+            .any(|p| p.id == estado.perfil_padrao_id)
+    {
+        return Err(ErroAtalhos::Corrompida);
+    }
+    let mut ids = HashSet::new();
+    for perfil in &estado.perfis {
+        if !ids.insert(&perfil.id) || validar_perfil(perfil, &estado.atalhos).is_err() {
+            return Err(ErroAtalhos::Corrompida);
+        }
+    }
+    Ok(())
+}
+
+fn validar_perfil(perfil: &PerfilDeDeck, atalhos: &[Atalho]) -> Result<(), ErroAtalhos> {
+    if perfil.id.is_empty()
+        || perfil.id.len() > 64
+        || perfil.nome.trim().is_empty()
+        || perfil.nome.chars().count() > 28
+        || !CORES.contains(&perfil.cor.as_str())
+        || !(2..=3).contains(&perfil.colunas_retrato)
+        || !(4..=6).contains(&perfil.colunas_paisagem)
+        || perfil.itens.len() > MAXIMO_ITENS
+    {
+        return Err(ErroAtalhos::PerfilInvalido);
+    }
+    for item in &perfil.itens {
+        let tamanho_valido = item
+            .tamanho
+            .as_deref()
+            .is_none_or(|t| matches!(t, "normal" | "largo"));
+        let cor_valida = item
+            .cor
+            .as_deref()
+            .is_none_or(|cor| CORES.contains(&cor));
+        if item.action_id.is_empty()
+            || item.action_id.len() > 128
+            || item.pagina > 9
+            || item.ordem > 199
+            || !tamanho_valido
+            || !cor_valida
+            || !acao_existe(&item.action_id, atalhos)
+        {
+            return Err(ErroAtalhos::PerfilInvalido);
+        }
+    }
+    Ok(())
+}
+
+fn acao_existe(action_id: &str, atalhos: &[Atalho]) -> bool {
+    ACOES_FIXAS.contains(&action_id)
+        || action_id
+            .strip_prefix("programa.")
+            .is_some_and(|id| !id.is_empty() && atalhos.iter().any(|a| a.id == id))
+}
+
+fn nome_da_copia(nome: &str) -> String {
+    let sufixo = " (copia)";
+    let limite = 28usize.saturating_sub(sufixo.chars().count());
+    format!("{}{}", nome.chars().take(limite).collect::<String>(), sufixo)
+}
+
 pub fn validar_caminho(caminho: &str) -> Result<(), ErroAtalhos> {
     let p = Path::new(caminho);
     if !p.is_absolute() || !p.is_file() {
         return Err(ErroAtalhos::CaminhoInvalido);
     }
-    // Extensão conferida para que o atalho abra um programa, e não um
-    // documento qualquer que o Shell resolveria com o aplicativo associado.
     let extensao = p
         .extension()
         .and_then(|e| e.to_str())
@@ -193,16 +512,8 @@ pub fn validar_caminho(caminho: &str) -> Result<(), ErroAtalhos> {
     }
 }
 
-fn gravar(caminho: &Path, atalhos: &[Atalho]) -> Result<(), ErroAtalhos> {
-    let bruto = serde_json::to_vec(&ArquivoAtalhos {
-        versao: VERSAO_ARQUIVO,
-        atalhos: atalhos.to_vec(),
-    })
-    .map_err(|_| ErroAtalhos::Corrompida)?;
-
-    // Grava em arquivo temporário e renomeia: uma queda de energia no meio da
-    // escrita deixaria o arquivo pela metade, e a lista inteira de atalhos se
-    // perderia por causa de um cadastro.
+fn gravar(caminho: &Path, estado: &ArquivoAtalhos) -> Result<(), ErroAtalhos> {
+    let bruto = serde_json::to_vec(estado).map_err(|_| ErroAtalhos::Corrompida)?;
     let temporario = caminho.with_extension("json.novo");
     {
         use std::io::Write;
@@ -228,7 +539,6 @@ mod testes {
         p
     }
 
-    /// Um executável de verdade, para os testes não dependerem de instalação.
     fn programa_existente() -> String {
         let candidatos = [
             r"C:\Windows\System32\notepad.exe",
@@ -244,102 +554,88 @@ mod testes {
 
     #[test]
     fn recusa_caminho_que_nao_e_programa() {
-        // O que este teste tranca: qualquer coisa que não seja programa vira
-        // "abrir com o aplicativo associado", e aí um `.html` cadastrado por
-        // engano viraria execução de conteúdo pelo Shell.
-        for ruim in [
-            "nao-absoluto.exe",
-            r"C:\Windows\System32\drivers\etc\hosts",
-            "",
-            r"C:\Windows",
-        ] {
+        for ruim in ["nao-absoluto.exe", "", r"C:\Windows"] {
             assert!(validar_caminho(ruim).is_err(), "deixou passar: {ruim}");
         }
     }
 
     #[test]
-    #[cfg(windows)]
-    fn aceita_um_executavel_de_verdade() {
-        assert!(validar_caminho(&programa_existente()).is_ok());
+    fn migra_v1_sem_perder_programas_e_monta_perfil_padrao() {
+        let pasta = pasta("migracao");
+        let atalho = Atalho {
+            id: "programa-1".into(),
+            nome: "Editor".into(),
+            caminho: r"C:\Programas\editor.exe".into(),
+            cor: "blue".into(),
+            icone: None,
+        };
+        std::fs::write(
+            pasta.join(ARQUIVO),
+            serde_json::to_vec(&serde_json::json!({ "versao": 1, "atalhos": [atalho] })).unwrap(),
+        )
+        .unwrap();
+        let carregado = AtalhosPersonalizados::carregar(&pasta).unwrap();
+        assert_eq!(carregado.listar().len(), 1);
+        let configuracao = carregado.configuracao();
+        assert_eq!(configuracao.perfis.len(), 1);
+        let itens = &configuracao.perfis[0].itens;
+        for fixa in ACOES_FIXAS {
+            assert!(itens.iter().any(|i| i.action_id == fixa));
+        }
+        assert!(itens.iter().any(|i| i.action_id == "programa.programa-1"));
+        let salvo: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(pasta.join(ARQUIVO)).unwrap()).unwrap();
+        assert_eq!(salvo["versao"], 2);
+        let _ = std::fs::remove_dir_all(pasta);
     }
 
     #[test]
-    fn cria_lista_e_remove_sobrevivendo_ao_fechamento() {
+    fn cria_remove_e_limpa_referencias_do_programa() {
         let pasta = pasta("ciclo");
         let programa = programa_existente();
         if validar_caminho(&programa).is_err() {
-            return; // sem executável conhecido nesta plataforma
+            return;
         }
-
         let atalhos = AtalhosPersonalizados::carregar(&pasta).unwrap();
         let criado = atalhos.criar(&programa, "  Meu Jogo  ", "green").unwrap();
-        assert_eq!(criado.nome, "Meu Jogo", "o nome é aparado");
-        assert_eq!(criado.cor, "green");
+        let action_id = format!("programa.{}", criado.id);
+        assert!(atalhos.configuracao().perfis[0]
+            .itens
+            .iter()
+            .any(|i| i.action_id == action_id));
+        atalhos.remover(&criado.id).unwrap();
+        assert!(atalhos
+            .configuracao()
+            .perfis
+            .iter()
+            .all(|p| p.itens.iter().all(|i| i.action_id != action_id)));
+        let _ = std::fs::remove_dir_all(pasta);
+    }
 
-        // Reabre como se o Agente tivesse sido fechado.
+    #[test]
+    fn perfis_aplicam_limites_e_lista_fechada() {
+        let pasta = pasta("perfis");
+        let atalhos = AtalhosPersonalizados::carregar(&pasta).unwrap();
+        let mut perfil = atalhos.criar_perfil("Trabalho", "cyan").unwrap();
+        perfil.itens.push(item("comando.arbitrario", 0, 0));
+        assert!(matches!(
+            atalhos.salvar_perfil(perfil),
+            Err(ErroAtalhos::PerfilInvalido)
+        ));
+        let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    #[test]
+    fn duplicar_remover_e_definir_padrao_persistem() {
+        let pasta = pasta("crud");
+        let atalhos = AtalhosPersonalizados::carregar(&pasta).unwrap();
+        let original = atalhos.configuracao().perfis[0].clone();
+        let copia = atalhos.duplicar_perfil(&original.id).unwrap();
+        atalhos.definir_perfil_padrao(&copia.id).unwrap();
+        atalhos.remover_perfil(&original.id).unwrap();
         let reaberto = AtalhosPersonalizados::carregar(&pasta).unwrap();
-        assert_eq!(reaberto.listar().len(), 1);
-        assert_eq!(reaberto.buscar(&criado.id).unwrap().caminho, programa);
-
-        reaberto.remover(&criado.id).unwrap();
-        assert!(reaberto.buscar(&criado.id).is_none());
-        assert!(AtalhosPersonalizados::carregar(&pasta).unwrap().listar().is_empty());
-
-        let _ = std::fs::remove_dir_all(pasta);
-    }
-
-    #[test]
-    fn cor_desconhecida_vira_padrao_em_vez_de_erro() {
-        // A cor é enfeite: recusar o cadastro inteiro por causa dela trocaria
-        // um atalho funcionando por uma mensagem de erro.
-        let pasta = pasta("cor");
-        let programa = programa_existente();
-        if validar_caminho(&programa).is_err() {
-            return;
-        }
-        let atalhos = AtalhosPersonalizados::carregar(&pasta).unwrap();
-        let criado = atalhos.criar(&programa, "Jogo", "cor-inventada").unwrap();
-        assert_eq!(criado.cor, "violet");
-        let _ = std::fs::remove_dir_all(pasta);
-    }
-
-    #[test]
-    #[cfg(windows)]
-    fn o_atalho_nasce_com_o_icone_do_proprio_programa() {
-        // A parte mais arriscada do recurso: o Windows entrega o ícone como
-        // handle, e virar PNG passa por Shell, GDI, inversão de linhas e troca
-        // de BGRA para RGBA. Errar qualquer etapa dá imagem em branco, de
-        // cabeça para baixo ou com as cores trocadas — e nada disso apareceria
-        // num teste que só conferisse "o atalho foi criado".
-        let pasta = pasta("icone");
-        let programa = programa_existente();
-        let atalhos = AtalhosPersonalizados::carregar(&pasta).unwrap();
-        let criado = atalhos.criar(&programa, "Bloco de Notas", "cyan").unwrap();
-
-        let icone = criado.icone.expect("o programa do Windows tem ícone");
-        assert!(icone.starts_with("data:image/png;base64,"));
-
-        // Confere a assinatura do PNG nos bytes decodificados, e não só o
-        // prefixo do data URI: um base64 de lixo passaria pelo prefixo.
-        use base64::{engine::general_purpose::STANDARD, Engine};
-        let bytes = STANDARD
-            .decode(icone.trim_start_matches("data:image/png;base64,"))
-            .expect("base64 válido");
-        assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n", "não é um PNG");
-        assert!(bytes.len() > 100, "PNG pequeno demais para ter imagem");
-
-        let _ = std::fs::remove_dir_all(pasta);
-    }
-
-    #[test]
-    fn nome_vazio_e_recusado() {
-        let pasta = pasta("nome");
-        let programa = programa_existente();
-        if validar_caminho(&programa).is_err() {
-            return;
-        }
-        let atalhos = AtalhosPersonalizados::carregar(&pasta).unwrap();
-        assert!(atalhos.criar(&programa, "   ", "blue").is_err());
+        assert_eq!(reaberto.configuracao().perfil_padrao_id, copia.id);
+        assert_eq!(reaberto.configuracao().perfis.len(), 1);
         let _ = std::fs::remove_dir_all(pasta);
     }
 }

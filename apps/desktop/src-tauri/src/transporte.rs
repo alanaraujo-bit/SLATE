@@ -1,5 +1,5 @@
 use crate::acoes::{self, EstadoComandos, RecepcaoAcao};
-use crate::atalhos::{Atalho, AtalhosPersonalizados};
+use crate::atalhos::{Atalho, AtalhosPersonalizados, ConfiguracaoDeck};
 use crate::api::ClienteApi;
 use crate::identidade::{
     mensagem_desafio_sinalizacao, mensagem_fingerprint_dtls, normalizar_fingerprint_dtls,
@@ -178,7 +178,7 @@ async fn anunciar_sessao(
     // Quando a permissão é retirada, o hello sozinho já esvazia a grade do
     // outro lado — a capacidade some, e com ela o grupo inteiro.
     if pode_abrir_programas {
-        for conteudo in mensagens_do_deck(&atalhos.listar()) {
+        for conteudo in mensagens_do_deck(&atalhos.listar(), &atalhos.configuracao()) {
             let mensagem = json!({
                 "v": VERSAO_PROTOCOLO,
                 "id": uuid::Uuid::new_v4().to_string(),
@@ -225,7 +225,7 @@ struct AtalhoNoCanal<'a> {
 /// Sempre devolve ao menos uma mensagem: lista vazia precisa chegar do mesmo
 /// jeito, senão o celular continuaria mostrando os atalhos de um cadastro que
 /// já não existe.
-fn mensagens_do_deck(atalhos: &[Atalho]) -> Vec<Value> {
+fn mensagens_do_deck(atalhos: &[Atalho], configuracao: &ConfiguracaoDeck) -> Vec<Value> {
     let mut fatias: Vec<Vec<Value>> = vec![Vec::new()];
     let mut tamanho = 0usize;
 
@@ -257,6 +257,18 @@ fn mensagens_do_deck(atalhos: &[Atalho]) -> Vec<Value> {
         .enumerate()
         .map(|(indice, itens)| {
             let mut conteudo = json!({ "atalhos": itens });
+            // Os painéis viajam **só na primeira fatia**, e isso é combinado
+            // com a remontagem do outro lado: a PWA zera os perfis ao ver
+            // `parte == 1` e sobrescreve se uma fatia posterior trouxer o
+            // campo. Repetir a lista em toda fatia gastaria banda do canal
+            // sem mudar o resultado; omiti-la da primeira apagaria os painéis.
+            //
+            // São leves de propósito — um item de perfil é um identificador,
+            // não um ícone —, então cabem junto do primeiro lote de PNGs.
+            if indice == 0 {
+                conteudo["perfis"] = json!(configuracao.perfis);
+                conteudo["perfilPadraoId"] = json!(configuracao.perfil_padrao_id);
+            }
             // `parte`/`total` só aparecem quando há mais de uma: a lista comum
             // cabe inteira, e anunciar fatia de uma fatia só seria ruído.
             if total > 1 {
@@ -293,6 +305,16 @@ enum SaidaSinalizacao {
  * cada canal precisa ver o aviso para decidir se é sobre ele.
  */
 pub type AvisoDePermissao = tokio::sync::broadcast::Sender<String>;
+
+/// Aviso dirigido a **todos** os aparelhos ligados, e não a um só.
+///
+/// A permissão de abrir programas é por aparelho, então o aviso comum carrega
+/// um identificador e só aquele canal reage. O deck não é: mexer num painel na
+/// janela muda o que **todo** aparelho conectado deve estar mostrando, e mandar
+/// um aviso por aparelho exigiria a janela saber quem está ligado agora.
+///
+/// `*` nunca colide com um destino real — eles são UUIDs.
+pub const AVISO_TODOS: &str = "*";
 
 pub fn canal_de_avisos() -> AvisoDePermissao {
     tokio::sync::broadcast::channel(16).0
@@ -367,7 +389,9 @@ impl PeerConnectionEventHandler for EventosPar {
                         match aviso {
                             // Só reanuncia para o aparelho que mudou: os
                             // outros canais recebem o mesmo aviso e ignoram.
-                            Ok(id) if aberto && id == destino => {
+                            // `AVISO_TODOS` é a exceção — mudança de painel
+                            // vale para todo mundo que está ligado.
+                            Ok(id) if aberto && (id == destino || id == AVISO_TODOS) => {
                                 if !anunciar_sessao(
                                     &canal,
                                     &pares,
@@ -901,6 +925,56 @@ mod testes {
         }
     }
 
+    fn deck_de_teste() -> ConfiguracaoDeck {
+        ConfiguracaoDeck {
+            perfil_padrao_id: "p1".to_string(),
+            perfis: vec![crate::atalhos::PerfilDeDeck {
+                id: "p1".to_string(),
+                nome: "Ao vivo".to_string(),
+                cor: "violet".to_string(),
+                colunas_retrato: 3,
+                colunas_paisagem: 5,
+                itens: vec![crate::atalhos::ItemDePerfilDeck {
+                    action_id: "midia.reproduzir-pausar".to_string(),
+                    pagina: 0,
+                    ordem: 0,
+                    cor: None,
+                    tamanho: None,
+                }],
+            }],
+        }
+    }
+
+    #[test]
+    fn os_paineis_viajam_na_primeira_fatia_e_so_nela() {
+        // Este teste existe porque o recurso inteiro já estava construído dos
+        // dois lados — editor na janela, schema no protocolo, remontagem na
+        // PWA — e mesmo assim nenhum painel chegava ao celular: `deck.estado`
+        // saía daqui só com `atalhos`. Nada falhava, nada avisava; a grade
+        // clássica aparecia como se nenhum painel existisse.
+        //
+        // A fatia é combinada com `transporte-webrtc.ts`, que zera os perfis
+        // ao ver `parte == 1`. Mandar os painéis numa fatia posterior os faria
+        // sumir; repetir em todas gastaria banda à toa.
+        let icone = format!("data:image/png;base64,{}", "A".repeat(8_000));
+        let atalhos: Vec<Atalho> = (0..40)
+            .map(|n| atalho_de_teste(&n.to_string(), Some(icone.clone())))
+            .collect();
+        let mensagens = mensagens_do_deck(&atalhos, &deck_de_teste());
+        assert!(mensagens.len() > 1, "o teste precisa de mais de uma fatia");
+
+        assert_eq!(mensagens[0]["perfilPadraoId"], "p1");
+        assert_eq!(mensagens[0]["perfis"][0]["nome"], "Ao vivo");
+        assert_eq!(mensagens[0]["perfis"][0]["colunasRetrato"], json!(3));
+        assert_eq!(
+            mensagens[0]["perfis"][0]["itens"][0]["actionId"],
+            "midia.reproduzir-pausar"
+        );
+        for fatia in &mensagens[1..] {
+            assert!(fatia.get("perfis").is_none(), "painel repetido na fatia");
+        }
+    }
+
     #[test]
     fn o_deck_enviado_nunca_carrega_o_caminho_do_executavel() {
         // O par deste teste do lado da execução é
@@ -909,7 +983,7 @@ mod testes {
         // guarda nenhuma: `Atalho` deriva `Serialize` com o campo `caminho`
         // público, então serializar a lista direto entregaria a cada aparelho
         // pareado o mapa do disco deste computador.
-        let mensagens = mensagens_do_deck(&[atalho_de_teste("a", None)]);
+        let mensagens = mensagens_do_deck(&[atalho_de_teste("a", None)], &deck_de_teste());
         let bruto = mensagens[0].to_string();
         assert!(!bruto.contains("caminho"), "o campo vazou: {bruto}");
         assert!(!bruto.contains("jogo.exe"), "o caminho vazou: {bruto}");
@@ -922,7 +996,7 @@ mod testes {
     fn a_lista_vazia_ainda_vira_uma_mensagem() {
         // Sem ela, remover o último atalho deixaria a grade do celular exibindo
         // um cadastro que já não existe até alguém recarregar.
-        let mensagens = mensagens_do_deck(&[]);
+        let mensagens = mensagens_do_deck(&[], &deck_de_teste());
         assert_eq!(mensagens.len(), 1);
         assert_eq!(mensagens[0]["atalhos"].as_array().unwrap().len(), 0);
         assert!(mensagens[0].get("parte").is_none(), "fatia de uma só é ruído");
@@ -939,7 +1013,7 @@ mod testes {
             .map(|n| atalho_de_teste(&n.to_string(), Some(icone.clone())))
             .collect();
 
-        let mensagens = mensagens_do_deck(&atalhos);
+        let mensagens = mensagens_do_deck(&atalhos, &deck_de_teste());
         assert!(mensagens.len() > 1, "não fatiou nada");
 
         let mut vistos = 0;
