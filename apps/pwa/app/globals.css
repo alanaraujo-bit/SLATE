@@ -1352,10 +1352,6 @@ button {
   display: grid;
   flex: 1;
   min-height: 0;
-  /* Recorta em vez de transbordar. Sem isto a grade empurra o que vier depois
-     para fora da tela — foi assim que a faixa de energia sumiu no modo
-     deitado, sem nada indicando que ela existia. */
-  overflow: hidden;
   touch-action: pan-y;
 }
 

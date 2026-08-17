@@ -164,10 +164,10 @@ async fn anunciar_sessao(
     // Ser ponte é pergunta diferente de controlar a própria energia: uma é "o
     // que este computador faz consigo mesmo", a outra é "este computador serve
     // para ligar os outros".
-    if pares
+    let pode_ser_ponte = pares
         .buscar(destino)
-        .is_some_and(|par| par.tem_escopo("system.wake"))
-    {
+        .is_some_and(|par| par.tem_escopo("system.wake"));
+    if pode_ser_ponte {
         capacidades.push("energia.ponte");
     }
 
@@ -232,7 +232,10 @@ async fn anunciar_sessao(
             "k": "energia.estado",
             "ts": agora_ms(),
             "seq": *proxima_sequencia,
-            "p": { "perfil": perfil, "podeSerPonte": false }
+            // Mesma origem da capacidade `energia.ponte`, e não um valor
+            // próprio: duas fontes para a mesma pergunta divergem no dia em
+            // que uma das duas mudar, e o defeito só aparece muito depois.
+            "p": { "perfil": perfil, "podeSerPonte": pode_ser_ponte }
         });
         *proxima_sequencia += 1;
         if canal.send_text(&mensagem.to_string()).await.is_err() {

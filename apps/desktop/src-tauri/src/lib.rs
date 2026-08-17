@@ -169,10 +169,7 @@ async fn definir_energia_permitida(
 /// continuar mostrando o impedimento que ela acabou de resolver a faria concluir
 /// que não funcionou.
 #[tauri::command]
-async fn reconferir_energia(
-    estado: tauri::State<'_, Estado>,
-) -> Result<energia::PerfilEnergia, String> {
-    let _ = &estado;
+async fn reconferir_energia() -> Result<energia::PerfilEnergia, String> {
     energia::esquecer_cache();
     Ok(energia::montar_perfil(&energia::detectar(), false, None))
 }
