@@ -49,6 +49,8 @@ export function Aplicacao() {
   const [programas, setProgramas] = useState<readonly AtalhoDeDeck[]>([]);
   const [perfis, setPerfis] = useState<readonly PerfilDeDeck[]>([]);
   const [perfilPadraoId, setPerfilPadraoId] = useState<string | undefined>();
+  /** Painel que o computador está pedindo agora. Ver `context.changed`. */
+  const [perfilSugerido, setPerfilSugerido] = useState<string | undefined>();
   const [agentePrincipalId, setAgentePrincipalId] = useState<string | null>(null);
   const [removendoDispositivo, setRemovendoDispositivo] = useState<string | null>(null);
   const [tokenConvite, setTokenConvite] = useState<string | null>(null);
@@ -155,6 +157,7 @@ export function Aplicacao() {
           setPerfis(deck.perfis);
           setPerfilPadraoId(deck.perfilPadraoId);
         },
+        aoMudarContexto: setPerfilSugerido,
       });
       transporteAtual.current = transporte;
       transporte.iniciar();
@@ -172,6 +175,7 @@ export function Aplicacao() {
       setProgramas([]);
       setPerfis([]);
       setPerfilPadraoId(undefined);
+      setPerfilSugerido(undefined);
       if (transporteAtual.current === transporte) transporteAtual.current = null;
     };
   }, [situacao, dispositivos, tentativa]);
@@ -419,6 +423,7 @@ export function Aplicacao() {
                 programas={programas}
                 perfis={perfis}
                 perfilPadraoId={perfilPadraoId}
+                perfilSugerido={perfilSugerido}
                 executar={(actionId) =>
                   transporteAtual.current?.executarAcao(actionId) ??
                   Promise.resolve({

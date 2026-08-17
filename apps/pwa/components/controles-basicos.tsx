@@ -20,6 +20,7 @@ export function ControlesBasicos({
   programas = [],
   perfis = [],
   perfilPadraoId,
+  perfilSugerido,
 }: {
   executar: (actionId: string) => Promise<ResultadoExecucaoAcao>;
   /**
@@ -32,6 +33,11 @@ export function ControlesBasicos({
   /** Perfis criados no desktop. Ausente mantém a grade clássica. */
   perfis?: readonly PerfilDeDeck[];
   perfilPadraoId?: string;
+  /**
+   * Painel que o computador está pedindo agora, por causa do programa em
+   * primeiro plano. Ausente quando ninguém configurou regra nenhuma.
+   */
+  perfilSugerido?: string;
   /** O Agente anunciou `action.media.completo` no handshake. */
   gradeCompleta?: boolean;
   /**
@@ -67,6 +73,7 @@ export function ControlesBasicos({
       <PainelDePerfis
         perfis={perfis}
         perfilPadraoId={perfilPadraoId}
+        perfilSugerido={perfilSugerido}
         programas={programas}
         gradeCompleta={gradeCompleta}
         acionar={acionar}
@@ -206,6 +213,7 @@ function Representacao({ controle }: { controle: Controle }) {
 function PainelDePerfis({
   perfis,
   perfilPadraoId,
+  perfilSugerido,
   programas,
   gradeCompleta,
   acionar,
@@ -213,6 +221,7 @@ function PainelDePerfis({
 }: {
   perfis: readonly PerfilDeDeck[];
   perfilPadraoId?: string;
+  perfilSugerido?: string;
   programas: readonly AtalhoDeDeck[];
   gradeCompleta: boolean;
   acionar: (actionId: string) => void;
@@ -224,10 +233,31 @@ function PainelDePerfis({
   const [pagina, setPagina] = useState(0);
   const inicioArraste = useRef<number | null>(null);
   const ignorarCliqueAte = useRef(0);
+  const sugestaoAplicada = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!perfis.some((perfil) => perfil.id === perfilId)) setPerfilId(perfilInicial);
   }, [perfilId, perfilInicial, perfis]);
+
+  /*
+   * O painel segue o computador, mas nunca por cima da mão de quem está com o
+   * celular.
+   *
+   * A troca acontece só quando a sugestão **muda** — e não enquanto ela
+   * continua a mesma. É isso que faz um toque deliberado valer: quem abriu o
+   * Netflix e escolheu "Cinema" fica em Cinema, porque o computador continua
+   * sugerindo o mesmo painel de antes. Assim que a pessoa abre outro programa,
+   * a sugestão vira outra e o painel acompanha.
+   *
+   * Sem essa distinção só havia dois extremos, e os dois são ruins: ou o
+   * automático arranca o painel da mão a cada segundo, ou o primeiro toque
+   * desliga o recurso para o resto da sessão.
+   */
+  useEffect(() => {
+    if (!perfilSugerido || perfilSugerido === sugestaoAplicada.current) return;
+    sugestaoAplicada.current = perfilSugerido;
+    if (perfis.some((perfil) => perfil.id === perfilSugerido)) setPerfilId(perfilSugerido);
+  }, [perfilSugerido, perfis]);
 
   useEffect(() => setPagina(0), [perfilId]);
 
@@ -308,7 +338,14 @@ function PainelDePerfis({
               type="button"
               role="tab"
               aria-selected={item.id === perfil.id}
-              className={`perfil-chip${item.id === perfil.id ? " perfil-chip--ativo" : ""}`}
+              /*
+                O ponto pulsa quando foi o computador que escolheu, e não a
+                pessoa. É a diferença entre "o painel mudou" e "o painel mudou
+                sozinho, e eu sei por quê" — sem gastar uma frase para dizê-lo.
+              */
+              className={`perfil-chip${item.id === perfil.id ? " perfil-chip--ativo" : ""}${
+                item.id === perfil.id && item.id === perfilSugerido ? " perfil-chip--auto" : ""
+              }`}
               style={{ "--perfil-cor": `var(--s-control-${item.cor})` } as React.CSSProperties}
               onClick={() => setPerfilId(item.id)}
             >

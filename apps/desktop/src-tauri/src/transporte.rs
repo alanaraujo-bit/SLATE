@@ -1,5 +1,5 @@
 use crate::acoes::{self, EstadoComandos, RecepcaoAcao};
-use crate::atalhos::{Atalho, AtalhosPersonalizados, ConfiguracaoDeck};
+use crate::atalhos::{Atalho, AtalhosPersonalizados, ConfiguracaoDeck, PerfilDeDeck};
 use crate::api::ClienteApi;
 use crate::identidade::{
     mensagem_desafio_sinalizacao, mensagem_fingerprint_dtls, normalizar_fingerprint_dtls,
@@ -220,6 +220,119 @@ struct AtalhoNoCanal<'a> {
     icone: Option<&'a str>,
 }
 
+/// Avisa uma sessão aberta de que outro painel passou a valer.
+///
+/// `reason: "regra"` distingue esta troca de uma escolha da pessoa, e é o que
+/// permite ao celular decidir se obedece — um toque deliberado não pode ser
+/// arrancado da mão a cada segundo.
+async fn anunciar_contexto(
+    canal: &Arc<dyn DataChannel>,
+    perfil: &str,
+    proxima_sequencia: &mut i64,
+) -> bool {
+    let mensagem = json!({
+        "v": VERSAO_PROTOCOLO,
+        "id": uuid::Uuid::new_v4().to_string(),
+        "t": "evt",
+        "k": "context.changed",
+        "ts": agora_ms(),
+        "seq": *proxima_sequencia,
+        "p": { "profileId": perfil, "reason": "regra" }
+    });
+    *proxima_sequencia += 1;
+    canal.send_text(&mensagem.to_string()).await.is_ok()
+}
+
+/// De quanto em quanto tempo o primeiro plano é conferido.
+///
+/// Um segundo e meio é curto o bastante para a troca parecer imediata a quem
+/// alt-tabou, e longo o bastante para o custo ser irrelevante — são três
+/// chamadas baratas ao Windows, e só quando existe alguma regra configurada.
+const INTERVALO_DE_FOCO: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// Observa o programa em primeiro plano e anuncia o painel que ele pede.
+///
+/// **Fica calada enquanto ninguém configura uma regra.** É o que garante que
+/// atualizar o Agente não liga comportamento nenhum: depois da migração todo
+/// painel nasce sem regra, e esta função só chega a perguntar ao Windows
+/// depois que alguém digitou um executável no editor.
+///
+/// Nada aqui trata ausência de leitura como erro. Processo elevado, área de
+/// trabalho em foco, tela bloqueada — todos devolvem nada, e nada significa
+/// "deixe o painel onde está".
+pub async fn vigiar_primeiro_plano(atalhos: Arc<AtalhosPersonalizados>, avisos: AvisoDePermissao) {
+    let mut ultimo_programa: Option<String> = None;
+    let mut ultimo_perfil: Option<String> = None;
+
+    loop {
+        tokio::time::sleep(INTERVALO_DE_FOCO).await;
+
+        let configuracao = atalhos.configuracao();
+        if !crate::atalhos::alguem_quer_contexto(&configuracao.perfis) {
+            // Esquece o que viu: se alguém apagar e recriar a mesma regra, a
+            // troca precisa voltar a acontecer em vez de ser suprimida por uma
+            // lembrança de outra configuração.
+            ultimo_programa = None;
+            ultimo_perfil = None;
+            continue;
+        }
+
+        let Some(programa) = crate::foco::programa_em_primeiro_plano() else {
+            continue;
+        };
+        if ultimo_programa.as_deref() == Some(programa.as_str()) {
+            continue;
+        }
+        ultimo_programa = Some(programa.clone());
+
+        let Some(perfil) = crate::atalhos::perfil_para_programa(&programa, &configuracao.perfis)
+        else {
+            // Programa sem regra não devolve ninguém ao painel inicial: quem
+            // abriu o bloco de notas no meio de uma transmissão não quer perder
+            // os controles que estava usando.
+            continue;
+        };
+        if ultimo_perfil.as_deref() == Some(perfil.id.as_str()) {
+            continue;
+        }
+        ultimo_perfil = Some(perfil.id.clone());
+        let _ = avisos.send(Aviso::Contexto {
+            perfil: perfil.id.clone(),
+        });
+    }
+}
+
+/// Um painel como ele viaja até o celular.
+///
+/// **Struct separada de `PerfilDeDeck` pelo mesmo motivo que `AtalhoNoCanal`.**
+/// O perfil guarda `regras` — os executáveis que o fazem entrar sozinho —, e
+/// serializar aquele struct direto contaria a cada aparelho pareado quais
+/// programas existem neste computador. É a mesma classe de vazamento que o
+/// `caminho`, com outro nome, e o ADR-0004 vale igual para os dois.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PerfilNoCanal<'a> {
+    id: &'a str,
+    nome: &'a str,
+    cor: &'a str,
+    colunas_retrato: u8,
+    colunas_paisagem: u8,
+    itens: &'a [crate::atalhos::ItemDePerfilDeck],
+}
+
+impl<'a> From<&'a PerfilDeDeck> for PerfilNoCanal<'a> {
+    fn from(perfil: &'a PerfilDeDeck) -> Self {
+        Self {
+            id: &perfil.id,
+            nome: &perfil.nome,
+            cor: &perfil.cor,
+            colunas_retrato: perfil.colunas_retrato,
+            colunas_paisagem: perfil.colunas_paisagem,
+            itens: &perfil.itens,
+        }
+    }
+}
+
 /// Monta os conteúdos de `deck.estado`, já fatiados para caberem no canal.
 ///
 /// Sempre devolve ao menos uma mensagem: lista vazia precisa chegar do mesmo
@@ -266,7 +379,9 @@ fn mensagens_do_deck(atalhos: &[Atalho], configuracao: &ConfiguracaoDeck) -> Vec
             // São leves de propósito — um item de perfil é um identificador,
             // não um ícone —, então cabem junto do primeiro lote de PNGs.
             if indice == 0 {
-                conteudo["perfis"] = json!(configuracao.perfis);
+                let perfis: Vec<PerfilNoCanal> =
+                    configuracao.perfis.iter().map(PerfilNoCanal::from).collect();
+                conteudo["perfis"] = json!(perfis);
                 conteudo["perfilPadraoId"] = json!(configuracao.perfil_padrao_id);
             }
             // `parte`/`total` só aparecem quando há mais de uma: a lista comum
@@ -304,7 +419,24 @@ enum SaidaSinalizacao {
  * `broadcast` porque pode haver vários aparelhos ligados ao mesmo tempo, e
  * cada canal precisa ver o aviso para decidir se é sobre ele.
  */
-pub type AvisoDePermissao = tokio::sync::broadcast::Sender<String>;
+/// O que a janela — ou a vigilância do primeiro plano — tem a dizer às sessões
+/// que já estão abertas.
+///
+/// Um canal só, com duas mensagens, e não dois canais: os dois avisos precisam
+/// chegar ao mesmo lugar, no mesmo `select!`, e cada canal novo teria de ser
+/// costurado por quatro assinaturas até o `EventosPar`.
+#[derive(Clone, Debug)]
+pub enum Aviso {
+    /// A permissão de um aparelho mudou. Carrega o destino, ou `AVISO_TODOS`.
+    Permissao(String),
+    /// O programa em primeiro plano pede outro painel. Carrega só o id do
+    /// painel: **o nome do programa não sai desta máquina**. O celular não
+    /// precisa dele para trocar de painel, e ele é a lista de programas deste
+    /// computador contada de outro jeito.
+    Contexto { perfil: String },
+}
+
+pub type AvisoDePermissao = tokio::sync::broadcast::Sender<Aviso>;
 
 /// Aviso dirigido a **todos** os aparelhos ligados, e não a um só.
 ///
@@ -391,13 +523,35 @@ impl PeerConnectionEventHandler for EventosPar {
                             // outros canais recebem o mesmo aviso e ignoram.
                             // `AVISO_TODOS` é a exceção — mudança de painel
                             // vale para todo mundo que está ligado.
-                            Ok(id) if aberto && (id == destino || id == AVISO_TODOS) => {
+                            Ok(Aviso::Permissao(id))
+                                if aberto && (id == destino || id == AVISO_TODOS) =>
+                            {
                                 if !anunciar_sessao(
                                     &canal,
                                     &pares,
                                     &atalhos,
                                     &destino,
                                     &dispositivo_id,
+                                    &mut proxima_sequencia_saida,
+                                )
+                                .await
+                                {
+                                    break;
+                                }
+                            }
+                            // O painel automático segue a mesma concessão dos
+                            // atalhos: para quem não pode abrir programas, os
+                            // painéis nem chegaram, e mandar a troca seria
+                            // apontar para algo que não existe do outro lado.
+                            Ok(Aviso::Contexto { perfil })
+                                if aberto
+                                    && pares
+                                        .buscar(&destino)
+                                        .is_some_and(|par| par.tem_escopo("system.process")) =>
+                            {
+                                if !anunciar_contexto(
+                                    &canal,
+                                    &perfil,
                                     &mut proxima_sequencia_saida,
                                 )
                                 .await
@@ -928,7 +1082,7 @@ mod testes {
     fn deck_de_teste() -> ConfiguracaoDeck {
         ConfiguracaoDeck {
             perfil_padrao_id: "p1".to_string(),
-            perfis: vec![crate::atalhos::PerfilDeDeck {
+            perfis: vec![PerfilDeDeck {
                 id: "p1".to_string(),
                 nome: "Ao vivo".to_string(),
                 cor: "violet".to_string(),
@@ -941,8 +1095,30 @@ mod testes {
                     cor: None,
                     tamanho: None,
                 }],
+                regras: vec!["obs64.exe".to_string(), "valorant.exe".to_string()],
             }],
         }
+    }
+
+    #[test]
+    fn o_deck_enviado_nunca_carrega_as_regras_de_contexto() {
+        // Irmão de `o_deck_enviado_nunca_carrega_o_caminho_do_executavel`, e
+        // pelo mesmo motivo: `regras` é a lista de programas deste computador
+        // com outro nome. `PerfilDeDeck` deriva `Serialize` com o campo
+        // público, então mandar aquele struct direto contaria a cada aparelho
+        // pareado o que está instalado aqui.
+        //
+        // Zod descarta chave desconhecida do outro lado, então nada quebraria
+        // e ninguém perceberia — que é exatamente o que torna este teste
+        // necessário em vez de opcional.
+        let mensagens = mensagens_do_deck(&[atalho_de_teste("a", None)], &deck_de_teste());
+        let bruto = mensagens[0].to_string();
+        assert!(!bruto.contains("regras"), "o campo vazou: {bruto}");
+        assert!(!bruto.contains("obs64"), "uma regra vazou: {bruto}");
+        assert!(!bruto.contains("valorant"), "uma regra vazou: {bruto}");
+        // E o resto do painel continua chegando inteiro.
+        assert_eq!(mensagens[0]["perfis"][0]["nome"], "Ao vivo");
+        assert_eq!(mensagens[0]["perfis"][0]["colunasPaisagem"], json!(5));
     }
 
     #[test]

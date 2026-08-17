@@ -5,9 +5,18 @@ import type { CorAtalho, ItemDePerfilDeck, PerfilDeDeck } from "@slate/protocol"
 import type { Atalho } from "./programas";
 import { Modal } from "../modal";
 
+/**
+ * O perfil como ele existe **neste computador**.
+ *
+ * `regras` não está em `@slate/protocol` de propósito: ela nomeia executáveis
+ * instalados aqui, e o schema do protocolo descreve o que atravessa o canal
+ * até o celular. O campo vive só entre a janela e o Agente.
+ */
+type PerfilLocal = PerfilDeDeck & { regras?: string[] };
+
 interface ConfiguracaoDeck {
   atalhos: Atalho[];
-  perfis: PerfilDeDeck[];
+  perfis: PerfilLocal[];
   perfilPadraoId: string;
 }
 
@@ -56,7 +65,7 @@ export function TelaPaineis() {
   const [orientacao, setOrientacao] = useState<"retrato" | "paisagem">("retrato");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [aRemover, setARemover] = useState<PerfilDeDeck | null>(null);
+  const [aRemover, setARemover] = useState<PerfilLocal | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -95,7 +104,7 @@ export function TelaPaineis() {
     [catalogo],
   );
 
-  const salvar = async (proximo: PerfilDeDeck) => {
+  const salvar = async (proximo: PerfilLocal) => {
     if (!configuracao || salvando) return;
     const anterior = configuracao;
     setConfiguracao({
@@ -118,7 +127,7 @@ export function TelaPaineis() {
   const criar = async () => {
     setSalvando(true);
     try {
-      const criado = await invoke<PerfilDeDeck>("criar_perfil", { nome: "Novo painel" });
+      const criado = await invoke<PerfilLocal>("criar_perfil", { nome: "Novo painel" });
       await carregar();
       setPerfilId(criado.id);
     } catch (e) {
@@ -132,7 +141,7 @@ export function TelaPaineis() {
     if (!perfil) return;
     setSalvando(true);
     try {
-      const criado = await invoke<PerfilDeDeck>("duplicar_perfil", { id: perfil.id });
+      const criado = await invoke<PerfilLocal>("duplicar_perfil", { id: perfil.id });
       await carregar();
       setPerfilId(criado.id);
     } catch (e) {
@@ -325,6 +334,12 @@ export function TelaPaineis() {
             </div>
           </div>
 
+          <RegrasDoPerfil
+            perfil={perfil}
+            atalhos={configuracao.atalhos}
+            aoMudar={(regras) => void salvar({ ...perfil, regras })}
+          />
+
           <div className="paginas-editor">
             {Array.from({ length: maxPagina + 1 }, (_, indice) => (
               <button key={indice} type="button" className={pagina === indice ? "ativa" : ""} onClick={() => setPagina(indice)}>
@@ -373,6 +388,123 @@ export function TelaPaineis() {
         acoes={<><Botao onClick={() => setARemover(null)}>Cancelar</Botao><Botao tom="perigo" onClick={() => void remover()}>Remover painel</Botao></>}
       />
     </section>
+  );
+}
+
+/**
+ * Os programas que fazem este painel entrar sozinho.
+ *
+ * É a única parte do editor que não descreve teclas, e por isso ela se explica
+ * pelo que faz e não pelo que é: "quando eu abrir isto, mostre este painel".
+ * Um campo chamado "regras" com uma lista de `.exe` seria correto e mudo.
+ *
+ * Os programas já cadastrados viram sugestões de um clique, porque digitar o
+ * nome exato do executável é a parte em que se erra — quem chama de "OBS"
+ * dificilmente lembra que o arquivo é `obs64.exe`.
+ */
+function RegrasDoPerfil({
+  perfil,
+  atalhos,
+  aoMudar,
+}: {
+  perfil: PerfilLocal;
+  atalhos: Atalho[];
+  aoMudar: (regras: string[]) => void;
+}) {
+  const [rascunho, setRascunho] = useState("");
+  const regras = perfil.regras ?? [];
+
+  const acrescentar = (bruto: string) => {
+    const nome = bruto.trim().toLowerCase().split(/[\\/]/).pop() ?? "";
+    if (!nome || regras.includes(nome)) {
+      setRascunho("");
+      return;
+    }
+    aoMudar([...regras, nome]);
+    setRascunho("");
+  };
+
+  // Só o que ainda não é regra: sugerir de novo o que já está na lista faria
+  // a pessoa clicar num botão que não muda nada.
+  const sugestoes = atalhos
+    .map((atalho) => (atalho.caminho.split(/[\\/]/).pop() ?? "").toLowerCase())
+    .filter((nome) => nome && !regras.includes(nome));
+
+  return (
+    <div className="regras-deck">
+      <div className="regras-deck__cabecalho">
+        <div>
+          <strong>Entrar sozinho</strong>
+          <span>Quando um destes programas ficar em primeiro plano, o celular abre este painel.</span>
+        </div>
+        <Rotulo tamanho="2xs" tom="sutil">{regras.length}/20</Rotulo>
+      </div>
+
+      {regras.length > 0 && (
+        <ul className="regras-deck__lista">
+          {regras.map((regra) => (
+            <li key={regra}>
+              <Icone nome="Monitor" aria-hidden />
+              <span>{regra}</span>
+              <button
+                type="button"
+                aria-label={`Remover ${regra}`}
+                onClick={() => aoMudar(regras.filter((item) => item !== regra))}
+              >
+                <Icone nome="Fechar" aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form
+        className="regras-deck__entrada"
+        onSubmit={(evento) => {
+          evento.preventDefault();
+          acrescentar(rascunho);
+        }}
+      >
+        <input
+          value={rascunho}
+          placeholder="nome do programa, como obs64.exe"
+          maxLength={120}
+          onChange={(evento) => setRascunho(evento.target.value)}
+        />
+        {/*
+          `Botao` é sempre `type="button"` — ele bloqueia acionamento por
+          `aria-disabled` em vez de `disabled`, e um submit nativo furaria esse
+          controle. O formulário continua existindo pelo Enter: com um campo de
+          texto só, o navegador envia sem precisar de botão de envio.
+        */}
+        <Botao
+          tamanho="sm"
+          estado={rascunho.trim() ? "idle" : "disabled"}
+          onClick={() => acrescentar(rascunho)}
+        >
+          <Icone nome="Mais" aria-hidden /> Adicionar
+        </Botao>
+      </form>
+
+      {sugestoes.length > 0 && (
+        <div className="regras-deck__sugestoes">
+          <span>Dos seus programas</span>
+          <div>
+            {sugestoes.map((nome) => (
+              <button key={nome} type="button" onClick={() => acrescentar(nome)}>
+                <Icone nome="Mais" aria-hidden /> {nome}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {regras.length === 0 && (
+        <p className="regras-deck__inerte">
+          Sem nenhum programa aqui, este painel só entra quando você tocar nele.
+        </p>
+      )}
+    </div>
   );
 }
 

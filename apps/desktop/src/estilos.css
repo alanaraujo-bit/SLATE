@@ -2752,3 +2752,182 @@ body::after {
   height: 100%;
   object-fit: contain;
 }
+
+/* ------------------------------------------------------------------------ */
+/* Regras de contexto                                                        */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * O bloco tem a borda acesa porque é o único do editor que liga um
+ * comportamento automático. Uma tecla mal colocada se conserta arrastando; uma
+ * regra faz o painel do celular mudar sozinho na mão de quem está usando, e
+ * merece se distinguir do resto antes de ser preenchida.
+ */
+.regras-deck {
+  display: grid;
+  gap: var(--s-space-4);
+  padding: var(--s-space-5);
+  border: 1px solid color-mix(in srgb, var(--s-accent) 26%, var(--s-border));
+  border-radius: var(--s-radius-lg);
+  background: var(--s-surface-raised);
+  box-shadow: var(--s-highlight), var(--s-shadow-sm);
+}
+
+.regras-deck__cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-space-4);
+}
+
+.regras-deck__cabecalho strong {
+  display: block;
+  font-size: var(--s-text-md);
+  font-weight: var(--s-weight-semibold);
+}
+
+.regras-deck__cabecalho span {
+  display: block;
+  max-width: 44ch;
+  color: var(--s-text-muted);
+  font-size: var(--s-text-sm);
+  line-height: var(--s-leading-normal);
+}
+
+.regras-deck__lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.regras-deck__lista li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-space-2);
+  min-height: 2.25rem;
+  padding: 0 var(--s-space-2) 0 var(--s-space-3);
+  border-radius: var(--s-radius-full);
+  background: var(--s-accent-soft);
+  color: var(--s-text);
+  font-family: var(--s-font-mono);
+  font-size: var(--s-text-xs);
+}
+
+.regras-deck__lista svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--s-accent);
+}
+
+.regras-deck__lista button {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 0;
+  border-radius: var(--s-radius-full);
+  background: transparent;
+  color: var(--s-text-subtle);
+  cursor: pointer;
+  transition: color var(--s-duration-fast) var(--s-ease-out);
+}
+
+.regras-deck__lista button:hover {
+  color: var(--s-danger);
+}
+
+.regras-deck__lista button:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+}
+
+.regras-deck__entrada {
+  display: flex;
+  gap: var(--s-space-2);
+}
+
+.regras-deck__entrada input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--s-touch-min);
+  padding: 0 var(--s-space-3);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--s-radius-md);
+  background: var(--s-surface-sunken);
+  box-shadow: var(--s-inset-sutil);
+  color: var(--s-text);
+  font-family: var(--s-font-mono);
+  font-size: var(--s-text-sm);
+  transition:
+    border-color var(--s-duration-fast) var(--s-ease-out),
+    box-shadow var(--s-duration-fast) var(--s-ease-out);
+}
+
+.regras-deck__entrada input:focus {
+  outline: none;
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 3px var(--s-accent-soft);
+}
+
+.regras-deck__sugestoes {
+  display: grid;
+  gap: var(--s-space-2);
+}
+
+.regras-deck__sugestoes > span {
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-2xs);
+  font-weight: var(--s-weight-semibold);
+  letter-spacing: var(--s-tracking-caps);
+  text-transform: uppercase;
+}
+
+.regras-deck__sugestoes > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-space-2);
+}
+
+.regras-deck__sugestoes button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-space-1);
+  min-height: 2rem;
+  padding: 0 var(--s-space-3);
+  border: 1px dashed var(--s-border-strong);
+  border-radius: var(--s-radius-full);
+  background: transparent;
+  color: var(--s-text-muted);
+  font-family: var(--s-font-mono);
+  font-size: var(--s-text-xs);
+  cursor: pointer;
+  transition:
+    border-color var(--s-duration-fast) var(--s-ease-out),
+    color var(--s-duration-fast) var(--s-ease-out);
+}
+
+.regras-deck__sugestoes button svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.regras-deck__sugestoes button:hover {
+  border-color: var(--s-accent);
+  color: var(--s-text);
+}
+
+.regras-deck__sugestoes button:focus-visible {
+  outline: none;
+  box-shadow: var(--s-ring-focus);
+}
+
+/* Dizer que está desligado vale mais que uma lista vazia: sem isto, um painel
+   sem regra e um painel com regra parecem o mesmo bloco pela metade. */
+.regras-deck__inerte {
+  margin: 0;
+  color: var(--s-text-subtle);
+  font-size: var(--s-text-sm);
+}

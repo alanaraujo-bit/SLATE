@@ -1461,3 +1461,34 @@ button {
     display: none;
   }
 }
+
+/*
+ * O painel entrou sozinho.
+ *
+ * Um anel que respira em volta do ponto do perfil, e nada escrito. Quem está
+ * usando percebe que a troca veio do computador; quem não reparar não perde
+ * nada, porque o painel certo já está na tela. Texto aqui seria uma legenda
+ * explicando o que acabou de acontecer bem na frente da pessoa.
+ */
+.perfil-chip--auto i {
+  animation: perfil-seguindo 2.4s var(--s-ease-in-out) infinite;
+}
+
+@keyframes perfil-seguindo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--perfil-cor) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 0.3rem color-mix(in srgb, var(--perfil-cor) 0%, transparent);
+  }
+}
+
+/* Movimento contínuo é exatamente o que incomoda quem pediu para reduzi-lo, e
+   o anel é enfeite: sem ele nada se perde. */
+@media (prefers-reduced-motion: reduce) {
+  .perfil-chip--auto i {
+    animation: none;
+    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--perfil-cor) 35%, transparent);
+  }
+}

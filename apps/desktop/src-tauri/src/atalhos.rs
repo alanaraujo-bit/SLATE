@@ -97,6 +97,20 @@ pub struct PerfilDeDeck {
     pub colunas_retrato: u8,
     pub colunas_paisagem: u8,
     pub itens: Vec<ItemDePerfilDeck>,
+    /**
+     * Executáveis que fazem este painel entrar sozinho, em minúsculas e sem
+     * caminho — `obs64.exe`, `valorant.exe`.
+     *
+     * **Nunca atravessa o canal.** É a lista de programas desta máquina com
+     * outro nome, e entregá-la a cada aparelho pareado é a mesma classe de
+     * vazamento que o `caminho` do `Atalho` — por isso o deck é montado a
+     * partir de `PerfilNoCanal`, em `transporte.rs`, que não tem este campo.
+     *
+     * `default` porque perfis gravados antes desta versão não o têm, e um
+     * campo novo jamais pode invalidar um arquivo que já está no disco.
+     */
+    #[serde(default)]
+    pub regras: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -270,6 +284,7 @@ impl AtalhosPersonalizados {
             colunas_retrato: 3,
             colunas_paisagem: 6,
             itens: Vec::new(),
+            regras: Vec::new(),
         };
         self.inserir_perfil(perfil)
     }
@@ -298,6 +313,7 @@ impl AtalhosPersonalizados {
         let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
         let mut perfil = perfil;
         normalizar_ordem(&mut perfil.itens);
+        perfil.regras = normalizar_regras(&perfil.regras);
         validar_perfil(&perfil, &estado.atalhos)?;
         let mut candidato = estado.clone();
         let alvo = candidato
@@ -387,6 +403,7 @@ fn perfil_padrao(atalhos: &[Atalho]) -> PerfilDeDeck {
         colunas_retrato: 3,
         colunas_paisagem: 6,
         itens,
+        regras: Vec::new(),
     }
 }
 
@@ -476,6 +493,74 @@ fn normalizar_ordem(itens: &mut [ItemDePerfilDeck]) {
     }
 }
 
+/// Teto de regras por painel.
+const MAXIMO_REGRAS: usize = 20;
+
+/// Deixa cada regra na forma em que ela vai ser comparada.
+///
+/// Quem digita "OBS Studio.exe", " valorant.exe " ou cola um caminho inteiro
+/// está descrevendo a mesma coisa que `obs64.exe`, e uma comparação literal
+/// erraria as três. Normalizar na gravação — e não na comparação — é o que faz
+/// o campo mostrar exatamente aquilo que vai valer, em vez de guardar um texto
+/// e obedecer a outro.
+///
+/// Regras vazias somem, e repetidas também: as duas só existiriam para nunca
+/// casar ou para casar duas vezes.
+pub fn normalizar_regras(regras: &[String]) -> Vec<String> {
+    let mut vistas = Vec::new();
+    for regra in regras {
+        let limpa = regra.trim().to_lowercase();
+        // Aceita caminho colado e fica só com o nome do arquivo — é o que a
+        // comparação recebe do Windows.
+        let nome = limpa
+            .rsplit(['\\', '/'])
+            .next()
+            .unwrap_or(&limpa)
+            .to_string();
+        if nome.is_empty() || nome.chars().count() > 120 || vistas.contains(&nome) {
+            continue;
+        }
+        vistas.push(nome);
+        if vistas.len() == MAXIMO_REGRAS {
+            break;
+        }
+    }
+    vistas
+}
+
+/// O painel que um programa em foco pede, se algum pedir.
+///
+/// Função pura de propósito: é aqui que mora o comportamento, e a leitura do
+/// Windows fica sendo uma casca fina que só devolve um nome de arquivo. Assim
+/// a regra é testável numa máquina onde nada disso está rodando.
+///
+/// **O primeiro painel na ordem da lista ganha um empate.** Dois painéis
+/// reivindicando `obs64.exe` é configuração ambígua, e resolver por ordem é
+/// previsível — a alternativa seria alternar entre os dois conforme o humor do
+/// mapa, que é o tipo de coisa impossível de depurar olhando.
+pub fn perfil_para_programa<'a>(
+    programa: &str,
+    perfis: &'a [PerfilDeDeck],
+) -> Option<&'a PerfilDeDeck> {
+    let alvo = programa.trim().to_lowercase();
+    if alvo.is_empty() {
+        return None;
+    }
+    perfis
+        .iter()
+        .find(|perfil| perfil.regras.iter().any(|regra| *regra == alvo))
+}
+
+/// Se vale a pena olhar o programa em foco neste computador.
+///
+/// Sem nenhuma regra configurada, a resposta é não — e é o que mantém a
+/// vigilância do primeiro plano **desligada até alguém pedir**. Depois da
+/// migração todo painel nasce sem regra, então uma instalação que só atualizou
+/// não ganha nenhum comportamento novo.
+pub fn alguem_quer_contexto(perfis: &[PerfilDeDeck]) -> bool {
+    perfis.iter().any(|perfil| !perfil.regras.is_empty())
+}
+
 fn validar_perfil(perfil: &PerfilDeDeck, atalhos: &[Atalho]) -> Result<(), ErroAtalhos> {
     if perfil.id.is_empty()
         || perfil.id.len() > 64
@@ -485,6 +570,11 @@ fn validar_perfil(perfil: &PerfilDeDeck, atalhos: &[Atalho]) -> Result<(), ErroA
         || !(2..=3).contains(&perfil.colunas_retrato)
         || !(4..=6).contains(&perfil.colunas_paisagem)
         || perfil.itens.len() > MAXIMO_ITENS
+        || perfil.regras.len() > MAXIMO_REGRAS
+        || perfil
+            .regras
+            .iter()
+            .any(|r| r.trim().is_empty() || r.chars().count() > 120)
     {
         return Err(ErroAtalhos::PerfilInvalido);
     }
@@ -650,6 +740,72 @@ mod testes {
             Err(ErroAtalhos::PerfilInvalido)
         ));
         let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    fn perfil_com_regras(id: &str, regras: &[&str]) -> PerfilDeDeck {
+        PerfilDeDeck {
+            id: id.to_string(),
+            nome: id.to_string(),
+            cor: "violet".to_string(),
+            colunas_retrato: 3,
+            colunas_paisagem: 6,
+            itens: Vec::new(),
+            regras: regras.iter().map(|r| r.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn a_regra_e_guardada_na_forma_em_que_vai_ser_comparada() {
+        // O que o Windows devolve é `obs64.exe`, sempre. Quem digita escreve
+        // com maiúscula, com espaço sobrando ou cola o caminho inteiro — e uma
+        // comparação literal erraria os três casos calada.
+        assert_eq!(
+            normalizar_regras(&[
+                "  OBS64.exe ".to_string(),
+                r"C:\Riot Games\VALORANT.exe".to_string(),
+                "obs64.exe".to_string(),
+                "   ".to_string(),
+            ]),
+            vec!["obs64.exe", "valorant.exe"],
+            "normaliza, tira caminho, e não repete",
+        );
+    }
+
+    #[test]
+    fn sem_nenhuma_regra_o_agente_nao_olha_o_primeiro_plano() {
+        // É este teste que sustenta a promessa de que atualizar o Agente não
+        // liga nada sozinho: depois da migração todo painel nasce sem regra.
+        assert!(!alguem_quer_contexto(&[perfil_com_regras("a", &[])]));
+        assert!(alguem_quer_contexto(&[
+            perfil_com_regras("a", &[]),
+            perfil_com_regras("b", &["obs64.exe"]),
+        ]));
+    }
+
+    #[test]
+    fn o_programa_em_foco_escolhe_o_painel_ou_nenhum() {
+        let perfis = vec![
+            perfil_com_regras("live", &["obs64.exe", "discord.exe"]),
+            perfil_com_regras("jogo", &["valorant.exe"]),
+            // Empate proposital: dois painéis reivindicando o mesmo programa.
+            perfil_com_regras("outro", &["obs64.exe"]),
+        ];
+
+        assert_eq!(
+            perfil_para_programa("obs64.exe", &perfis).map(|p| p.id.as_str()),
+            Some("live"),
+            "o empate vai para o primeiro da lista, e não para um sorteio",
+        );
+        assert_eq!(
+            perfil_para_programa("VALORANT.EXE", &perfis).map(|p| p.id.as_str()),
+            Some("jogo"),
+            "o Windows não promete maiúsculas",
+        );
+        // Programa sem regra nenhuma não troca o painel — quem está usando
+        // continua onde estava, que é bem melhor do que cair num padrão.
+        assert!(perfil_para_programa("bloco-de-notas.exe", &perfis).is_none());
+        // Processo elevado devolve nada do Windows, e nada não é erro.
+        assert!(perfil_para_programa("", &perfis).is_none());
     }
 
     #[test]

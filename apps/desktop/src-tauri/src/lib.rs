@@ -1,5 +1,6 @@
 mod acoes;
 mod atalhos;
+mod foco;
 mod icone;
 mod api;
 mod identidade;
@@ -108,7 +109,9 @@ async fn definir_atalhos_permitidos(
     // Reanuncia para o aparelho que mudou, se ele estiver conectado agora. Um
     // erro aqui significa apenas que ninguém está ouvindo — nenhuma sessão
     // aberta —, e a permissão já está gravada de qualquer forma.
-    let _ = estado.avisos_de_permissao.send(id);
+    let _ = estado
+        .avisos_de_permissao
+        .send(transporte::Aviso::Permissao(id));
     Ok(())
 }
 
@@ -310,7 +313,9 @@ async fn renomear_atalho(
 async fn reanunciar_deck(estado: &tauri::State<'_, Estado>) {
     let _ = estado
         .avisos_de_permissao
-        .send(transporte::AVISO_TODOS.to_string());
+        .send(transporte::Aviso::Permissao(
+            transporte::AVISO_TODOS.to_string(),
+        ));
 }
 
 /// A configuração do deck como a **janela** a recebe.
@@ -451,6 +456,13 @@ pub fn run() {
                     api.clone(),
                     identidade.clone(),
                     pares.clone(),
+                    atalhos.clone(),
+                    avisos_de_permissao.clone(),
+                ));
+                // A vigilância do primeiro plano roda ao lado do transporte, e
+                // não dentro dele: ela não depende de haver sessão aberta, e
+                // fica calada sozinha enquanto nenhum painel tiver regra.
+                tauri::async_runtime::spawn(transporte::vigiar_primeiro_plano(
                     atalhos.clone(),
                     avisos_de_permissao.clone(),
                 ));

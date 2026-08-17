@@ -98,6 +98,11 @@ windows = { version = "0.58", features = [
     # `SHGetFileInfoW` recebe um `FILE_FLAGS_AND_ATTRIBUTES`, que mora aqui —
     # sem esta feature a própria função não é exposta pelo crate.
     "Win32_Storage_FileSystem",
+    # Programa em primeiro plano: `GetForegroundWindow` dá a janela e
+    # `WindowsAndMessaging` o dono dela, mas `OpenProcess` e
+    # `QueryFullProcessImageNameW` — que traduzem o processo em nome de
+    # arquivo — moram aqui.
+    "Win32_System_Threading",
 ] }
 
 [features]

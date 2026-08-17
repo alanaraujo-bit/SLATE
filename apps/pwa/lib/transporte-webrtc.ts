@@ -10,6 +10,7 @@ import {
   acaoExecutarResposta,
   acaoResultado,
   criarEnvelope,
+  contextoAlterado,
   deckEstado,
   hello,
   type AtalhoDeDeck,
@@ -48,6 +49,11 @@ export interface OpcoesTransporteWebRtc {
    * grade de teclas de outra máquina, ou de uma permissão já retirada.
    */
   aoReceberDeck?: (deck: DeckRecebido) => void;
+  /**
+   * O computador passou a pedir outro painel, por causa do programa em
+   * primeiro plano. Só chega de Agentes com regra configurada.
+   */
+  aoMudarContexto?: (perfilId: string) => void;
   /** Usado pelo teste de relay; produção deixa o ICE escolher o melhor caminho. */
   politicaIce?: RTCIceTransportPolicy;
 }
@@ -515,6 +521,17 @@ export class TransporteWebRtc {
             ? "Comando executado no computador."
             : resultado.data.error ?? "O computador não conseguiu executar o comando.",
         });
+      }
+      return;
+    }
+
+    if (envelope.valor.k === "context.changed") {
+      const contexto = contextoAlterado.safeParse(conteudo.valor);
+      // Só a troca automática interessa aqui. `manual` e `fallback` descrevem
+      // decisões que já aconteceram do lado de cá, e obedecê-las de volta
+      // faria o painel discutir consigo mesmo.
+      if (contexto.success && contexto.data.reason === "regra") {
+        this.opcoes.aoMudarContexto?.(contexto.data.profileId);
       }
       return;
     }

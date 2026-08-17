@@ -266,7 +266,39 @@ Chromium não é o seu telefone na sua mão. Vale olhar especificamente:
   assinatura não embute logotipo registrado de terceiros. Se alguma não estiver
   reconhecível o bastante, dá para redesenhar sem mexer em mais nada.
 
-### 3. Duas pendências antigas que continuam de pé
+### 3. Experimentar o painel que entra sozinho — e é o único código não rodado
+
+Um painel pode listar programas em **Entrar sozinho**: quando um deles fica em
+primeiro plano no computador, o celular abre aquele painel na hora.
+
+**Isto é a única coisa desta sessão escrita sem nunca ter sido executada.** O
+Agente instalado tranca o binário, então nada além de `cargo test --lib` rodou
+aqui. A leitura do Windows — `GetForegroundWindow` → `OpenProcess` →
+`QueryFullProcessImageNameW` — compila e está isolada em `foco.rs`, mas nenhuma
+janela real foi consultada.
+
+O que compensa isso é o desenho: **a vigilância nem chega a perguntar ao
+Windows enquanto nenhum painel tiver regra.** Depois da migração todo painel
+nasce sem nenhuma, então quem só atualizar o Agente não ganha comportamento
+novo. Você liga digitando um executável no editor, e desliga apagando.
+
+Toda a decisão — qual painel um programa pede, o que fazer num empate, quando
+vale a pena olhar — está em funções puras testadas em `atalhos.rs`. O módulo do
+Windows só devolve um nome de arquivo ou nada.
+
+Dois limites conhecidos, para não parecerem defeito:
+
+- **Programa aberto como administrador lê como nada.** `OpenProcess` responde
+  acesso negado a um processo mais privilegiado que o Agente, e alguns jogos
+  com anti-cheat rodam elevados. O painel simplesmente não troca.
+- **Programa sem regra não devolve ninguém ao painel inicial.** Abrir o bloco
+  de notas no meio de uma transmissão não tira da mão os controles em uso.
+
+E a regra de convivência, que vale conferir: **um toque seu vence o
+automático** até o computador mudar para outro programa. Escolheu "Cinema" com
+o OBS aberto? Fica em Cinema. Abriu o Valorant depois? Aí sim o painel segue.
+
+### 4. Duas pendências antigas que continuam de pé
 
 - **O e2e da PWA está vermelho** porque o job `pwa` do CI não sobe a API nem
   define `API_URL`. É anterior a tudo isto e continua igual.
