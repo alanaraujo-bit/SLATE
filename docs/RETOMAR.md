@@ -28,12 +28,17 @@ Testado e em produção, salvo onde indicado.
 | Marcas próprias dos serviços | ✅ desenho nosso, no design system |
 | Editor de painéis com prévia de telefone | ✅ conferido nos dois temas |
 
-⚠️ Tudo da metade da tabela para baixo está **em código, testado e olhado em
-Chromium — e ainda não publicado**. O Agente publicado continua o `0.1.6`, que
-não tem os comandos de painel. Ver §9.
+⚠️ **Empurrado e verificado no CI, mas ainda não distribuído.** Tudo da metade
+da tabela para baixo está na `main` (`383adf8`), com os cinco jobs verdes. A
+PWA sobe sozinha na Vercel a cada push, então essa metade já está no ar; o
+**Agente**, não — ele sai por release assinada, e o publicado continua sendo o
+`0.1.6`, que não tem os comandos de painel.
 
-Versões: Agente **0.1.6** publicado e assinado; PWA e API em produção com tudo
-acima.
+Enquanto o Agente não for publicado, o celular cai na grade clássica: um Agente
+antigo não manda perfis, e a PWA trata isso como o caso normal. Nada quebra —
+só não aparece. Ver §9.
+
+Versões: Agente **0.1.6** publicado e assinado; PWA e API em produção.
 
 ## 2. As decisões desta sessão que não podem ser desfeitas por engano
 
@@ -252,9 +257,12 @@ Agente antigo não manda perfis. As duas pontas se toleram (a PWA cai na grade
 clássica quando não vêm perfis), então a ordem não quebra nada; só não adianta
 publicar só um lado e ir olhar o celular.
 
-Lembre da armadilha do cache: empurre para a `main`, **espere o CI terminar** e
-só então marque a tag — senão a release sai fria e leva os treze minutos
-antigos.
+**A parte de esperar já está feita.** A armadilha do cache diz para empurrar
+para a `main`, esperar o CI terminar e só então marcar a tag. O CI fechou verde
+na execução `32049170198`, sobre o commit `383adf8`, e foi ali que o job
+`agente` gravou o cache `agente-windows` no branch padrão. Marque a tag a
+partir deste commit e a release sai em torno de seis minutos, não treze — não é
+preciso outro ciclo de empurrar e esperar.
 
 ### 2. Olhar e dizer o que achou
 
@@ -273,11 +281,16 @@ Chromium não é o seu telefone na sua mão. Vale olhar especificamente:
 Um painel pode listar programas em **Entrar sozinho**: quando um deles fica em
 primeiro plano no computador, o celular abre aquele painel na hora.
 
-**Isto é a única coisa desta sessão escrita sem nunca ter sido executada.** O
-Agente instalado tranca o binário, então nada além de `cargo test --lib` rodou
-aqui. A leitura do Windows — `GetForegroundWindow` → `OpenProcess` →
-`QueryFullProcessImageNameW` — compila e está isolada em `foco.rs`, mas nenhuma
-janela real foi consultada.
+**É a única parte desta sessão cujo resultado em execução ninguém viu** — e a
+lacuna é menor do que parece. A leitura do Windows (`GetForegroundWindow` →
+`OpenProcess` → `QueryFullProcessImageNameW`) compila **e linka** no
+`windows-latest` do CI: o job `agente` roda `cargo test --locked` no alvo
+completo, não só a biblioteca. Ou seja, as chamadas existem, as assinaturas
+batem e o binário monta.
+
+O que ninguém conferiu é o **valor devolvido diante de uma área de trabalho de
+verdade** — se a janela em foco vira mesmo o nome de arquivo esperado. Aqui só
+`cargo test --lib` rodou, porque o Agente instalado tranca o binário.
 
 O que compensa isso é o desenho: **a vigilância nem chega a perguntar ao
 Windows enquanto nenhum painel tiver regra.** Depois da migração todo painel
@@ -307,4 +320,5 @@ o OBS aberto? Fica em Cinema. Abriu o Valorant depois? Aí sim o painel segue.
   na API, então ela não está atrasada agora — mas o próximo commit em
   `services/api` volta a precisar de `railway up` na mão.
 
-O e2e da PWA, que estava nesta lista, foi consertado — ver §4 acima.
+O e2e da PWA, que estava nesta lista, foi consertado — ver §4, "Operação — o
+que morde".
