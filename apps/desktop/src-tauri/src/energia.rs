@@ -123,6 +123,12 @@ pub struct PerfilEnergia {
 pub struct CapacidadesDetectadas {
     pub suspender: bool,
     pub hibernar: bool,
+    /// Se este processo consegue habilitar `SeShutdownPrivilege`.
+    ///
+    /// Não é presumido: uma política de domínio pode retirar o privilégio da
+    /// conta, e nesse caso o botão prometeria algo que falha na execução — a
+    /// mesma classe de mentira que o ADR-0006 proíbe para o acordar.
+    pub desligar: bool,
     pub acordar_de_suspenso: Suporte,
     pub acordar_de_hibernado: Suporte,
     pub acordar_de_desligado: Suporte,
@@ -240,18 +246,20 @@ pub fn montar_perfil(
         detectadas.acordar_de_desligado,
         detectadas.acordar_de_hibernado,
         detectadas.hibernar,
-        true,
+        detectadas.desligar,
     );
 
     PerfilEnergia {
-        // Bloquear existe em todo Windows; é a única capacidade que pode ser
-        // afirmada sem medir.
+        // Bloquear existe em todo Windows e não exige privilégio; é a única
+        // capacidade que pode ser afirmada sem medir.
         bloquear: Suporte::Sim,
         suspender: Suporte::de_bool(detectadas.suspender),
         hibernar: Suporte::de_bool(detectadas.hibernar),
-        reiniciar: Suporte::Sim,
-        desligar: Suporte::Sim,
-        cancelar_desligamento: Suporte::Sim,
+        // As três dependem do mesmo privilégio. Uma política de domínio que o
+        // retire faria o botão prometer algo que falha na execução.
+        reiniciar: Suporte::de_bool(detectadas.desligar),
+        desligar: Suporte::de_bool(detectadas.desligar),
+        cancelar_desligamento: Suporte::de_bool(detectadas.desligar),
         acordar_pela_rede,
         acordar_de_suspenso: detectadas.acordar_de_suspenso,
         acordar_de_hibernado: detectadas.acordar_de_hibernado,
@@ -591,6 +599,57 @@ fn obter_privilegio_de_desligamento() -> Result<(), &'static str> {
 // Detecção de capacidades (Windows)
 // ---------------------------------------------------------------------------
 
+/// Quanto tempo um perfil detectado continua valendo.
+///
+/// A detecção não é barata — `GetAdaptersAddresses` enumera e aloca, e o
+/// `powercfg` custa um processo — e ela estava sendo refeita a cada ação
+/// executada, ou seja, a cada toque no volume. Este projeto já pagou por
+/// latência no caminho de cada toque uma vez.
+///
+/// Meio minuto é o que equilibra as duas coisas: a hibernação pode ser ligada
+/// ou desligada no Windows com a sessão de pé, e um perfil eterno recusaria uma
+/// ação que a máquina passou a suportar.
+const VALIDADE_DO_PERFIL: std::time::Duration = std::time::Duration::from_secs(30);
+
+static PERFIL_EM_CACHE: std::sync::OnceLock<
+    std::sync::RwLock<Option<(std::time::Instant, CapacidadesDetectadas)>>,
+> = std::sync::OnceLock::new();
+
+/// O que esta máquina sabe fazer, reaproveitando a última leitura recente.
+///
+/// É o que o caminho de execução de ação deve chamar. `detectar` continua
+/// existindo para o autoteste, que precisa de leitura fresca por definição.
+pub fn detectar_com_cache() -> CapacidadesDetectadas {
+    let cache = PERFIL_EM_CACHE.get_or_init(|| std::sync::RwLock::new(None));
+
+    if let Ok(guarda) = cache.read() {
+        if let Some((momento, capacidades)) = guarda.as_ref() {
+            if momento.elapsed() < VALIDADE_DO_PERFIL {
+                return capacidades.clone();
+            }
+        }
+    }
+
+    let capacidades = detectar();
+    if let Ok(mut guarda) = cache.write() {
+        *guarda = Some((std::time::Instant::now(), capacidades.clone()));
+    }
+    capacidades
+}
+
+/// Descarta a leitura guardada.
+///
+/// Chamada depois do autoteste e de qualquer ajuste de configuração feito pelo
+/// Agente: sem isto, a tela continuaria mostrando o impedimento que a pessoa
+/// acabou de resolver, por até meio minuto, e ela concluiria que não funcionou.
+pub fn esquecer_cache() {
+    if let Some(cache) = PERFIL_EM_CACHE.get() {
+        if let Ok(mut guarda) = cache.write() {
+            *guarda = None;
+        }
+    }
+}
+
 /// Descobre o que esta máquina sabe fazer.
 ///
 /// Fora do Windows devolve tudo negativo com o retorno de rede desconhecido —
@@ -607,6 +666,7 @@ pub fn detectar() -> CapacidadesDetectadas {
         CapacidadesDetectadas {
             suspender: false,
             hibernar: false,
+            desligar: false,
             acordar_de_suspenso: Suporte::Desconhecido,
             acordar_de_hibernado: Suporte::Desconhecido,
             acordar_de_desligado: Suporte::Desconhecido,
@@ -656,6 +716,10 @@ fn detectar_windows() -> CapacidadesDetectadas {
     CapacidadesDetectadas {
         suspender,
         hibernar,
+        // Habilitar o privilégio é idempotente e não desliga nada: só liga algo
+        // que a conta já tem. Perguntar agora é o que evita anunciar um botão
+        // que falha na hora de usar.
+        desligar: obter_privilegio_de_desligamento().is_ok(),
         acordar_de_suspenso,
         acordar_de_hibernado,
         // Depende de firmware, e nenhuma API do Windows responde. Só o
@@ -712,6 +776,9 @@ fn adaptador_ativo() -> Option<Adaptador> {
             return None;
         }
 
+        // Lido uma vez, e não por adaptador: `powercfg` custa um processo.
+        let armados = dispositivos_armados_para_acordar();
+
         let mut melhor: Option<Adaptador> = None;
         let mut atual = inicio;
         while !atual.is_null() {
@@ -767,13 +834,10 @@ fn adaptador_ativo() -> Option<Adaptador> {
             };
 
             let candidato = Adaptador {
+                pode_acordar: permissao_de_acordar(&nome, &armados),
                 nome,
                 mac,
                 tipo,
-                // A permissão de acordar mora na configuração do driver, e não
-                // é exposta por esta API. `Desconhecido` é a resposta honesta:
-                // quem decide é o autoteste ou a leitura em `powercfg`.
-                pode_acordar: Suporte::Desconhecido,
                 ipv4,
             };
 
@@ -786,6 +850,67 @@ fn adaptador_ativo() -> Option<Adaptador> {
         }
         melhor
     }
+}
+
+/// Os dispositivos que o Windows está autorizando a acordar a máquina.
+///
+/// Vem de `powercfg /devicequery wake_armed`, que é a única fonte que responde
+/// isto sem entrar no driver por `DeviceIoControl`. Não exige elevação.
+///
+/// `None` significa "não deu para perguntar" — e vira `Desconhecido` no perfil,
+/// não `Nao`. A diferença importa: uma máquina onde o `powercfg` falhou não tem
+/// menos capacidade que outra, e afirmar que ela não acorda seria a promessa ao
+/// contrário que o ADR-0006 também proíbe.
+#[cfg(windows)]
+fn dispositivos_armados_para_acordar() -> Option<Vec<String>> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let saida = std::process::Command::new("powercfg")
+        .args(["/devicequery", "wake_armed"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+    if !saida.status.success() {
+        return None;
+    }
+    // `powercfg` escreve na codificação do console, não em UTF-8. Nomes de
+    // adaptador costumam ser ASCII, mas um acento vira byte inválido — daí o
+    // `from_utf8_lossy`, que degrada aquele caractere em vez de perder a lista.
+    Some(
+        String::from_utf8_lossy(&saida.stdout)
+            .lines()
+            .map(|linha| linha.trim().to_string())
+            .filter(|linha| !linha.is_empty())
+            .collect(),
+    )
+}
+
+/// Se aquele adaptador está entre os autorizados a acordar a máquina.
+///
+/// Função pura sobre as duas listas de texto, separada da chamada ao
+/// `powercfg`, para poder ser exercitada sem Windows — a comparação de nomes é
+/// a parte fácil de errar aqui.
+///
+/// A comparação é frouxa de propósito: `GetAdaptersAddresses` devolve a
+/// descrição do adaptador e o `powercfg` devolve o nome amigável do
+/// dispositivo, e os dois divergem em detalhes como `#2` no fim quando há duas
+/// placas iguais. Exigir igualdade exata reportaria "sem permissão" numa
+/// máquina configurada corretamente, que é o pior erro possível nesta tela:
+/// manda a pessoa mexer no que já está certo.
+pub fn permissao_de_acordar(adaptador: &str, armados: &Option<Vec<String>>) -> Suporte {
+    let Some(armados) = armados else {
+        return Suporte::Desconhecido;
+    };
+    let alvo = adaptador.trim().to_lowercase();
+    if alvo.is_empty() {
+        return Suporte::Desconhecido;
+    }
+    let combina = armados.iter().any(|armado| {
+        let armado = armado.trim().to_lowercase();
+        armado == alvo || armado.starts_with(&alvo) || alvo.starts_with(&armado)
+    });
+    Suporte::de_bool(combina)
 }
 
 #[cfg(windows)]
@@ -807,6 +932,7 @@ mod testes {
         let mut base = CapacidadesDetectadas {
             suspender: true,
             hibernar: true,
+            desligar: true,
             acordar_de_suspenso: Suporte::Sim,
             acordar_de_hibernado: Suporte::Sim,
             acordar_de_desligado: Suporte::Desconhecido,
@@ -958,6 +1084,78 @@ mod testes {
         assert!(!json.to_lowercase().contains("11:22"));
     }
 
+    /// Roda a detecção de verdade nesta máquina e mostra o que ela viu.
+    ///
+    /// Marcado como ignorado de propósito: o resultado depende do computador, e
+    /// afirmar qualquer coisa sobre ele quebraria o CI — que roda em máquina
+    /// virtual sem placa de rede armada para acordar. Serve para conferir à mão
+    /// que a leitura corresponde ao que `powercfg /devicequery wake_armed` e
+    /// `powercfg /a` dizem naquela máquina:
+    ///
+    /// ```text
+    /// cargo test --lib energia -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "depende do hardware desta máquina; ver ADR-0006"]
+    fn mostra_o_que_esta_maquina_sabe_fazer() {
+        let detectadas = detectar();
+        println!("{detectadas:#?}");
+        let perfil = montar_perfil(&detectadas, false, None);
+        println!("{}", serde_json::to_string_pretty(&perfil).unwrap());
+    }
+
+    #[test]
+    fn permissao_de_acordar_tolera_a_divergencia_dos_dois_nomes() {
+        // `GetAdaptersAddresses` devolve a descrição do adaptador e o
+        // `powercfg` o nome amigável do dispositivo. Eles divergem em detalhes
+        // como o `#2` de quando há duas placas iguais, e exigir igualdade exata
+        // reportaria "sem permissão" numa máquina configurada corretamente — o
+        // pior erro possível nesta tela, porque manda mexer no que já está certo.
+        let armados = Some(vec![
+            "Realtek PCIe GbE Family Controller".to_string(),
+            "Mouse compatível com HID".to_string(),
+        ]);
+        assert_eq!(
+            permissao_de_acordar("Realtek PCIe GbE Family Controller", &armados),
+            Suporte::Sim
+        );
+        assert_eq!(
+            permissao_de_acordar("Realtek PCIe GbE Family Controller #2", &armados),
+            Suporte::Sim
+        );
+        // Maiúsculas e espaços não decidem nada.
+        assert_eq!(
+            permissao_de_acordar("  realtek pcie gbe family controller  ", &armados),
+            Suporte::Sim
+        );
+    }
+
+    #[test]
+    fn adaptador_fora_da_lista_nao_tem_permissao() {
+        let armados = Some(vec!["Mouse compatível com HID".to_string()]);
+        assert_eq!(
+            permissao_de_acordar("Intel Wi-Fi 6 AX201", &armados),
+            Suporte::Nao
+        );
+        // Lista vazia é uma resposta: nada está armado nesta máquina.
+        assert_eq!(
+            permissao_de_acordar("Intel Wi-Fi 6 AX201", &Some(Vec::new())),
+            Suporte::Nao
+        );
+    }
+
+    #[test]
+    fn nao_conseguir_perguntar_e_desconhecido_e_nao_negativo() {
+        // A promessa do ADR-0006 na direção contrária: uma máquina onde o
+        // `powercfg` falhou não tem menos capacidade que outra, e afirmar que
+        // ela não acorda é tão errado quanto afirmar que acorda.
+        assert_eq!(
+            permissao_de_acordar("Realtek PCIe GbE Family Controller", &None),
+            Suporte::Desconhecido
+        );
+        assert_eq!(permissao_de_acordar("", &Some(Vec::new())), Suporte::Desconhecido);
+    }
+
     #[test]
     fn hibernacao_desligada_aparece_como_impedimento() {
         let perfil = montar_perfil(&detectadas(|d| d.hibernar = false), true, None);
@@ -965,6 +1163,27 @@ mod testes {
         assert!(perfil
             .impedimentos
             .contains(&Impedimento::HibernacaoDesligada));
+    }
+
+    #[test]
+    fn sem_privilegio_de_desligamento_o_botao_nao_e_prometido() {
+        // Uma política de domínio pode retirar `SeShutdownPrivilege` da conta.
+        // Anunciar o botão assim mesmo prometeria algo que falha na execução —
+        // a mesma classe de mentira que o ADR-0006 proíbe para o acordar.
+        let perfil = montar_perfil(
+            &detectadas(|d| {
+                d.desligar = false;
+                d.acordar_de_desligado = Suporte::Sim;
+            }),
+            true,
+            None,
+        );
+        assert_eq!(perfil.desligar, Suporte::Nao);
+        assert_eq!(perfil.reiniciar, Suporte::Nao);
+        assert_eq!(perfil.cancelar_desligamento, Suporte::Nao);
+        // E sem poder desligar, Pronto para Retorno não pode ser "desligado"
+        // por melhor que o retorno seja: ele cairia para hibernar.
+        assert_eq!(perfil.pronto_para_retorno, EstadoProntoParaRetorno::Hibernado);
     }
 
     #[test]

@@ -147,6 +147,27 @@ Pelo mesmo motivo, desligar e reiniciar **não forçam** o fechamento de program
 por padrão: um documento não salvo vale mais que a garantia de que o comando
 funcionou.
 
+### 7. Desligar tem contagem, e "aceito" não é "aconteceu"
+
+Desligar e reiniciar disparam com **15 segundos de contagem**, não
+imediatamente. Duas razões concretas:
+
+- Quem está fisicamente na frente da máquina consegue cancelar um comando
+  disparado por engano do celular — o caso do bolso, ou da criança com o
+  telefone na mão.
+- É o que dá sentido a `sistema.cancelar-desligamento`. Sem janela, não há o que
+  cancelar, e a ação existiria só no papel.
+
+A consequência precisa estar na interface, porque é a mesma disciplina do
+acordar, espelhada: **o `ok` da ação significa que a contagem começou, não que a
+máquina desligou.** Assim como `WAKE_SENT` não é `ONLINE`, "desligamento aceito"
+não é "computador desligado" — e nesse intervalo o desligamento ainda pode ser
+abortado localmente ou barrado por um programa com trabalho aberto.
+
+A PWA mostra a contagem e oferece cancelar durante ela. Quem confirma que a
+máquina de fato desligou é o mesmo sinal que confirma tudo o mais neste
+documento: a sessão caindo, e depois o computador aparecendo como offline.
+
 ## Acordar de outra rede
 
 O caso "estou no 4G e quero ligar o PC de casa". Vale registrar o que foi

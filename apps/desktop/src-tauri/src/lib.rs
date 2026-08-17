@@ -59,6 +59,16 @@ struct Situacao {
     /// é aqui que a permissão é concedida e é aqui que ela é verificada.
     #[serde(rename = "atalhosPermitidos")]
     atalhos_permitidos: Vec<String>,
+    /// Aparelhos autorizados a desligar, reiniciar, hibernar e suspender.
+    #[serde(rename = "energiaPermitida")]
+    energia_permitida: Vec<String>,
+    /// Aparelhos autorizados a pedir que este computador acorde outro da conta.
+    /// Lista separada porque é autorização separada (ADR-0006 §6).
+    #[serde(rename = "acordarPermitido")]
+    acordar_permitido: Vec<String>,
+    /// O que este computador sabe fazer, para a tela de energia do Agente.
+    #[serde(rename = "perfilEnergia")]
+    perfil_energia: energia::PerfilEnergia,
 }
 
 #[tauri::command]
@@ -77,14 +87,21 @@ async fn situacao(estado: tauri::State<'_, Estado>) -> Result<Situacao, String> 
         nome_computador: estado.nome_computador.clone(),
         chave_publica: estado.identidade.chave_publica(),
         dispositivos,
-        atalhos_permitidos: estado
-            .pares
-            .listar()
-            .into_iter()
-            .filter(|par| par.tem_escopo("system.process"))
-            .map(|par| par.id)
-            .collect(),
+        atalhos_permitidos: ids_com_escopo(&estado, "system.process"),
+        energia_permitida: ids_com_escopo(&estado, "system.power"),
+        acordar_permitido: ids_com_escopo(&estado, "system.wake"),
+        perfil_energia: energia::montar_perfil(&energia::detectar_com_cache(), false, None),
     })
+}
+
+fn ids_com_escopo(estado: &tauri::State<'_, Estado>, escopo: &str) -> Vec<String> {
+    estado
+        .pares
+        .listar()
+        .into_iter()
+        .filter(|par| par.tem_escopo(escopo))
+        .map(|par| par.id)
+        .collect()
 }
 
 /// Autoriza — ou desautoriza — um aparelho a abrir programas neste computador.
@@ -114,6 +131,50 @@ async fn definir_atalhos_permitidos(
         .avisos_de_permissao
         .send(transporte::Aviso::Permissao(id));
     Ok(())
+}
+
+/// Autoriza — ou desautoriza — um aparelho a mexer na energia deste computador.
+///
+/// Mesma cerimônia dos atalhos, e pelo mesmo motivo: quem concede está na frente
+/// da máquina. Desligar o computador de alguém é autoridade de quem está diante
+/// dele, e o pareamento não a concede (ADR-0006 §6).
+///
+/// `acordar` escolhe qual das duas autorizações mexer. Elas são separadas
+/// porque não são o mesmo risco: acordar, no pior caso, liga uma máquina à toa;
+/// desligar pode custar trabalho não salvo. Uma caixa só obrigaria quem quer o
+/// botão de ligar a conceder também o de desligar.
+#[tauri::command]
+async fn definir_energia_permitida(
+    estado: tauri::State<'_, Estado>,
+    id: String,
+    permitido: bool,
+    acordar: bool,
+) -> Result<(), String> {
+    let escopo = if acordar { "system.wake" } else { "system.power" };
+    estado
+        .pares
+        .definir_escopo_local(&id, escopo, permitido)
+        .map_err(|e| e.to_string())?;
+
+    let _ = estado
+        .avisos_de_permissao
+        .send(transporte::Aviso::Permissao(id));
+    Ok(())
+}
+
+/// Refaz a leitura das capacidades de energia, sem esperar o cache expirar.
+///
+/// É o "testar de novo" da tela de diagnóstico: depois de a pessoa ligar a
+/// hibernação ou marcar a permissão de acordar no gerenciador de dispositivos,
+/// continuar mostrando o impedimento que ela acabou de resolver a faria concluir
+/// que não funcionou.
+#[tauri::command]
+async fn reconferir_energia(
+    estado: tauri::State<'_, Estado>,
+) -> Result<energia::PerfilEnergia, String> {
+    let _ = &estado;
+    energia::esquecer_cache();
+    Ok(energia::montar_perfil(&energia::detectar(), false, None))
 }
 
 #[tauri::command]
@@ -492,6 +553,8 @@ pub fn run() {
             consultar_convite_qr,
             remover_dispositivo,
             definir_atalhos_permitidos,
+            definir_energia_permitida,
+            reconferir_energia,
             escolher_programa,
             listar_atalhos,
             criar_atalho,

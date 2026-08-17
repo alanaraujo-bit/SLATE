@@ -151,6 +151,26 @@ async fn anunciar_sessao(
         capacidades.push("deck.sync");
     }
 
+    // Energia, pelo mesmo desenho dos atalhos: anunciada por par, e só a quem
+    // recebeu a concessão nesta máquina (ADR-0006 §6). Retirar a permissão na
+    // janela reenvia o hello, a capacidade some e a grade do celular perde os
+    // controles de energia na hora, sem reconectar.
+    let pode_energia = pares
+        .buscar(destino)
+        .is_some_and(|par| par.tem_escopo("system.power"));
+    if pode_energia {
+        capacidades.push("energia.controle");
+    }
+    // Ser ponte é pergunta diferente de controlar a própria energia: uma é "o
+    // que este computador faz consigo mesmo", a outra é "este computador serve
+    // para ligar os outros".
+    if pares
+        .buscar(destino)
+        .is_some_and(|par| par.tem_escopo("system.wake"))
+    {
+        capacidades.push("energia.ponte");
+    }
+
     let sequencia_do_hello = *proxima_sequencia;
     *proxima_sequencia += 1;
     let hello = json!({
@@ -193,6 +213,30 @@ async fn anunciar_sessao(
             if canal.send_text(&mensagem.to_string()).await.is_err() {
                 return false;
             }
+        }
+    }
+
+    // O perfil de energia vai atrás do hello, e só a quem pode usá-lo. Sem ele
+    // a PWA não tem como decidir o que mostrar: quais botões existem, se há
+    // Pronto para Retorno, e o que dizer quando não há. Uma grade de energia
+    // desenhada sem perfil seria otimismo — exatamente o que o ADR-0006 proíbe.
+    if pode_energia {
+        // `tem_ponte` é `false` enquanto a nuvem não souber responder quem está
+        // online naquela rede (P3-M5-T6). É a resposta conservadora, e a certa:
+        // ela produz PADRÃO em vez de COMPLETO, ou seja, promete de menos.
+        let perfil = energia::montar_perfil(&energia::detectar_com_cache(), false, None);
+        let mensagem = json!({
+            "v": VERSAO_PROTOCOLO,
+            "id": uuid::Uuid::new_v4().to_string(),
+            "t": "evt",
+            "k": "energia.estado",
+            "ts": agora_ms(),
+            "seq": *proxima_sequencia,
+            "p": { "perfil": perfil, "podeSerPonte": false }
+        });
+        *proxima_sequencia += 1;
+        if canal.send_text(&mensagem.to_string()).await.is_err() {
+            return false;
         }
     }
 
@@ -643,14 +687,13 @@ impl PeerConnectionEventHandler for EventosPar {
 
                                 proxima_sequencia_saida += 1;
                                 let inicio = Instant::now();
-                                // O perfil é lido a cada execução, e não guardado
-                                // na abertura da sessão: a hibernação pode ser
-                                // ligada ou desligada no Windows com a sessão de
-                                // pé, e um perfil velho recusaria uma ação que a
-                                // máquina passou a suportar — ou pior, tentaria
-                                // uma que ela deixou de suportar.
+                                // Perfil de cache, e não detecção: este é o
+                                // caminho de **toda** ação executada, inclusive
+                                // cada toque no volume. Enumerar adaptadores e
+                                // chamar `powercfg` aqui poria latência de volta
+                                // no lugar de onde ela custou caro para sair.
                                 let perfil = energia::montar_perfil(
-                                    &energia::detectar(),
+                                    &energia::detectar_com_cache(),
                                     false,
                                     None,
                                 );
