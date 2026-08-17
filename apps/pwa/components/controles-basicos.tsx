@@ -2,16 +2,115 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icone, Marca, Rotulo } from "@slate/design-system";
-import type { AtalhoDeDeck, ItemDePerfilDeck, PerfilDeDeck } from "@slate/protocol";
+import type {
+  AtalhoDeDeck,
+  ItemDePerfilDeck,
+  PerfilDeDeck,
+  PerfilEnergia,
+} from "@slate/protocol";
 import {
   CONTROLES_ATALHOS,
   CONTROLES_MIDIA,
   CONTROLES_VOLUME,
   acaoDoPrograma,
+  energiaVisivel,
+  explicarSemRetorno,
+  textoProntoParaRetorno,
   visiveis,
   type Controle,
+  type ControleEnergia,
 } from "@/lib/controles";
 import type { ResultadoExecucaoAcao } from "@/lib/transporte-webrtc";
+
+/** Quanto tempo o dedo fica na tecla antes de a ação disparar. */
+const SEGURAR_MS = 1_200;
+
+/**
+ * A tecla que só dispara depois de segurar.
+ *
+ * Escolhido em vez de uma caixa de confirmação por dois motivos concretos. Um
+ * diálogo de "tem certeza?" é respondido no automático depois da terceira vez,
+ * e deixa de proteger exatamente quando mais precisaria; e ele rouba a tela num
+ * aparelho onde a grade inteira cabe justa.
+ *
+ * Segurar não tem esse desgaste: o custo é o mesmo na primeira e na centésima
+ * vez, e é impossível de fazer sem querer com o telefone no bolso — que é o
+ * cenário que estamos protegendo. O anel que preenche mostra o que está
+ * acontecendo, então ninguém precisa descobrir a regra por tentativa.
+ *
+ * Soltar antes cancela, e é isso que dá a saída para quem tocou por engano.
+ */
+function TeclaSegurar({
+  controle,
+  acionar,
+}: {
+  controle: ControleEnergia;
+  acionar: (actionId: string) => void;
+}) {
+  const [progresso, setProgresso] = useState(0);
+  const inicio = useRef<number | null>(null);
+  const quadro = useRef<number | null>(null);
+
+  const parar = () => {
+    inicio.current = null;
+    if (quadro.current !== null) cancelAnimationFrame(quadro.current);
+    quadro.current = null;
+    setProgresso(0);
+  };
+
+  const passo = () => {
+    if (inicio.current === null) return;
+    const decorrido = performance.now() - inicio.current;
+    if (decorrido >= SEGURAR_MS) {
+      parar();
+      acionar(controle.actionId);
+      return;
+    }
+    setProgresso(decorrido / SEGURAR_MS);
+    quadro.current = requestAnimationFrame(passo);
+  };
+
+  const comecar = () => {
+    if (inicio.current !== null) return;
+    inicio.current = performance.now();
+    quadro.current = requestAnimationFrame(passo);
+  };
+
+  // Sem isto, um componente desmontado no meio do gesto — troca de painel,
+  // queda da conexão — deixa o quadro agendado chamando `setProgresso`.
+  useEffect(() => parar, []);
+
+  return (
+    <button
+      type="button"
+      className="tecla tecla--segurar"
+      style={{ "--progresso": progresso } as React.CSSProperties}
+      // `onPointer*` cobre dedo, caneta e ponteiro numa família só. O
+      // `onPointerLeave` existe porque arrastar o dedo para fora da tecla é a
+      // forma natural de desistir, e sem ele o gesto continuaria contando.
+      onPointerDown={comecar}
+      onPointerUp={parar}
+      onPointerLeave={parar}
+      onPointerCancel={parar}
+      // Teclado não tem "segurar" com sentido, e deixar esta tecla inacessível
+      // seria pior que o risco: aqui a confirmação vira a pergunta explícita.
+      onKeyDown={(evento) => {
+        if (evento.key !== "Enter" && evento.key !== " ") return;
+        evento.preventDefault();
+        if (window.confirm(`${controle.rotulo} este computador?`)) {
+          acionar(controle.actionId);
+        }
+      }}
+      aria-label={`${controle.rotulo} — segure para confirmar`}
+    >
+      <Representacao controle={controle} />
+      <span>{controle.rotulo}</span>
+      <span className="tecla__dica" aria-hidden>
+        segure
+      </span>
+    </button>
+  );
+}
 
 export function ControlesBasicos({
   executar,
@@ -21,6 +120,7 @@ export function ControlesBasicos({
   perfis = [],
   perfilPadraoId,
   perfilSugerido,
+  perfilEnergia,
 }: {
   executar: (actionId: string) => Promise<ResultadoExecucaoAcao>;
   /**
@@ -45,6 +145,15 @@ export function ControlesBasicos({
    * permissão de abrir programas naquele computador, marcada lá.
    */
   atalhosLiberados?: boolean;
+  /**
+   * O que aquele computador sabe fazer com a própria energia.
+   *
+   * Ausente é o normal: só chega de quem anunciou `energia.controle`, ou seja,
+   * de quem recebeu a permissão marcada na janela daquele computador. Sem
+   * perfil não há grade de energia nenhuma — desenhar botões produziria teclas
+   * que respondem "escopo negado".
+   */
+  perfilEnergia?: PerfilEnergia;
 }) {
   /**
    * Só o erro vira texto na tela.
@@ -67,6 +176,10 @@ export function ControlesBasicos({
 
   const midia = visiveis(CONTROLES_MIDIA, gradeCompleta);
   const volume = visiveis(CONTROLES_VOLUME, gradeCompleta);
+  // Tecla por tecla, a partir do que aquela máquina anunciou saber fazer — e
+  // não por uma capacidade única como os outros grupos. Duas máquinas com o
+  // mesmo Agente mostram grades diferentes, e é isso que o ADR-0006 pede.
+  const energia = energiaVisivel(perfilEnergia);
 
   if (perfis.length > 0) {
     return (
@@ -78,6 +191,7 @@ export function ControlesBasicos({
         gradeCompleta={gradeCompleta}
         acionar={acionar}
         erro={erro}
+        perfilEnergia={perfilEnergia}
       />
     );
   }
@@ -164,6 +278,30 @@ export function ControlesBasicos({
         </div>
       )}
 
+      {energia.length > 0 && (
+        <div className="painel__grupo painel__grupo--energia">
+          <div className="painel__cabecalho">
+            <h2>Energia</h2>
+            <Rotulo tamanho="xs" tom="sutil">
+              {textoProntoParaRetorno(perfilEnergia) ?? explicarSemRetorno(perfilEnergia)}
+            </Rotulo>
+          </div>
+          <div className="grade-teclas">
+            {energia.map((controle) =>
+              controle.destrutiva ? (
+                <TeclaSegurar
+                  key={controle.actionId}
+                  controle={controle}
+                  acionar={acionar}
+                />
+              ) : (
+                botao(controle)
+              ),
+            )}
+          </div>
+        </div>
+      )}
+
       {atalhosLiberados && programas.length > 0 && (
         <div className="painel__grupo painel__grupo--programas">
           <div className="painel__cabecalho">
@@ -218,6 +356,7 @@ function PainelDePerfis({
   gradeCompleta,
   acionar,
   erro,
+  perfilEnergia,
 }: {
   perfis: readonly PerfilDeDeck[];
   perfilPadraoId?: string;
@@ -226,6 +365,7 @@ function PainelDePerfis({
   gradeCompleta: boolean;
   acionar: (actionId: string) => void;
   erro: string | null;
+  perfilEnergia?: PerfilEnergia;
 }) {
   const perfilInicial =
     perfis.find((perfil) => perfil.id === perfilPadraoId)?.id ?? perfis[0]?.id ?? "";
@@ -399,6 +539,39 @@ function PainelDePerfis({
           </div>
         )}
       </div>
+
+      {/*
+        Energia fica fora das páginas do painel, e é de propósito.
+
+        Um painel é um arranjo de atalhos daquele computador, montado por quem
+        usa; energia é uma propriedade da máquina, e some ou aparece conforme o
+        que ela sabe fazer e o que aquele aparelho pode. Se entrasse como item
+        de página, sumiria ao trocar de painel e voltaria noutro — e desligar o
+        computador viraria uma tecla que às vezes existe.
+
+        Foi assim que o furo apareceu: a grade clássica mostrava a energia e o
+        painel de perfis não, ou seja, quem tem o Agente novo — que é quem tem
+        perfis — não veria nada. Renderizar as duas telas é o que achou.
+      */}
+      {energiaVisivel(perfilEnergia).length > 0 && (
+        <div className="faixa-energia">
+          {energiaVisivel(perfilEnergia).map((controle) =>
+            controle.destrutiva ? (
+              <TeclaSegurar key={controle.actionId} controle={controle} acionar={acionar} />
+            ) : (
+              <button
+                key={controle.actionId}
+                type="button"
+                className="tecla tecla--energia"
+                onClick={() => acionar(controle.actionId)}
+              >
+                <Representacao controle={controle} />
+                <span>{controle.rotulo}</span>
+              </button>
+            ),
+          )}
+        </div>
+      )}
 
       {totalPaginas > 1 && (
         <nav className="paginacao-perfil" aria-label="Páginas do perfil">

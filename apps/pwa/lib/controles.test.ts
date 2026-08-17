@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
+import type { PerfilEnergia } from "@slate/protocol";
 import {
   CONTROLES_ATALHOS,
+  CONTROLES_ENERGIA,
   CONTROLES_MIDIA,
   CONTROLES_VOLUME,
+  energiaVisivel,
+  explicarSemRetorno,
+  textoProntoParaRetorno,
   visiveis,
   type Controle,
 } from "./controles";
@@ -71,5 +76,123 @@ describe("grade de controles", () => {
   it("destaca uma tecla só", () => {
     // O destaque ocupa duas colunas; dois deles desalinhariam a grade.
     expect(TODOS.filter((c) => c.destaque)).toHaveLength(1);
+  });
+});
+
+const perfil = (over: Partial<PerfilEnergia> = {}): PerfilEnergia => ({
+  bloquear: "sim",
+  suspender: "sim",
+  hibernar: "sim",
+  reiniciar: "sim",
+  desligar: "sim",
+  cancelarDesligamento: "sim",
+  acordarPelaRede: "sim",
+  acordarDeSuspenso: "sim",
+  acordarDeHibernado: "sim",
+  acordarDeDesligado: "desconhecido",
+  prontoParaRetorno: "hibernado",
+  nivel: "PADRAO",
+  ...over,
+});
+
+describe("grade de energia", () => {
+  it("manda os identificadores que o Agente reconhece", () => {
+    // O outro lado é `toda_a_grade_de_energia_e_reconhecida` em `acoes.rs`.
+    expect(CONTROLES_ENERGIA.map((c) => c.actionId).sort()).toEqual(
+      [
+        "sistema.bloquear",
+        "sistema.suspender",
+        "sistema.hibernar",
+        "sistema.reiniciar",
+        "sistema.desligar",
+      ].sort(),
+    );
+  });
+
+  it("sem perfil não desenha tecla nenhuma", () => {
+    // Um Agente que não anunciou energia não recebeu a permissão, ou é antigo
+    // demais para conhecê-la. Nos dois casos, botões aqui responderiam "escopo
+    // negado" ou "ação não encontrada" — pior do que não existirem.
+    expect(energiaVisivel(undefined)).toEqual([]);
+  });
+
+  it("some a tecla que aquela máquina não sabe executar", () => {
+    const semHibernar = energiaVisivel(perfil({ hibernar: "nao" }));
+    expect(semHibernar.map((c) => c.actionId)).not.toContain("sistema.hibernar");
+    expect(semHibernar.map((c) => c.actionId)).toContain("sistema.desligar");
+  });
+
+  it("desconhecido não é permissão", () => {
+    // Mesma disciplina do Agente: na dúvida a tecla não aparece, em vez de
+    // aparecer e falhar na hora de usar.
+    expect(
+      energiaVisivel(perfil({ desligar: "desconhecido" })).map((c) => c.actionId),
+    ).not.toContain("sistema.desligar");
+  });
+
+  it("uma política que tira o privilégio derruba as três juntas — e só elas", () => {
+    // Desligar, reiniciar e cancelar dependem do mesmo `SeShutdownPrivilege`.
+    // Hibernar e suspender **não**: eles passam por `SetSuspendState`, que não
+    // exige privilégio nenhum. Numa máquina de domínio com o desligamento
+    // bloqueado, hibernar continua sendo o caminho — e é justamente ele que
+    // sustenta o Pronto para Retorno ali.
+    const travado = energiaVisivel(
+      perfil({ desligar: "nao", reiniciar: "nao", cancelarDesligamento: "nao" }),
+    );
+    expect(travado.map((c) => c.actionId)).toEqual([
+      "sistema.bloquear",
+      "sistema.suspender",
+      "sistema.hibernar",
+    ]);
+  });
+
+  it("o que pode custar trabalho não salvo pede confirmação", () => {
+    const porId = new Map(CONTROLES_ENERGIA.map((c) => [c.actionId, c.destrutiva]));
+    expect(porId.get("sistema.desligar")).toBe(true);
+    expect(porId.get("sistema.reiniciar")).toBe(true);
+    expect(porId.get("sistema.hibernar")).toBe(true);
+    // E o que não custa, não pede: confirmar tudo treina a pessoa a confirmar
+    // sem ler, e aí a confirmação do desligar também deixa de proteger.
+    expect(porId.get("sistema.bloquear")).toBe(false);
+    expect(porId.get("sistema.suspender")).toBe(false);
+  });
+
+  it("a ausência de Pronto para Retorno é explicada, não escondida", () => {
+    // O mandato é explícito: nunca esconder limitação de hardware ou de rede.
+    expect(textoProntoParaRetorno(perfil({ prontoParaRetorno: "nenhum" }))).toBeUndefined();
+
+    const semPermissao = perfil({
+      prontoParaRetorno: "nenhum",
+      impedimentos: ["adaptador-sem-permissao"],
+    });
+    expect(explicarSemRetorno(semPermissao)).toContain("não está autorizada");
+
+    const semHibernar = perfil({
+      prontoParaRetorno: "nenhum",
+      impedimentos: ["hibernacao-desligada"],
+    });
+    expect(explicarSemRetorno(semHibernar)).toContain("hibernação está desligada");
+  });
+
+  it("a explicação não exige saber o que é S3, ACPI ou pacote mágico", () => {
+    // A tela principal fala linguagem de produto; o vocabulário técnico mora
+    // nos detalhes avançados (ADR-0006 e P3-M5-T11).
+    const tecnico = /\bS3\b|\bS4\b|\bS5\b|ACPI|PME|mágico|magic|broadcast|MAC/i;
+    for (const impedimento of [
+      "adaptador-nao-suporta",
+      "adaptador-sem-permissao",
+      "hibernacao-desligada",
+      "firmware-precisa-de-ajuste",
+      "nao-testado",
+      "sem-ponte-na-rede",
+    ] as const) {
+      const texto = explicarSemRetorno(
+        perfil({ prontoParaRetorno: "nenhum", impedimentos: [impedimento] }),
+      );
+      expect(texto, `vazou jargão em ${impedimento}: ${texto}`).not.toMatch(tecnico);
+    }
+    for (const controle of CONTROLES_ENERGIA) {
+      expect(controle.rotulo).not.toMatch(tecnico);
+    }
   });
 });

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Botao, Rotulo, Superficie } from "@slate/design-system";
-import type { AtalhoDeDeck, PerfilDeDeck } from "@slate/protocol";
+import type { AtalhoDeDeck, PerfilDeDeck, PerfilEnergia } from "@slate/protocol";
 import {
   api,
   EVENTO_SEM_CONEXAO,
@@ -51,6 +51,7 @@ export function Aplicacao() {
   const [perfilPadraoId, setPerfilPadraoId] = useState<string | undefined>();
   /** Painel que o computador está pedindo agora. Ver `context.changed`. */
   const [perfilSugerido, setPerfilSugerido] = useState<string | undefined>();
+  const [perfilEnergia, setPerfilEnergia] = useState<PerfilEnergia | undefined>();
   const [agentePrincipalId, setAgentePrincipalId] = useState<string | null>(null);
   const [removendoDispositivo, setRemovendoDispositivo] = useState<string | null>(null);
   const [tokenConvite, setTokenConvite] = useState<string | null>(null);
@@ -157,6 +158,9 @@ export function Aplicacao() {
           setPerfis(deck.perfis);
           setPerfilPadraoId(deck.perfilPadraoId);
         },
+        // O perfil descreve **aquela** máquina, naquela sessão, sob aquela
+        // permissão. Ele chega e cai junto com o deck, e pelo mesmo motivo.
+        aoReceberEnergia: (energia) => setPerfilEnergia(energia?.perfil),
         aoMudarContexto: setPerfilSugerido,
       });
       transporteAtual.current = transporte;
@@ -174,6 +178,7 @@ export function Aplicacao() {
       setAgenteLiberaAtalhos(false);
       setProgramas([]);
       setPerfis([]);
+      setPerfilEnergia(undefined);
       setPerfilPadraoId(undefined);
       setPerfilSugerido(undefined);
       if (transporteAtual.current === transporte) transporteAtual.current = null;
@@ -424,6 +429,7 @@ export function Aplicacao() {
                 perfis={perfis}
                 perfilPadraoId={perfilPadraoId}
                 perfilSugerido={perfilSugerido}
+                perfilEnergia={perfilEnergia}
                 executar={(actionId) =>
                   transporteAtual.current?.executarAcao(actionId) ??
                   Promise.resolve({

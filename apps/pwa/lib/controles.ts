@@ -12,6 +12,7 @@
  */
 
 import type { NomeMarca } from "@slate/design-system";
+import { ACOES_ENERGIA, type PerfilEnergia } from "@slate/protocol";
 
 export interface Controle {
   actionId: string;
@@ -24,7 +25,11 @@ export interface Controle {
     | "Volume"
     | "Mudo"
     | "Parar"
-    | "Monitor";
+    | "Monitor"
+    | "Escudo"
+    | "Camada"
+    | "Atualizar"
+    | "Energia";
   /**
    * Só aparece quando o Agente anunciou `action.media.completo`.
    *
@@ -147,6 +152,140 @@ export const CONTROLES_ATALHOS: readonly Controle[] = [
     exigeGradeCompleta: false,
   },
 ];
+
+/**
+ * Os controles de energia (ADR-0006).
+ *
+ * Diferente de todos os outros grupos: quais teclas aparecem **não** é decidido
+ * por uma capacidade única, e sim pelo perfil daquela máquina, tecla por tecla.
+ * Duas máquinas com o mesmo Agente mostram grades diferentes — uma hiberna, a
+ * outra não —, e é isso que o mandato pede quando diz para nunca fingir
+ * suporte.
+ *
+ * `exigeGradeCompleta` é `false` em todos porque o filtro aqui é outro: é
+ * `energiaVisivel`, logo abaixo.
+ */
+export interface ControleEnergia extends Controle {
+  /** A chave do perfil que decide se esta tecla existe naquela máquina. */
+  capacidade: keyof Pick<
+    PerfilEnergia,
+    "bloquear" | "suspender" | "hibernar" | "reiniciar" | "desligar" | "cancelarDesligamento"
+  >;
+  /** Pede confirmação deliberada em vez de executar ao toque. */
+  destrutiva: boolean;
+}
+
+export const CONTROLES_ENERGIA: readonly ControleEnergia[] = [
+  {
+    actionId: ACOES_ENERGIA.bloquear,
+    rotulo: "Bloquear",
+    icone: "Escudo",
+    capacidade: "bloquear",
+    destrutiva: false,
+    exigeGradeCompleta: false,
+  },
+  {
+    actionId: ACOES_ENERGIA.suspender,
+    rotulo: "Suspender",
+    icone: "Monitor",
+    capacidade: "suspender",
+    // Suspender não fecha nada e volta com um toque no teclado. Pedir
+    // cerimônia aqui treinaria a pessoa a confirmar sem ler, e aí a
+    // confirmação do desligar também deixa de proteger.
+    destrutiva: false,
+    exigeGradeCompleta: false,
+  },
+  {
+    actionId: ACOES_ENERGIA.hibernar,
+    rotulo: "Hibernar",
+    icone: "Camada",
+    capacidade: "hibernar",
+    destrutiva: true,
+    exigeGradeCompleta: false,
+  },
+  {
+    actionId: ACOES_ENERGIA.reiniciar,
+    rotulo: "Reiniciar",
+    icone: "Atualizar",
+    capacidade: "reiniciar",
+    destrutiva: true,
+    exigeGradeCompleta: false,
+  },
+  {
+    actionId: ACOES_ENERGIA.desligar,
+    rotulo: "Desligar",
+    icone: "Energia",
+    capacidade: "desligar",
+    destrutiva: true,
+    exigeGradeCompleta: false,
+  },
+];
+
+/**
+ * As teclas de energia que aquela máquina de fato sabe executar.
+ *
+ * Sem perfil não há grade nenhuma — e isso é o certo, não uma falta. Um Agente
+ * que não anunciou `energia.controle` não recebeu a permissão, ou é antigo
+ * demais para conhecer energia; nos dois casos, desenhar botões produziria
+ * teclas que respondem "escopo negado" ou "ação não encontrada".
+ *
+ * `Desconhecido` também não mostra a tecla. É a mesma disciplina do Agente:
+ * desconhecido não é permissão.
+ */
+export function energiaVisivel(
+  perfil: PerfilEnergia | undefined,
+): readonly ControleEnergia[] {
+  if (!perfil) return [];
+  return CONTROLES_ENERGIA.filter((c) => perfil[c.capacidade] === "sim");
+}
+
+/**
+ * O texto de Pronto para Retorno para aquela máquina.
+ *
+ * Devolve `undefined` quando não existe — e a tela mostra a ausência com o
+ * motivo, em vez de esconder. É a diferença entre explicar uma limitação e
+ * fingir que ela não existe.
+ */
+export function textoProntoParaRetorno(
+  perfil: PerfilEnergia | undefined,
+): string | undefined {
+  if (!perfil) return undefined;
+  switch (perfil.prontoParaRetorno) {
+    case "desligado":
+      return "Desliga por completo e volta pelo SLATE.";
+    case "hibernado":
+      return "Hiberna com o mínimo de consumo e volta pelo SLATE.";
+    case "nenhum":
+      return undefined;
+  }
+}
+
+/**
+ * Por que não há Pronto para Retorno naquela máquina, em linguagem de produto.
+ *
+ * O usuário comum não precisa saber o que são S3, S4, ACPI ou pacote mágico —
+ * precisa saber o que fazer. Cada motivo tem um texto próprio porque a ação é
+ * diferente em cada um; um "não foi possível" genérico não ajuda ninguém.
+ */
+export function explicarSemRetorno(perfil: PerfilEnergia | undefined): string {
+  const impedimentos = perfil?.impedimentos ?? [];
+  if (impedimentos.includes("adaptador-nao-suporta")) {
+    return "A rede deste computador não consegue ligá-lo de volta.";
+  }
+  if (impedimentos.includes("adaptador-sem-permissao")) {
+    return "A placa de rede deste computador não está autorizada a ligá-lo. Dá para mudar isso na janela do SLATE nele.";
+  }
+  if (impedimentos.includes("hibernacao-desligada")) {
+    return "A hibernação está desligada neste computador. Ligando ela, o SLATE consegue trazê-lo de volta.";
+  }
+  if (impedimentos.includes("firmware-precisa-de-ajuste")) {
+    return "Falta um ajuste na configuração de inicialização deste computador para ele poder ser ligado à distância.";
+  }
+  if (impedimentos.includes("nao-testado")) {
+    return "Ainda não foi testado se este computador consegue voltar depois de desligado.";
+  }
+  return "Este computador não consegue voltar sozinho depois de desligar.";
+}
 
 /**
  * O identificador de ação de um atalho de programa.

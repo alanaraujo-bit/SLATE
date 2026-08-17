@@ -12,8 +12,10 @@ import {
   criarEnvelope,
   contextoAlterado,
   deckEstado,
+  energiaEstado,
   hello,
   type AtalhoDeDeck,
+  type EnergiaEstado,
   type PerfilDeDeck,
   mensagemServidorSinalizacao,
   negociar,
@@ -54,6 +56,17 @@ export interface OpcoesTransporteWebRtc {
    * primeiro plano. Só chega de Agentes com regra configurada.
    */
   aoMudarContexto?: (perfilId: string) => void;
+  /**
+   * O que aquele computador sabe fazer com a própria energia.
+   *
+   * Chamada com `undefined` quando o canal cai, pelo mesmo motivo do deck: o
+   * perfil descreve **aquela** máquina, e mantê-lo depois da queda faria a tela
+   * oferecer desligar um computador que já não está do outro lado.
+   *
+   * Só chega de Agentes que anunciam `energia.controle`, e só a quem recebeu a
+   * permissão marcada na janela daquele computador (ADR-0006).
+   */
+  aoReceberEnergia?: (energia: EnergiaEstado | undefined) => void;
   /** Usado pelo teste de relay; produção deixa o ICE escolher o melhor caminho. */
   politicaIce?: RTCIceTransportPolicy;
 }
@@ -536,6 +549,13 @@ export class TransporteWebRtc {
       return;
     }
 
+    if (envelope.valor.k === "energia.estado") {
+      const estado = energiaEstado.safeParse(conteudo.valor);
+      if (!estado.success) return;
+      this.opcoes.aoReceberEnergia?.(estado.data);
+      return;
+    }
+
     if (envelope.valor.k === "deck.estado") {
       const estado = deckEstado.safeParse(conteudo.valor);
       if (!estado.success) return;
@@ -643,6 +663,10 @@ export class TransporteWebRtc {
     this.perfisDeckParcial = [];
     this.perfilPadraoParcial = undefined;
     this.opcoes.aoReceberDeck?.({ atalhos: [], perfis: [] });
+    // E o perfil de energia junto, pelo mesmo motivo: manter os controles de
+    // desligar depois da queda ofereceria desligar um computador que já não
+    // está do outro lado.
+    this.opcoes.aoReceberEnergia?.(undefined);
     for (const [id] of this.pendentes) {
       this.concluirPendente(id, {
         ok: false,
