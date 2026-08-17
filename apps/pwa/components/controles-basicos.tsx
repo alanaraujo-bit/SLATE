@@ -317,9 +317,17 @@ function PainelDePerfis({
             </button>
           ))}
         </div>
-        <span className="seletor-perfis__pagina">
-          {totalPaginas > 1 ? `${pagina + 1} / ${totalPaginas}` : "Painel pronto"}
-        </span>
+        {/*
+          Com uma página só não há o que contar, e o espaço fica vazio de
+          propósito. Antes ficava escrito "Painel pronto" — uma frase que não
+          informa nada, aparecia igual num painel cheio e num painel sem
+          nenhuma tecla, e ali dizia justamente o contrário do que se via.
+        */}
+        {totalPaginas > 1 && (
+          <span className="seletor-perfis__pagina">
+            {pagina + 1} / {totalPaginas}
+          </span>
+        )}
       </header>
 
       <div

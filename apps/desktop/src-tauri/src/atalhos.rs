@@ -296,6 +296,8 @@ impl AtalhosPersonalizados {
 
     pub fn salvar_perfil(&self, perfil: PerfilDeDeck) -> Result<PerfilDeDeck, ErroAtalhos> {
         let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
+        let mut perfil = perfil;
+        normalizar_ordem(&mut perfil.itens);
         validar_perfil(&perfil, &estado.atalhos)?;
         let mut candidato = estado.clone();
         let alvo = candidato
@@ -447,6 +449,31 @@ fn validar_estado(estado: &ArquivoAtalhos) -> Result<(), ErroAtalhos> {
         }
     }
     Ok(())
+}
+
+/// Renumera as posições de cada página em 0, 1, 2, … sem buracos nem empates.
+///
+/// **Recusar um perfil malformado seria pior do que consertá-lo.** A janela
+/// reordena trocando o `ordem` entre vizinhos, e dois itens com o mesmo número
+/// fazem a troca não trocar nada: as setas param de funcionar e nada explica
+/// por quê. Empate é fácil de produzir sem ninguém errar — mover teclas entre
+/// páginas, duplicar um perfil, editar o arquivo à mão — e devolver "o perfil
+/// é inválido" para quem só arrastou uma tecla não ajudaria em nada.
+///
+/// A ordenação é estável, então itens empatados mantêm a sequência em que
+/// chegaram, e não uma escolhida por sorteio.
+fn normalizar_ordem(itens: &mut [ItemDePerfilDeck]) {
+    itens.sort_by_key(|item| (item.pagina, item.ordem));
+    let mut pagina_atual: Option<u8> = None;
+    let mut proxima: u16 = 0;
+    for item in itens.iter_mut() {
+        if pagina_atual != Some(item.pagina) {
+            pagina_atual = Some(item.pagina);
+            proxima = 0;
+        }
+        item.ordem = proxima;
+        proxima += 1;
+    }
 }
 
 fn validar_perfil(perfil: &PerfilDeDeck, atalhos: &[Atalho]) -> Result<(), ErroAtalhos> {
@@ -623,6 +650,54 @@ mod testes {
             Err(ErroAtalhos::PerfilInvalido)
         ));
         let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    #[test]
+    fn posicoes_empatadas_sao_renumeradas_em_vez_de_recusadas() {
+        // O sintoma que isto evita não é um erro: é a seta de reordenar parar
+        // de funcionar. A janela troca o `ordem` entre vizinhos, e trocar dois
+        // números iguais não muda nada — a tecla fica presa e nada explica.
+        let pasta = pasta("ordem");
+        let atalhos = AtalhosPersonalizados::carregar(&pasta).unwrap();
+        let mut perfil = atalhos.configuracao().perfis[0].clone();
+        perfil.itens = vec![
+            item("midia.parar", 0, 7),
+            item("volume.mudo", 0, 7),
+            item("midia.proxima", 0, 3),
+            item("atalho.netflix", 1, 99),
+            item("atalho.prime", 1, 99),
+        ];
+
+        let salvo = atalhos.salvar_perfil(perfil).unwrap();
+
+        let pagina_zero: Vec<_> = salvo.itens.iter().filter(|i| i.pagina == 0).collect();
+        assert_eq!(
+            pagina_zero
+                .iter()
+                .map(|i| (i.action_id.as_str(), i.ordem))
+                .collect::<Vec<_>>(),
+            // A menor posição vem primeiro; o empate preserva a sequência de
+            // entrada, e não uma escolhida por sorteio.
+            vec![("midia.proxima", 0), ("midia.parar", 1), ("volume.mudo", 2)],
+        );
+        let pagina_um: Vec<_> = salvo
+            .itens
+            .iter()
+            .filter(|i| i.pagina == 1)
+            .map(|i| i.ordem)
+            .collect();
+        assert_eq!(pagina_um, vec![0, 1], "cada página recomeça do zero");
+        let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    fn item(action_id: &str, pagina: u8, ordem: u16) -> ItemDePerfilDeck {
+        ItemDePerfilDeck {
+            action_id: action_id.to_string(),
+            pagina,
+            ordem,
+            cor: None,
+            tamanho: None,
+        }
     }
 
     #[test]

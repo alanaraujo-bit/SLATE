@@ -1241,7 +1241,20 @@ button {
 .grade-perfil {
   display: grid;
   grid-template-columns: repeat(var(--colunas-retrato), minmax(0, 1fr));
-  align-content: start;
+  /*
+   * A tecla cresce para ocupar a tela, até um teto.
+   *
+   * Antes as fileiras ficavam agarradas no topo com o tamanho mínimo, e um
+   * painel de seis teclas usava um terço do aparelho — o resto era preto. Num
+   * controle segurado com uma mão só, área é precisão: o alvo maior é o que
+   * permite apertar sem olhar.
+   *
+   * O teto existe porque sem ele uma página de uma tecla vira um botão do
+   * tamanho do telefone, o que parece defeito e não generosidade. Com teto e
+   * centralização, a página escassa fica composta em vez de esticada.
+   */
+  grid-auto-rows: minmax(4.5rem, 10rem);
+  align-content: center;
   gap: var(--s-space-3);
 }
 
@@ -1353,29 +1366,60 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  /* 1.5rem, e não 1.75, porque é o que `.tecla svg` impõe aos ícones ao lado.
+     Uma caixa maior que o desenho que ela contém desalinha a marca do resto da
+     fileira — e a fileira é o que se olha, não a tecla isolada. */
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
 }
 
-.marca-servico--youtube,
-.marca-servico--netflix {
+/*
+ * A cor vai no SVG, e não no elemento de fora.
+ *
+ * Duas regras da tecla disputavam essa cor e as duas ganhavam da marca:
+ * `.tecla svg` pinta `var(--tom)` direto no desenho, e `.tecla span` pinta o
+ * texto de cinza — e a caixa da marca é um `span`. O resultado era a página de
+ * serviços inteira num tom só, ora roxa, ora cinza, com Netflix e Prime
+ * indistinguíveis sem ler o rótulo. É exatamente o contrário do que a marca
+ * serve para fazer: ser reconhecida antes do texto.
+ *
+ * Pintar o próprio SVG resolve os dois de uma vez, e continua valendo em
+ * qualquer contexto que venha a existir depois.
+ */
+.marca-servico svg {
+  width: 100%;
+  height: 100%;
+}
+
+.marca-servico--youtube svg,
+.marca-servico--netflix svg {
   color: var(--s-control-red);
 }
 
-.marca-servico--twitch {
+.marca-servico--twitch svg {
   color: var(--s-control-violet);
 }
 
-.marca-servico--disney {
+.marca-servico--disney svg {
   color: var(--s-control-indigo);
 }
 
-.marca-servico--prime {
+.marca-servico--prime svg {
   color: var(--s-control-cyan);
 }
 
-.marca-servico--spotify {
+.marca-servico--spotify svg {
   color: var(--s-control-green);
+}
+
+/* Deitado os ícones encolhem; a caixa da marca acompanha, senão ela fica
+   maior que os vizinhos justamente onde a altura é escassa. */
+@media (max-height: 30rem) {
+  .marca-servico {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
 }
 
 @media (orientation: landscape) {

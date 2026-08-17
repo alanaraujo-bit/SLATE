@@ -2683,24 +2683,32 @@ body::after {
   height: 1.75rem;
 }
 
-.marca-servico--youtube,
-.marca-servico--netflix {
+/* A cor vai no SVG, e não na caixa: `.item-deck__arte` pinta `var(--tom)` nos
+   filhos, e a marca precisa ganhar dele em qualquer contexto. Mesmo raciocínio
+   — e mesmas regras — do lado da PWA. */
+.marca-servico svg {
+  width: 100%;
+  height: 100%;
+}
+
+.marca-servico--youtube svg,
+.marca-servico--netflix svg {
   color: var(--s-control-red);
 }
 
-.marca-servico--twitch {
+.marca-servico--twitch svg {
   color: var(--s-control-violet);
 }
 
-.marca-servico--disney {
+.marca-servico--disney svg {
   color: var(--s-control-indigo);
 }
 
-.marca-servico--prime {
+.marca-servico--prime svg {
   color: var(--s-control-cyan);
 }
 
-.marca-servico--spotify {
+.marca-servico--spotify svg {
   color: var(--s-control-green);
 }
 

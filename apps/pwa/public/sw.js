@@ -12,7 +12,7 @@
  * é pior que um controle que admite não saber.
  */
 
-const VERSAO = "slate-00df2751-mswfjo43";
+const VERSAO = "slate-00df2751-msxgjd76";
 
 /**
  * Este service worker foi gerado para o servidor de desenvolvimento?

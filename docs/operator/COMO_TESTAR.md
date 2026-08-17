@@ -12,15 +12,59 @@ O que já dá para experimentar, o que ainda não existe, e como rodar cada peç
 - Parear o celular com o computador, das duas formas: código de seis dígitos
   digitado no Agente, ou QR Code exibido no Agente e lido pelo celular.
 - Reproduzir/pausar a mídia do computador pelo celular, por WebRTC.
+- Comandar a mídia inteira: faixa, parada, volume e mudo.
+- Cadastrar programas do computador (`.exe`) e abri-los pelo celular, com o
+  ícone do próprio programa aparecendo na tecla.
+- Abrir YouTube, Twitch, Netflix, Prime Video, Disney+ e Spotify.
+- **Montar painéis** — vários conjuntos de atalhos, cada um com nome, cor,
+  número de colunas e páginas próprias, trocáveis com um toque no celular.
 
 ## O que ainda não existe
 
-- **Grade de atalhos.** Existe um controle só, de mídia. A grade configurável
-  ainda está por vir — botões que não comandam nada seriam promessa disfarçada
-  de produto.
+- **Sequências e condições.** Uma tecla executa uma ação. Encadear várias,
+  com atraso ou condição, ainda não existe.
+- **Troca automática de painel.** Hoje quem troca de painel é quem está com o
+  celular na mão; o painel não muda sozinho conforme o programa em foco no
+  computador.
 
 Nada disso está escondido atrás de "em breve": a aplicação diz o que é verdade
 em cada tela.
+
+---
+
+## Testar os painéis, de ponta a ponta
+
+Este é o caminho novo, e o que mais vale conferir. Ele atravessa as duas
+pontas: o painel é montado no computador e usado no celular.
+
+**No computador, na janela do SLATE:**
+
+1. Aba **Programas** → *Adicionar programa*. Escolha um `.exe` (um jogo, o
+   navegador, o OBS). O ícone é extraído do próprio arquivo.
+2. Aba **Aparelhos** → marque a permissão de abrir programas **para aquele
+   celular**. Sem isso o painel não chega: a permissão é por aparelho, e é
+   dada aqui de propósito — nunca pela conta.
+3. Aba **Painéis** → *Novo painel*. Dê um nome ("Ao vivo", "Cinema"), escolha
+   a cor, o número de colunas em pé e deitado, e vá acrescentando controles.
+   A prévia mostra o telefone como ele vai ficar.
+
+**No celular:**
+
+4. As abas dos painéis aparecem no topo. Toque para trocar de painel.
+5. Arraste para o lado para passar de página, ou use as setas embaixo.
+6. Gire o aparelho: a grade passa a usar o número de colunas de deitado.
+
+**O que conferir, e que já quebrou antes:**
+
+- Mexer num painel na janela muda o celular **na hora**, sem reconectar e sem
+  fechar o aplicativo. Se só mudar depois de reabrir, o reanúncio do deck
+  parou de funcionar.
+- Um painel com muitos programas continua chegando inteiro. A lista viaja
+  fatiada porque cada ícone é um PNG embutido, e os painéis vão na primeira
+  fatia — se sumirem justamente quando há muitos programas, é aí que olhar.
+- Cada serviço aparece com a cor dele (Netflix vermelho, Prime ciano, Disney
+  azul). Todos da mesma cor significa que a cor da tecla está vencendo a da
+  marca.
 
 ---
 
