@@ -3,7 +3,6 @@
 //! O arquivo guarda caminhos, mas o transporte nunca serializa esta estrutura
 //! diretamente: o celular recebe somente identificadores de acoes conhecidas.
 
-use crate::icone;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -14,6 +13,31 @@ const ARQUIVO: &str = "atalhos.json";
 const MAXIMO: usize = 100;
 const MAXIMO_PERFIS: usize = 12;
 const MAXIMO_ITENS: usize = 200;
+
+/// Teto do endereço de um atalho de site, em caracteres.
+///
+/// 2048 é o limite prático que navegadores e servidores respeitam há décadas.
+/// Um endereço maior que isto não é um atalho — é um payload.
+const MAXIMO_URL: usize = 2048;
+
+/**
+ * Teto do ícone guardado, contando o data URI inteiro.
+ *
+ * **Não é estética, é a integridade do canal.** O deck viaja por DataChannel e
+ * `LIMITE_MENSAGEM_DECK` (48 KiB, em `transporte.rs`) não é conselho:
+ * estourar o limite do SCTP não devolve erro legível, derruba a conexão. E
+ * `mensagens_do_deck` deixa um item grande demais passar sozinho de propósito
+ * — recusá-lo tiraria a tecla da grade sem explicar.
+ *
+ * O ícone extraído de um `.exe` tem 32×32 e ocupa uns 2 KB. Um favicon `.ico`
+ * ou uma imagem escolhida à mão passa de 100 KB sem esforço. 24 KiB deixa o
+ * pior caso com folga debaixo do teto da mensagem, mesmo com a inflação do
+ * base64 já contada — o valor aqui mede o texto final, não os bytes da arte.
+ *
+ * Quem não couber fica sem ícone, e a janela diz isso. É a mesma resposta que
+ * `icone::extrair` já dá quando o Windows não entrega a arte.
+ */
+pub const MAXIMO_ICONE: usize = 24 * 1024;
 
 pub const CORES: [&str; 12] = [
     "red", "orange", "amber", "yellow", "lime", "green", "teal", "cyan", "blue", "indigo",
@@ -47,6 +71,10 @@ pub enum ErroAtalhos {
     Concorrencia,
     #[error("esse arquivo nao e um programa que de para abrir")]
     CaminhoInvalido,
+    #[error("esse endereco nao serve - use um endereco http ou https")]
+    UrlInvalida,
+    #[error("essa imagem e grande demais para virar uma tecla")]
+    IconeInvalido,
     #[error("de um nome ao atalho")]
     NomeVazio,
     #[error("ja sao {MAXIMO} atalhos - remova algum antes de criar outro")]
@@ -65,15 +93,70 @@ pub enum ErroAtalhos {
     UltimoPerfil,
 }
 
+/// O que um atalho abre.
+///
+/// Duas formas, um identificador só: o celular continua mandando
+/// `programa.<id>` para as duas, porque abrir um site e abrir um programa são
+/// a mesma autoridade (`system.process`, em `acoes.rs`) e separá-las daria
+/// duas caixas para marcar sem nenhum ganho. O que muda é o mecanismo deste
+/// lado, e ele é escolhido aqui — nunca pelo pedido que chegou.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Alvo<'a> {
+    /// Caminho absoluto neste disco. Nunca atravessa o canal.
+    Programa(&'a str),
+    /// Endereço `http`/`https` digitado na janela do Agente.
+    Site(&'a str),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Atalho {
     pub id: String,
     pub nome: String,
     /// Caminho absoluto do executavel. Nunca chega pelo canal.
+    ///
+    /// **Vazio quando o atalho é um endereço**, e é isso que mantém o arquivo
+    /// na versão 2. Ver `url` para o porquê de não ser um enum.
     pub caminho: String,
+    /**
+     * Endereço, quando o atalho abre um site em vez de um programa.
+     *
+     * **Campo acrescentado em vez de um enum, e o arquivo continua na versão
+     * 2.** Um enum seria o modelo honesto, mas obrigaria a versão 3 — e este
+     * Agente se atualiza sozinho. Quem voltasse para uma versão anterior
+     * encontraria um arquivo que ela recusa como corrompido, e
+     * `AtalhosPersonalizados::carregar` é chamado no `setup` do Tauri: recusar
+     * ali não é perder os atalhos, é a janela não abrir.
+     *
+     * Do jeito de baixo, um Agente antigo lê o arquivo inteiro, mostra o
+     * atalho de site com caminho vazio e, se alguém o acionar, responde "o
+     * programa deste atalho não está mais no lugar" — que é feio, mas é uma
+     * frase numa tecla em vez de um programa que não abre.
+     */
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     pub cor: String,
+    /// Data URI da arte da tecla, dentro de `MAXIMO_ICONE`.
+    ///
+    /// Vem do próprio `.exe`, do favicon do site ou de uma imagem escolhida à
+    /// mão — e, seja qual for a origem, `None` é sempre uma resposta válida.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icone: Option<String>,
+}
+
+impl Atalho {
+    /// O que este atalho abre, ou `None` se o cadastro não descreve nada.
+    ///
+    /// `None` acontece com um arquivo escrito por um Agente mais novo e lido
+    /// por este — o oposto do caso que o campo `url` protege. Devolver
+    /// `Option` obriga quem executa, pelo compilador, a dizer o que fazer com
+    /// um atalho que ele não entende, em vez de abrir a coisa errada.
+    pub fn alvo(&self) -> Option<Alvo<'_>> {
+        match self.url.as_deref() {
+            Some(url) if !url.is_empty() => Some(Alvo::Site(url)),
+            _ if !self.caminho.is_empty() => Some(Alvo::Programa(&self.caminho)),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -208,12 +291,53 @@ impl AtalhosPersonalizados {
             .cloned()
     }
 
-    pub fn criar(&self, caminho: &str, nome: &str, cor: &str) -> Result<Atalho, ErroAtalhos> {
+    /// Cadastra um programa deste disco.
+    ///
+    /// **O ícone chega pronto, e não é extraído aqui.** Extrair do `.exe` é
+    /// uma chamada ao Shell que dura microssegundos, mas a arte de um site
+    /// vem da rede, com tempo limite medido em segundos — e este método
+    /// segura a trava de escrita do estado. Resolver a imagem antes de
+    /// chamar, do lado do comando, é o que impede um site fora do ar de
+    /// travar a listagem e o reanúncio do deck junto.
+    pub fn criar(
+        &self,
+        caminho: &str,
+        nome: &str,
+        cor: &str,
+        icone: Option<String>,
+    ) -> Result<Atalho, ErroAtalhos> {
+        validar_caminho(caminho)?;
+        self.inserir(caminho.to_string(), None, nome, cor, icone)
+    }
+
+    /// Cadastra um endereço.
+    ///
+    /// Irmão de `criar`, e de propósito: os dois produzem a mesma tecla, com o
+    /// mesmo `programa.<id>`, e só o campo preenchido difere.
+    pub fn criar_site(
+        &self,
+        url: &str,
+        nome: &str,
+        cor: &str,
+        icone: Option<String>,
+    ) -> Result<Atalho, ErroAtalhos> {
+        let url = normalizar_url(url)?;
+        self.inserir(String::new(), Some(url), nome, cor, icone)
+    }
+
+    fn inserir(
+        &self,
+        caminho: String,
+        url: Option<String>,
+        nome: &str,
+        cor: &str,
+        icone: Option<String>,
+    ) -> Result<Atalho, ErroAtalhos> {
         let nome = nome.trim();
         if nome.is_empty() {
             return Err(ErroAtalhos::NomeVazio);
         }
-        validar_caminho(caminho)?;
+        let icone = validar_icone(icone)?;
         let cor = if CORES.contains(&cor) { cor } else { "violet" };
 
         let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
@@ -223,9 +347,10 @@ impl AtalhosPersonalizados {
         let atalho = Atalho {
             id: uuid::Uuid::new_v4().to_string(),
             nome: nome.chars().take(40).collect(),
-            caminho: caminho.to_string(),
+            caminho,
+            url,
             cor: cor.to_string(),
-            icone: icone::extrair(caminho),
+            icone,
         };
         let mut candidato = estado.clone();
         adicionar_programa_ao_padrao(&mut candidato, &atalho)?;
@@ -251,11 +376,27 @@ impl AtalhosPersonalizados {
         Ok(())
     }
 
-    pub fn renomear(&self, id: &str, nome: &str, cor: &str) -> Result<(), ErroAtalhos> {
+    /// Edita nome, cor e — só para atalho de site — o endereço.
+    ///
+    /// `url` só vale para quem já é site: promover um programa a endereço, ou
+    /// o contrário, transformaria a tecla em outra coisa mantendo o mesmo
+    /// identificador, e o celular não teria como saber. Quem quer trocar de
+    /// forma remove e cadastra de novo.
+    pub fn renomear(
+        &self,
+        id: &str,
+        nome: &str,
+        cor: &str,
+        url: Option<&str>,
+    ) -> Result<(), ErroAtalhos> {
         let nome = nome.trim();
         if nome.is_empty() {
             return Err(ErroAtalhos::NomeVazio);
         }
+        let url = match url {
+            Some(bruta) => Some(normalizar_url(bruta)?),
+            None => None,
+        };
         let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
         let mut candidato = estado.clone();
         let alvo = candidato
@@ -267,6 +408,32 @@ impl AtalhosPersonalizados {
         if CORES.contains(&cor) {
             alvo.cor = cor.to_string();
         }
+        if let Some(url) = url {
+            if alvo.url.is_none() {
+                return Err(ErroAtalhos::UrlInvalida);
+            }
+            alvo.url = Some(url);
+        }
+        gravar(&self.caminho, &candidato)?;
+        *estado = candidato;
+        Ok(())
+    }
+
+    /// Troca a arte da tecla, ou tira a que estava lá.
+    ///
+    /// `None` volta a tecla ao desenho genérico, e é uma escolha legítima:
+    /// nem todo favicon fica bom em 32 pontos, e uma tecla com a cor certa e
+    /// sem imagem pode ser mais legível que uma com o desenho errado.
+    pub fn definir_icone(&self, id: &str, icone: Option<String>) -> Result<(), ErroAtalhos> {
+        let icone = validar_icone(icone)?;
+        let mut estado = self.estado.write().map_err(|_| ErroAtalhos::Concorrencia)?;
+        let mut candidato = estado.clone();
+        let alvo = candidato
+            .atalhos
+            .iter_mut()
+            .find(|a| a.id == id)
+            .ok_or(ErroAtalhos::NaoEncontrado)?;
+        alvo.icone = icone;
         gravar(&self.caminho, &candidato)?;
         *estado = candidato;
         Ok(())
@@ -614,6 +781,61 @@ fn nome_da_copia(nome: &str) -> String {
     format!("{}{}", nome.chars().take(limite).collect::<String>(), sufixo)
 }
 
+/**
+ * Deixa um endereço na forma em que ele vai ser aberto, ou recusa.
+ *
+ * Só `http` e `https` passam. Um atalho é uma tecla que abre alguma coisa no
+ * navegador; `file://` abriria o disco, `javascript:` executaria script na
+ * página que estivesse aberta, e esquemas registrados por outros programas
+ * (`steam:`, `ms-settings:`) são superfície de execução com outro nome.
+ *
+ * **Não há lista de caracteres proibidos aqui, e é de propósito.** O endereço é
+ * aberto por `ShellExecuteW`, que recebe a string inteira como um argumento só
+ * e não passa por interpretador nenhum — quem protege é o mecanismo. Uma lista
+ * negra seria pior que inútil: teria de recusar `&`, que é o separador normal
+ * de toda consulta com mais de um parâmetro.
+ *
+ * O que continua recusado é espaço e caractere de controle, porque um endereço
+ * de verdade não tem nenhum dos dois — quem os tem foi montado para enganar
+ * quem lê a tela.
+ */
+pub fn normalizar_url(url: &str) -> Result<String, ErroAtalhos> {
+    let url = url.trim();
+    if url.chars().count() > MAXIMO_URL {
+        return Err(ErroAtalhos::UrlInvalida);
+    }
+    let resto = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .ok_or(ErroAtalhos::UrlInvalida)?;
+    let hospedeiro = resto
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default();
+    if hospedeiro.is_empty() || !hospedeiro.contains(|c: char| c.is_ascii_alphanumeric()) {
+        return Err(ErroAtalhos::UrlInvalida);
+    }
+    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(ErroAtalhos::UrlInvalida);
+    }
+    Ok(url.to_string())
+}
+
+/// Aceita a arte, ou explica por que ela não serve.
+///
+/// `None` entra e sai como `None`: tecla sem imagem é um estado normal, não
+/// uma falha. O que não passa é o que não é imagem e o que não cabe no canal
+/// (`MAXIMO_ICONE`).
+pub fn validar_icone(icone: Option<String>) -> Result<Option<String>, ErroAtalhos> {
+    let Some(icone) = icone else {
+        return Ok(None);
+    };
+    if !icone.starts_with("data:image/") || icone.len() > MAXIMO_ICONE {
+        return Err(ErroAtalhos::IconeInvalido);
+    }
+    Ok(Some(icone))
+}
+
 pub fn validar_caminho(caminho: &str) -> Result<(), ErroAtalhos> {
     let p = Path::new(caminho);
     if !p.is_absolute() || !p.is_file() {
@@ -683,6 +905,7 @@ mod testes {
             id: "programa-1".into(),
             nome: "Editor".into(),
             caminho: r"C:\Programas\editor.exe".into(),
+            url: None,
             cor: "blue".into(),
             icone: None,
         };
@@ -714,7 +937,9 @@ mod testes {
             return;
         }
         let atalhos = AtalhosPersonalizados::carregar(&pasta).unwrap();
-        let criado = atalhos.criar(&programa, "  Meu Jogo  ", "green").unwrap();
+        let criado = atalhos
+            .criar(&programa, "  Meu Jogo  ", "green", None)
+            .unwrap();
         let action_id = format!("programa.{}", criado.id);
         assert!(atalhos.configuracao().perfis[0]
             .itens
@@ -726,6 +951,128 @@ mod testes {
             .perfis
             .iter()
             .all(|p| p.itens.iter().all(|i| i.action_id != action_id)));
+        let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    #[test]
+    fn atalho_de_site_entra_na_grade_como_qualquer_programa() {
+        let pasta = pasta("site");
+        let atalhos = AtalhosPersonalizados::carregar(&pasta).unwrap();
+        let criado = atalhos
+            .criar_site("  https://exemplo.com/painel  ", " Painel ", "cyan", None)
+            .unwrap();
+
+        // Mesmo identificador das teclas de programa, de propósito: é o que
+        // permite ao celular não saber o que a tecla abre.
+        let action_id = format!("programa.{}", criado.id);
+        assert!(atalhos.configuracao().perfis[0]
+            .itens
+            .iter()
+            .any(|i| i.action_id == action_id));
+        assert_eq!(criado.nome, "Painel");
+        assert_eq!(criado.url.as_deref(), Some("https://exemplo.com/painel"));
+        assert!(criado.caminho.is_empty());
+        assert_eq!(criado.alvo(), Some(Alvo::Site("https://exemplo.com/painel")));
+        let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    #[test]
+    fn so_endereco_de_navegador_vira_atalho() {
+        for ruim in [
+            // Abriria o disco desta máquina.
+            "file:///C:/Windows",
+            // Executaria script na página aberta.
+            "javascript:alert(1)",
+            // Esquema registrado por outro programa é execução com outro nome.
+            "steam://run/730",
+            "ms-settings:",
+            // Sem esquema não dá para saber o que é.
+            "exemplo.com",
+            "",
+            "https://",
+            // Espaço no meio: endereço de verdade não tem.
+            "https://exemplo.com /outra-coisa",
+        ] {
+            assert!(normalizar_url(ruim).is_err(), "deixou passar: {ruim}");
+        }
+
+        // E o que é endereço de verdade passa, inclusive sem TLS: intranet e
+        // roteador não têm certificado, e recusá-los recusaria metade do uso.
+        for bom in [
+            "https://exemplo.com",
+            "http://192.168.0.1/admin",
+            "https://exemplo.com/busca?a=1&b=2#topo",
+        ] {
+            assert!(normalizar_url(bom).is_ok(), "recusou: {bom}");
+        }
+    }
+
+    #[test]
+    fn a_arte_grande_demais_e_recusada_antes_de_chegar_ao_canal() {
+        // O teto não é estético: LIMITE_MENSAGEM_DECK, em transporte.rs, é de
+        // 48 KiB, e estourar o limite do SCTP derruba a conexão em vez de
+        // devolver erro. Guardar um ícone maior seria trocar um desenho pelo
+        // canal inteiro.
+        let gigante = format!("data:image/png;base64,{}", "A".repeat(MAXIMO_ICONE));
+        assert!(validar_icone(Some(gigante)).is_err());
+        // O que não é imagem também não entra: um data:text/html viraria
+        // documento dentro de uma imagem no celular.
+        assert!(validar_icone(Some("data:text/html,<h1>oi</h1>".into())).is_err());
+        assert!(validar_icone(Some("https://site/logo.png".into())).is_err());
+        // Tecla sem arte continua sendo estado normal.
+        assert!(matches!(validar_icone(None), Ok(None)));
+    }
+
+    #[test]
+    fn editar_nao_transforma_programa_em_site() {
+        // Trocar a forma mantendo o identificador faria a mesma tecla passar a
+        // abrir outra coisa sem o celular ter como saber. Quem quer trocar
+        // remove e cadastra de novo.
+        let pasta = pasta("forma");
+        let atalhos = AtalhosPersonalizados::carregar(&pasta).unwrap();
+        let programa = programa_existente();
+        if validar_caminho(&programa).is_err() {
+            return;
+        }
+        let criado = atalhos.criar(&programa, "Jogo", "green", None).unwrap();
+        assert!(atalhos
+            .renomear(&criado.id, "Jogo", "green", Some("https://exemplo.com"))
+            .is_err());
+        assert_eq!(atalhos.buscar(&criado.id).unwrap().url, None);
+
+        // E o caminho inverso funciona: um site troca de endereço sem drama.
+        let site = atalhos
+            .criar_site("https://exemplo.com", "Site", "cyan", None)
+            .unwrap();
+        atalhos
+            .renomear(&site.id, "Site", "cyan", Some("https://outro.com/x"))
+            .unwrap();
+        assert_eq!(
+            atalhos.buscar(&site.id).unwrap().url.as_deref(),
+            Some("https://outro.com/x")
+        );
+        let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    #[test]
+    fn um_agente_antigo_ainda_le_o_arquivo_com_atalho_de_site() {
+        // A razão de o arquivo continuar na versão 2 e o endereço ser um campo
+        // acrescentado, e não um enum. Este Agente se atualiza sozinho; quem
+        // voltasse para uma versão anterior encontraria um arquivo recusado
+        // como corrompido, e carregar é chamado no setup do Tauri — recusar
+        // ali não perde atalhos, faz a janela não abrir.
+        let pasta = pasta("compatibilidade");
+        let atalhos = AtalhosPersonalizados::carregar(&pasta).unwrap();
+        atalhos
+            .criar_site("https://exemplo.com", "Site", "cyan", None)
+            .unwrap();
+
+        let salvo: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(pasta.join(ARQUIVO)).unwrap()).unwrap();
+        assert_eq!(salvo["versao"], 2);
+        // O campo que o Agente antigo conhece está lá, vazio — e é ele que faz
+        // a leitura passar em vez de estourar por campo faltando.
+        assert_eq!(salvo["atalhos"][0]["caminho"], "");
         let _ = std::fs::remove_dir_all(pasta);
     }
 

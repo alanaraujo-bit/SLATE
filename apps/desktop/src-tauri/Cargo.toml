@@ -1,6 +1,6 @@
 [package]
 name = "slate-agente"
-version = "0.1.9"
+version = "0.1.10"
 description = "Agente do SLATE para Windows"
 authors = ["Aionixdev"]
 edition = "2021"
@@ -94,6 +94,10 @@ windows = { version = "0.58", features = [
     # `DestroyIcon` que evita vazar handle a cada atalho cadastrado.
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
+    # `ShellExecuteW` — que abre programa, atalho do Windows e endereço — exige
+    # COM iniciado na thread que chama, e as ações chegam por uma thread do
+    # tokio. `CoInitializeEx` mora aqui.
+    "Win32_System_Com",
     "Win32_Graphics_Gdi",
     # `SHGetFileInfoW` recebe um `FILE_FLAGS_AND_ATTRIBUTES`, que mora aqui —
     # sem esta feature a própria função não é exposta pelo crate.

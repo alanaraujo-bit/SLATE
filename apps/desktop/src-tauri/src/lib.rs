@@ -1,6 +1,8 @@
 mod acoes;
 mod atalhos;
+mod diagnostico;
 mod energia;
+mod favicon;
 mod foco;
 mod icone;
 mod api;
@@ -372,9 +374,90 @@ async fn criar_atalho(
     nome: String,
     cor: String,
 ) -> Result<Atalho, String> {
+    // A arte é resolvida aqui, e não lá dentro, porque `criar` segura a trava
+    // de escrita do estado — e o irmão deste comando, o de site, busca a arte
+    // na rede. Os dois entram no mesmo formato para que só exista um lugar onde
+    // o ícone é decidido.
+    let icone = icone::extrair(&caminho);
     estado
         .atalhos
-        .criar(&caminho, &nome, &cor)
+        .criar(&caminho, &nome, &cor, icone)
+        .map_err(|e| e.to_string())
+}
+
+/// Cadastra um endereço como tecla.
+///
+/// **O endereço é digitado, e é a primeira coisa deste cadastro que não nasce
+/// de um diálogo nativo.** Isso não afrouxa o ADR-0004: o que ele mantém fora
+/// do alcance do celular é `action.define`, e definir continua acontecendo
+/// aqui, na janela, na frente da máquina. O que o canal recebe segue sendo
+/// `programa.<id>`; o endereço nunca atravessa, em nenhuma direção.
+#[tauri::command]
+async fn criar_atalho_de_site(
+    estado: tauri::State<'_, Estado>,
+    url: String,
+    nome: String,
+    cor: String,
+    icone: Option<String>,
+) -> Result<Atalho, String> {
+    estado
+        .atalhos
+        .criar_site(&url, &nome, &cor, icone)
+        .map_err(|e| e.to_string())
+}
+
+/// Procura o desenho de um site, para a janela mostrar antes de gravar.
+///
+/// Devolve `None` sem erro quando não acha: não achar desenho é resultado
+/// normal, não falha, e uma mensagem vermelha aqui daria a entender que o
+/// cadastro não pode continuar.
+#[tauri::command]
+async fn buscar_favicon(url: String) -> Result<Option<String>, String> {
+    let url = atalhos::normalizar_url(&url).map_err(|e| e.to_string())?;
+    Ok(favicon::buscar(&url).await)
+}
+
+/// Abre o seletor de imagem e devolve o arquivo escolhido como data URI.
+///
+/// **Devolve a imagem no tamanho original, e quem encolhe é a janela.** Ela é
+/// um webview: já tem decodificador de PNG, JPEG, GIF, WebP e ICO, e um
+/// `canvas` resolve em três linhas o que aqui exigiria trazer um codec para
+/// cada formato. O tamanho final é conferido de novo na gravação, por
+/// `atalhos::validar_icone` — a janela é conveniência, não a garantia.
+#[tauri::command]
+async fn escolher_icone(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let (envio, recebimento) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Escolha a imagem da tecla")
+        .add_filter("Imagens", &["png", "jpg", "jpeg", "gif", "webp", "ico"])
+        .pick_file(move |escolhido| {
+            let _ = envio.send(escolhido);
+        });
+
+    let escolhido = recebimento
+        .await
+        .map_err(|_| "seleção cancelada".to_string())?;
+    let Some(caminho) = escolhido.and_then(|c| c.into_path().ok()) else {
+        return Ok(None);
+    };
+    icone::de_arquivo(&caminho.to_string_lossy())
+        .map(Some)
+        .ok_or_else(|| "não foi possível ler essa imagem".to_string())
+}
+
+/// Troca a arte de uma tecla, ou tira a que estava lá.
+#[tauri::command]
+async fn definir_icone(
+    estado: tauri::State<'_, Estado>,
+    id: String,
+    icone: Option<String>,
+) -> Result<(), String> {
+    estado
+        .atalhos
+        .definir_icone(&id, icone)
         .map_err(|e| e.to_string())
 }
 
@@ -389,10 +472,11 @@ async fn renomear_atalho(
     id: String,
     nome: String,
     cor: String,
+    url: Option<String>,
 ) -> Result<(), String> {
     estado
         .atalhos
-        .renomear(&id, &nome, &cor)
+        .renomear(&id, &nome, &cor, url.as_deref())
         .map_err(|e| e.to_string())
 }
 
@@ -527,6 +611,12 @@ pub fn run() {
                 .app_data_dir()
                 .map_err(|_| "não foi possível acessar a pasta de dados do aplicativo")?;
 
+            // Antes de qualquer coisa que possa falhar: é justamente o que
+            // falha na subida que ninguém consegue enxergar depois.
+            let _ = std::fs::create_dir_all(&pasta);
+            diagnostico::iniciar(&pasta);
+            diagnostico::registrar(&format!("agente {} subindo", env!("CARGO_PKG_VERSION")));
+
             // Uma identidade que não pode ser criada é falha fatal: sem ela o
             // Agente não tem como se apresentar. Mas a janela ainda abre, para
             // que a pessoa veja a explicação em vez de um programa que fecha
@@ -589,6 +679,10 @@ pub fn run() {
             escolher_programa,
             listar_atalhos,
             criar_atalho,
+            criar_atalho_de_site,
+            buscar_favicon,
+            escolher_icone,
+            definir_icone,
             remover_atalho,
             renomear_atalho,
             listar_configuracao_deck,

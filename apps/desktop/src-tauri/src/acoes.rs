@@ -1,4 +1,4 @@
-use crate::atalhos::{validar_caminho, AtalhosPersonalizados};
+use crate::atalhos::{normalizar_url, validar_caminho, Alvo, AtalhosPersonalizados};
 use crate::energia::{AcaoEnergia, PerfilEnergia};
 use crate::pares::ParConfiavel;
 use serde::Deserialize;
@@ -309,11 +309,30 @@ fn executar_local(
     match acao {
         Acao::AbrirPrograma(id) => {
             let atalho = cadastrados.buscar(&id).ok_or("esse atalho não existe mais")?;
-            // Confere de novo na hora de executar. O programa pode ter sido
-            // desinstalado ou movido desde o cadastro, e tentar abrir um
-            // caminho que sumiu daria um erro do Windows sem explicação.
-            validar_caminho(&atalho.caminho).map_err(|_| "o programa deste atalho não está mais no lugar")?;
-            abrir_programa(&atalho.caminho)
+            // Qual dos dois mecanismos usar sai do cadastro em disco, escrito
+            // nesta máquina — e nunca do identificador que chegou pelo canal.
+            // O celular manda `programa.<id>` para os dois de propósito: ele
+            // não sabe, nem precisa saber, se a tecla abre um jogo ou um site.
+            match atalho.alvo() {
+                Some(Alvo::Programa(caminho)) => {
+                    // Confere de novo na hora de executar. O programa pode ter
+                    // sido desinstalado ou movido desde o cadastro, e tentar
+                    // abrir um caminho que sumiu daria um erro do Windows sem
+                    // explicação.
+                    validar_caminho(caminho)
+                        .map_err(|_| "o programa deste atalho não está mais no lugar")?;
+                    abrir_programa(caminho)
+                }
+                // Mesma conferência tardia, pelo mesmo motivo: o arquivo em
+                // disco pode ter sido editado à mão desde o cadastro.
+                Some(Alvo::Site(url)) => {
+                    let url = normalizar_url(url).map_err(|_| "o endereço deste atalho não serve")?;
+                    abrir_endereco(&url)
+                }
+                // Cadastro que este Agente não entende — arquivo escrito por
+                // uma versão mais nova. Recusar é o único caminho honesto.
+                None => Err("esse atalho não está completo"),
+            }
         }
         Acao::AbrirAtalho(atalho) => abrir_endereco(atalho.url()),
         Acao::Energia(acao_energia) => crate::energia::executar(acao_energia, perfil),
@@ -386,66 +405,92 @@ fn apertar_tecla_de_midia(acao: Acao) -> Result<(), &'static str> {
 
 /// Executa um programa cadastrado.
 ///
-/// O caminho vem sempre da lista em disco, escrita pelo seletor de arquivo do
-/// Windows — nunca de uma mensagem. `Command::new` recebe o executável como
-/// argumento próprio, e não uma linha de comando montada por concatenação: sem
-/// isso, um nome de arquivo com aspas ou `&` viraria injeção de comando.
-///
 /// A pasta do próprio programa vira diretório de trabalho porque muitos jogos e
 /// aplicativos procuram os arquivos deles em caminho relativo e falham ao abrir
 /// de outro lugar.
 fn abrir_programa(caminho: &str) -> Result<(), &'static str> {
-    let mut comando = std::process::Command::new(caminho);
-    if let Some(pasta) = std::path::Path::new(caminho).parent() {
-        comando.current_dir(pasta);
-    }
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        comando.creation_flags(CREATE_NO_WINDOW);
-    }
-
-    comando
-        .spawn()
-        .map(|_| ())
-        .map_err(|_| "não foi possível abrir esse programa")
+    let pasta = std::path::Path::new(caminho)
+        .parent()
+        .map(|p| p.to_string_lossy().to_string());
+    abrir_com_o_shell(caminho, pasta.as_deref(), "não foi possível abrir esse programa")
 }
 
 /// Abre um endereço no navegador padrão do Windows.
 ///
-/// Usa `cmd /c start` com o título vazio antes da URL. O argumento vazio existe
-/// porque `start` trata o primeiro argumento entre aspas como título da janela:
-/// sem ele, um endereço entre aspas seria engolido como título e nada abriria.
+/// **O endereço pode ter sido digitado na janela**, e é isso que muda tudo em
+/// relação à versão anterior desta função. Ela montava `cmd /c start "" <url>`,
+/// o que era seguro só enquanto a URL fosse constante de compilação: o Rust só
+/// põe aspas num argumento que tenha espaço ou aspas, um endereço não tem
+/// nenhum dos dois, e o `cmd.exe` interpreta `&`, `|`, `^`, `<` e `>` antes de
+/// qualquer outra coisa. `https://exemplo/?a=1&calc` seriam dois comandos.
 ///
-/// O endereço vem de `Atalho::url`, que é constante de compilação — nada que
-/// tenha chegado pelo canal passa por aqui. A verificação abaixo é redundante
-/// hoje e existe para o dia em que alguém acrescentar um atalho: uma constante
-/// errada falha aqui em vez de virar um `file://` aberto por comando remoto.
+/// `ShellExecuteW` não tem interpretador no meio: recebe a string inteira como
+/// um argumento e entrega ao aplicativo registrado para o esquema. Some junto a
+/// janela preta de console que o `cmd` piscava a cada atalho.
+///
+/// A conferência de esquema continua, e agora vale de verdade: só `http` e
+/// `https` chegam aqui, porque `file://` abriria o disco e um esquema
+/// registrado por outro programa é execução com outro nome.
 fn abrir_endereco(url: &str) -> Result<(), &'static str> {
-    if !url.starts_with("https://") {
+    if normalizar_url(url).is_err() {
         return Err("endereço de atalho inválido");
     }
+    abrir_com_o_shell(url, None, "não foi possível abrir o endereço")
+}
 
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // CREATE_NO_WINDOW: sem isto, uma janela preta de console pisca na tela
-        // a cada atalho, num programa que se propõe a ficar fora do caminho.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", url])
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .map(|_| ())
-            .map_err(|_| "não foi possível abrir o endereço")
-    }
+/// Entrega alvo e pasta ao Shell do Windows, como o Explorer faria.
+///
+/// **Um mecanismo só para as duas famílias**, e é o que faz `.lnk` e `.url`
+/// funcionarem: o seletor de arquivo sempre os ofereceu, mas `CreateProcess` —
+/// que é o que `std::process::Command` usa — não resolve atalho do Windows, e
+/// escolher um devolvia "não foi possível abrir esse programa" sem explicar por
+/// quê. O Shell resolve, e é ele quem sabe qual navegador abre um endereço.
+#[cfg(windows)]
+fn abrir_com_o_shell(
+    alvo: &str,
+    pasta: Option<&str>,
+    erro: &'static str,
+) -> Result<(), &'static str> {
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
-    #[cfg(not(windows))]
-    {
-        Err("ação disponível apenas no Windows")
+    // O Shell exige COM na thread que chama, e as ações chegam por uma thread
+    // do tokio, que não é a da janela. O resultado é ignorado de propósito:
+    // `S_FALSE` significa "já estava iniciado" e `RPC_E_CHANGED_MODE` significa
+    // "já está em outro modo" — nos dois casos há COM, que é o que interessa.
+    let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+
+    let alvo = HSTRING::from(alvo);
+    let pasta = pasta.map(HSTRING::from);
+    let resultado = unsafe {
+        ShellExecuteW(
+            None,
+            &HSTRING::from("open"),
+            &alvo,
+            PCWSTR::null(),
+            pasta.as_ref().map_or(PCWSTR::null(), |p| PCWSTR(p.as_ptr())),
+            SW_SHOWNORMAL,
+        )
+    };
+
+    // A convenção é do Windows de 16 bits e continua valendo: o retorno é um
+    // código de erro quando cabe em 32, e um handle quando passa disso.
+    if resultado.0 as isize > 32 {
+        Ok(())
+    } else {
+        Err(erro)
     }
+}
+
+#[cfg(not(windows))]
+fn abrir_com_o_shell(
+    _alvo: &str,
+    _pasta: Option<&str>,
+    _erro: &'static str,
+) -> Result<(), &'static str> {
+    Err("ação disponível apenas no Windows")
 }
 
 #[cfg(test)]
@@ -730,14 +775,24 @@ mod testes {
     }
 
     #[test]
-    fn abrir_endereco_recusa_o_que_nao_for_https() {
+    fn abrir_endereco_so_aceita_http_e_https() {
         // A rede de segurança de `abrir_endereco`, exercitada sem abrir nada:
         // chamar com uma URL válida abriria seis abas a cada `cargo test`.
+        //
+        // `http` passou a valer quando o atalho de endereço deixou de ser lista
+        // fixa e virou algo digitado na janela: intranet e roteador não têm
+        // certificado, e recusá-los seria recusar metade do uso real.
         for endereco in [
             "file:///C:/Windows/System32",
-            "http://exemplo.com/",
+            "javascript:alert(1)",
+            // Esquema registrado por outro programa é execução com outro nome.
+            "steam://run/730",
+            "ms-settings:",
             "cmd.exe",
             "",
+            // Espaço no meio: endereço de verdade não tem, e quem tem foi
+            // montado para enganar quem lê a tecla.
+            "https://exemplo.com /x",
         ] {
             assert!(
                 abrir_endereco(endereco).is_err(),

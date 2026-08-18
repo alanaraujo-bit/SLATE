@@ -766,7 +766,7 @@ pub async fn executar(
         )
         .await
         {
-            eprintln!("Transporte indisponível: {erro}");
+            crate::diagnostico::registrar(&format!("sinalizacao caiu: {erro}"));
         }
         tokio::time::sleep(espera).await;
         espera = (espera * 2).min(Duration::from_secs(15));
@@ -854,23 +854,53 @@ async fn executar_sessao(
                             continue;
                         };
 
-                        verificar_fingerprint_remoto(
+                        /*
+                         * Daqui até o fim deste braço, falhar **não** derruba a
+                         * sinalização.
+                         *
+                         * Cada uma destas etapas era um `?`, e um `?` aqui sobe
+                         * até `executar_sessao`, que devolve erro, larga o
+                         * WebSocket sem despedida — 1006 do lado do servidor — e
+                         * espera o `backoff` para reconectar. Como a oferta é
+                         * reenviada pelo celular a cada tentativa, uma falha
+                         * determinística nesta máquina vira laço infinito: entra,
+                         * recebe oferta, morre, entra de novo. Do lado de fora,
+                         * "Conectando" para sempre e nenhuma explicação em lugar
+                         * nenhum. Foi exatamente isso que aconteceu.
+                         *
+                         * Uma oferta ruim é problema daquela sessão, não da
+                         * conexão com o servidor. Agora ela é recusada com
+                         * `Encerrar`, o motivo vai para o diagnóstico, e o Agente
+                         * continua ouvindo — inclusive os outros aparelhos.
+                         */
+                        if let Err(erro) = verificar_fingerprint_remoto(
                             &superficie,
                             &sessao_id,
                             &sdp,
                             &fingerprint,
-                        )?;
+                        ) {
+                            crate::diagnostico::registrar(&format!(
+                                "oferta recusada de {origem}: impressao digital ({erro})"
+                            ));
+                            let _ = saida_tx.send(SaidaSinalizacao::Encerrar {
+                                destino: origem,
+                                sessao_id,
+                            });
+                            continue;
+                        }
 
                         let mesma_sessao = superficie_atual.as_deref() == Some(origem.as_str())
                             && sessao_atual.as_deref() == Some(sessao_id.as_str())
                             && par.is_some();
-                        if mesma_sessao {
-                            aplicar_nova_oferta(par.as_ref().unwrap().as_ref(), sdp).await?;
+                        let montagem = if mesma_sessao {
+                            aplicar_nova_oferta(par.as_ref().unwrap().as_ref(), sdp)
+                                .await
+                                .map(|()| None)
                         } else {
                             if let Some(anterior) = par.take() {
                                 let _ = anterior.close().await;
                             }
-                            par = Some(criar_resposta(
+                            criar_resposta(
                                 identidade,
                                 &desafio.dispositivo_id,
                                 &superficie,
@@ -881,14 +911,48 @@ async fn executar_sessao(
                                 &sessao_id,
                                 sdp,
                                 saida_tx.clone(),
-                            ).await?);
+                            )
+                            .await
+                            .map(Some)
+                        };
+                        match montagem {
+                            Ok(Some(novo)) => par = Some(novo),
+                            Ok(None) => {}
+                            Err(erro) => {
+                                crate::diagnostico::registrar(&format!(
+                                    "nao consegui montar a conexao com {origem}: {erro}"
+                                ));
+                                let _ = saida_tx.send(SaidaSinalizacao::Encerrar {
+                                    destino: origem,
+                                    sessao_id,
+                                });
+                                continue;
+                            }
                         }
 
-                        let atual = par.as_ref().ok_or(ErroTransporte::WebRtc)?;
-                        let local = atual.local_description().await
-                            .ok_or(ErroTransporte::WebRtc)?;
-                        let fingerprint_local = extrair_fingerprint_dtls(&local.sdp)
-                            .ok_or(ErroTransporte::WebRtc)?;
+                        let Some(atual) = par.as_ref() else {
+                            continue;
+                        };
+                        let Some(local) = atual.local_description().await else {
+                            crate::diagnostico::registrar(
+                                "a conexao subiu sem descricao local - oferta descartada",
+                            );
+                            let _ = saida_tx.send(SaidaSinalizacao::Encerrar {
+                                destino: origem,
+                                sessao_id,
+                            });
+                            continue;
+                        };
+                        let Some(fingerprint_local) = extrair_fingerprint_dtls(&local.sdp) else {
+                            crate::diagnostico::registrar(
+                                "descricao local sem impressao digital - oferta descartada",
+                            );
+                            let _ = saida_tx.send(SaidaSinalizacao::Encerrar {
+                                destino: origem,
+                                sessao_id,
+                            });
+                            continue;
+                        };
                         let assinatura = identidade.assinar(
                             mensagem_fingerprint_dtls(
                                 &sessao_id,
@@ -1084,23 +1148,77 @@ fn verificar_fingerprint_remoto(
     Ok(())
 }
 
+/**
+ * Os endereços locais em que o ICE vai escutar.
+ *
+ * **Cada um é testado antes de entrar na lista, e é isso que importa aqui.**
+ * A versão anterior devolvia tudo o que a máquina anunciava e deixava o
+ * `build()` da conexão descobrir o que prestava — só que uma falha ali não
+ * some sozinha: ela vira `ErroTransporte::WebRtc`, sobe pelo `?` do
+ * tratamento da oferta e derruba a sessão de sinalização inteira, que fecha
+ * com 1006 sem nunca ter respondido. Do lado de fora isso aparece como um
+ * celular eternamente em "Conectando" e um Agente dizendo que não há
+ * ninguém conectado — a mesma tela de quando não há rede.
+ *
+ * Dois endereços entram nessa lista e não podem ser vinculados:
+ *
+ * - **IPv6 link-local** (`fe80::/10`) precisa do índice de zona para dizer
+ *   *por qual placa*, e `[fe80::1]:0` sem ele é recusado pelo Windows. Toda
+ *   placa ativa tem um.
+ * - **Placas virtuais** — Hyper-V, WSL, VirtualBox, VPN — deixam endereços
+ *   que nem sempre aceitam vínculo, e um computador com mais programas
+ *   instalados tem mais delas. Era a diferença entre a máquina onde
+ *   funcionava e a máquina onde não.
+ *
+ * Testar custa um socket efêmero por endereço, uma vez por sessão. Perder a
+ * conexão custa a funcionalidade inteira, sem explicação nenhuma.
+ */
 fn enderecos_udp() -> Vec<String> {
-    let mut enderecos = list_afinet_netifas()
+    let enderecos = list_afinet_netifas()
         .unwrap_or_default()
         .into_iter()
         .map(|(_, ip)| ip)
-        .filter(|ip| !ip.is_loopback() && !ip.is_unspecified())
+        .filter(pode_escutar)
         .map(|ip| match ip {
             std::net::IpAddr::V4(ip) => format!("{ip}:0"),
             std::net::IpAddr::V6(ip) => format!("[{ip}]:0"),
         })
+        .filter(|endereco| aceita_vinculo(endereco))
         .collect::<Vec<_>>();
+
     if enderecos.is_empty() {
-        enderecos.push("0.0.0.0:0".to_string());
+        // Deixar o sistema escolher é melhor do que não escutar em lugar
+        // nenhum: sem isto, uma máquina cujos endereços todos falhassem
+        // ficaria permanentemente incapaz de conectar.
+        return vec!["0.0.0.0:0".to_string()];
     }
     enderecos
 }
 
+/// Se um endereço da máquina faz sentido como ponto de escuta.
+///
+/// Separada e pura para poder ser exercitada sem placa de rede nenhuma — o
+/// defeito que ela conserta só aparecia em máquina alheia, e um teste que
+/// dependesse do hardware de quem roda não teria pegado nada.
+fn pode_escutar(ip: &std::net::IpAddr) -> bool {
+    if ip.is_loopback() || ip.is_unspecified() {
+        return false;
+    }
+    // Link-local sem índice de zona não é endereço vinculável, é meio
+    // endereço: `[fe80::1]:0` não diz por qual placa, e o Windows recusa.
+    // Toda placa ativa tem um destes, então deixá-lo passar era garantir um
+    // candidato ruim na lista de qualquer máquina.
+    !matches!(ip, std::net::IpAddr::V6(v6) if v6.segments()[0] & 0xffc0 == 0xfe80)
+}
+
+/// Se dá para escutar UDP neste endereço, descobrindo do único jeito honesto.
+///
+/// O socket é aberto e descartado na hora. A porta é efêmera e a que a
+/// conexão vai usar de verdade é outra, então isto responde sobre o endereço,
+/// não sobre a porta.
+fn aceita_vinculo(endereco: &str) -> bool {
+    std::net::UdpSocket::bind(endereco).is_ok()
+}
 fn extrair_fingerprint_dtls(sdp: &str) -> Option<String> {
     sdp.lines().find_map(|linha| {
         let linha = linha.trim();
@@ -1142,6 +1260,7 @@ mod testes {
             id: id.to_string(),
             nome: format!("Jogo {id}"),
             caminho: r"C:\Users\alguem\Games\segredo\jogo.exe".to_string(),
+            url: None,
             cor: "violet".to_string(),
             icone,
         }
@@ -1237,6 +1356,32 @@ mod testes {
     }
 
     #[test]
+    fn o_deck_enviado_nunca_carrega_o_endereco_do_atalho_de_site() {
+        // Irmão do teste acima, e pelo mesmo raciocínio. O endereço é menos
+        // sensível que um caminho de disco, mas a promessa do ADR-0004 não é
+        // "não vaze o que for sensível", é "o celular recebe identificador".
+        // Um endereço chegando junto convidaria o outro lado a abri-lo
+        // diretamente um dia, e aí a tecla deixaria de passar por aqui.
+        let site = Atalho {
+            id: "s".to_string(),
+            nome: "Painel do roteador".to_string(),
+            caminho: String::new(),
+            url: Some("http://192.168.0.1/admin?token=segredo".to_string()),
+            cor: "cyan".to_string(),
+            icone: None,
+        };
+        let mensagens = mensagens_do_deck(&[site], &deck_de_teste());
+        let bruto = mensagens[0].to_string();
+        assert!(!bruto.contains("url"), "o campo vazou: {bruto}");
+        assert!(!bruto.contains("192.168"), "o endereço vazou: {bruto}");
+        assert!(!bruto.contains("segredo"), "o endereço vazou: {bruto}");
+        // E a tecla chega inteira, indistinguível de um atalho de programa —
+        // que é justamente o ponto: o celular não sabe o que ela abre.
+        assert_eq!(mensagens[0]["atalhos"][0]["id"], "s");
+        assert_eq!(mensagens[0]["atalhos"][0]["nome"], "Painel do roteador");
+    }
+
+    #[test]
     fn a_lista_vazia_ainda_vira_uma_mensagem() {
         // Sem ela, remover o último atalho deixaria a grade do celular exibindo
         // um cadastro que já não existe até alguém recarregar.
@@ -1281,6 +1426,39 @@ mod testes {
             extrair_fingerprint_dtls(&sdp),
             Some(fp.to_ascii_uppercase())
         );
+    }
+
+    #[test]
+    fn endereco_que_nao_da_para_escutar_fica_de_fora() {
+        use std::net::IpAddr;
+
+        // O defeito que tirou o produto do ar para quem não era o desenvolvedor:
+        // a lista ia inteira para o `build()` da conexão, e um endereço ruim
+        // fazia a montagem falhar. Aquele erro subia pelo `?` do tratamento da
+        // oferta, derrubava a sinalização com 1006 e o celular ficava em
+        // "Conectando" para sempre — sem nada escrito em lugar nenhum.
+        let fora: Vec<IpAddr> = vec![
+            // Link-local: precisa do índice de zona para dizer por qual placa.
+            "fe80::1".parse().unwrap(),
+            "fe80::9c2b:1a3f:2d4e:5f60".parse().unwrap(),
+            "127.0.0.1".parse().unwrap(),
+            "::1".parse().unwrap(),
+            "0.0.0.0".parse().unwrap(),
+        ];
+        for ip in fora {
+            assert!(!pode_escutar(&ip), "deixou passar: {ip}");
+        }
+
+        // E o que é endereço de verdade continua entrando, inclusive o IPv6
+        // global — tirar link-local não pode virar "só IPv4".
+        let dentro: Vec<IpAddr> = vec![
+            "192.168.0.10".parse().unwrap(),
+            "10.0.0.5".parse().unwrap(),
+            "2804:14c:1:2::9".parse().unwrap(),
+        ];
+        for ip in dentro {
+            assert!(pode_escutar(&ip), "recusou: {ip}");
+        }
     }
 
     #[test]

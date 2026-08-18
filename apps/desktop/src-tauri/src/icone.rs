@@ -148,3 +148,94 @@ fn codificar_png(rgba: &[u8]) -> Option<Vec<u8>> {
 pub fn extrair(_caminho: &str) -> Option<String> {
     None
 }
+
+/// Teto de leitura de uma imagem escolhida à mão, antes de qualquer conversão.
+///
+/// Não é o teto do que vira tecla — esse é `atalhos::MAXIMO_ICONE`, e vale
+/// sobre o data URI já pronto. Este aqui existe só para que um arquivo de 400
+/// MB com extensão `.png` não vire 400 MB de memória a caminho de ser
+/// recusado. 4 MiB cabe qualquer logotipo que alguém queira usar.
+pub const MAXIMO_LEITURA: usize = 4 * 1024 * 1024;
+
+/// Tipos de imagem aceitos como arte de tecla, reconhecidos pelos bytes.
+///
+/// **Pelo conteúdo, e não pela extensão.** A extensão é um palpite de quem
+/// nomeou o arquivo, e o `Content-Type` de um favicon é um palpite de quem
+/// configurou o servidor — na prática, muita gente serve PNG dizendo
+/// `image/x-icon`. O que decide é o começo do arquivo.
+///
+/// SVG fica de fora. Não tem assinatura binária, é XML — logo, um documento com
+/// script e referências externas dentro de um `<img>` que vai ser desenhado
+/// tanto na janela quanto no celular. Um desenho não vale esse risco.
+fn tipo_da_imagem(bytes: &[u8]) -> Option<&'static str> {
+    // Escrita byte a byte: a assinatura do PNG começa em 0x89, que não é ASCII
+    // e por isso não cabe num literal de string de bytes.
+    const PNG: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    const ICO: &[u8] = &[0x00, 0x00, 0x01, 0x00];
+    const CUR: &[u8] = &[0x00, 0x00, 0x02, 0x00];
+
+    if bytes.starts_with(PNG) {
+        Some("image/png")
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("image/jpeg")
+    } else if bytes.starts_with(b"GIF8") {
+        Some("image/gif")
+    } else if bytes.starts_with(ICO) || bytes.starts_with(CUR) {
+        Some("image/x-icon")
+    } else if bytes.len() > 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        Some("image/webp")
+    } else {
+        None
+    }
+}
+
+/// Transforma bytes de imagem no data URI correspondente, sem redimensionar.
+///
+/// **Não aplica `MAXIMO_ICONE`, e é de propósito.** O que sai daqui vai para a
+/// janela, que encolhe a imagem para o tamanho de uma tecla antes de mandar
+/// gravar — e é o resultado desse encolhimento que `atalhos::validar_icone`
+/// mede. Cortar aqui, no tamanho original, recusaria praticamente toda imagem
+/// que alguém escolheria: um PNG de logotipo passa de 24 KiB sem esforço, e
+/// depois de virar 64 pontos ele cabe de sobra.
+///
+/// Quem encolhe é o webview porque é ele quem já tem decodificador de PNG,
+/// JPEG, GIF, WebP e ICO. Trazer um para cá seria reimplementar o navegador
+/// que a janela já é.
+pub fn de_bytes(bytes: &[u8]) -> Option<String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let tipo = tipo_da_imagem(bytes)?;
+    Some(format!("data:{tipo};base64,{}", STANDARD.encode(bytes)))
+}
+
+/// Lê uma imagem escolhida no seletor de arquivo e devolve o data URI dela.
+pub fn de_arquivo(caminho: &str) -> Option<String> {
+    let metadados = std::fs::metadata(caminho).ok()?;
+    if metadados.len() > MAXIMO_LEITURA as u64 {
+        return None;
+    }
+    de_bytes(&std::fs::read(caminho).ok()?)
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    #[test]
+    fn reconhece_pelos_bytes_e_ignora_o_que_nao_e_imagem() {
+        let png = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, b'x'];
+        assert_eq!(tipo_da_imagem(&png), Some("image/png"));
+        assert_eq!(tipo_da_imagem(&[0xFF, 0xD8, 0xFF, 0xE0]), Some("image/jpeg"));
+        assert_eq!(tipo_da_imagem(b"GIF89a"), Some("image/gif"));
+        assert_eq!(tipo_da_imagem(&[0, 0, 1, 0, 1, 0]), Some("image/x-icon"));
+        assert_eq!(tipo_da_imagem(b"RIFF____WEBPVP8 "), Some("image/webp"));
+
+        // O que um servidor devolve quando o favicon não existe: uma página de
+        // erro com `Content-Type: image/x-icon` na cabeça. Confiar no tipo
+        // declarado poria HTML dentro de um `<img>`.
+        assert!(tipo_da_imagem(b"<!DOCTYPE html><html>").is_none());
+        // SVG é recusado por escolha, e não por descuido.
+        assert!(tipo_da_imagem(b"<svg xmlns=\"http://www.w3.org/2000/svg\">").is_none());
+        assert!(tipo_da_imagem(b"").is_none());
+    }
+}
