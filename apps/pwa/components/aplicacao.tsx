@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Botao, Rotulo, Superficie } from "@slate/design-system";
-import type { AtalhoDeDeck, PerfilDeDeck, PerfilEnergia } from "@slate/protocol";
+import type { AtalhoDeDeck, CallEstado, PerfilDeDeck, PerfilEnergia } from "@slate/protocol";
 import {
   api,
   EVENTO_SEM_CONEXAO,
@@ -52,6 +52,8 @@ export function Aplicacao() {
   /** Painel que o computador está pedindo agora. Ver `context.changed`. */
   const [perfilSugerido, setPerfilSugerido] = useState<string | undefined>();
   const [perfilEnergia, setPerfilEnergia] = useState<PerfilEnergia | undefined>();
+  /** O que o CALL daquele computador está fazendo. Ver `call.estado`. */
+  const [estadoCall, setEstadoCall] = useState<CallEstado | undefined>();
   const [agentePrincipalId, setAgentePrincipalId] = useState<string | null>(null);
   const [removendoDispositivo, setRemovendoDispositivo] = useState<string | null>(null);
   const [tokenConvite, setTokenConvite] = useState<string | null>(null);
@@ -161,6 +163,9 @@ export function Aplicacao() {
         // O perfil descreve **aquela** máquina, naquela sessão, sob aquela
         // permissão. Ele chega e cai junto com o deck, e pelo mesmo motivo.
         aoReceberEnergia: (energia) => setPerfilEnergia(energia?.perfil),
+        // Mesma disciplina: descreve o CALL **daquele** computador, e cai com a
+        // conexão que o trouxe.
+        aoReceberCall: setEstadoCall,
         aoMudarContexto: setPerfilSugerido,
       });
       transporteAtual.current = transporte;
@@ -179,6 +184,7 @@ export function Aplicacao() {
       setProgramas([]);
       setPerfis([]);
       setPerfilEnergia(undefined);
+      setEstadoCall(undefined);
       setPerfilPadraoId(undefined);
       setPerfilSugerido(undefined);
       if (transporteAtual.current === transporte) transporteAtual.current = null;
@@ -430,6 +436,7 @@ export function Aplicacao() {
                 perfilPadraoId={perfilPadraoId}
                 perfilSugerido={perfilSugerido}
                 perfilEnergia={perfilEnergia}
+                call={estadoCall}
                 executar={(actionId) =>
                   transporteAtual.current?.executarAcao(actionId) ??
                   Promise.resolve({

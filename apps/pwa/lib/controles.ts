@@ -12,7 +12,7 @@
  */
 
 import type { NomeMarca } from "@slate/design-system";
-import { ACOES_ENERGIA, type PerfilEnergia } from "@slate/protocol";
+import { ACOES_ENERGIA, type CallEstado, type PerfilEnergia } from "@slate/protocol";
 
 export interface Controle {
   actionId: string;
@@ -29,7 +29,9 @@ export interface Controle {
     | "Escudo"
     | "Camada"
     | "Atualizar"
-    | "Energia";
+    | "Energia"
+    | "Microfone"
+    | "MicrofoneMudo";
   /**
    * Só aparece quando o Agente anunciou `action.media.completo`.
    *
@@ -304,4 +306,48 @@ export function visiveis(
   gradeCompleta: boolean,
 ): readonly Controle[] {
   return lista.filter((c) => gradeCompleta || !c.exigeGradeCompleta);
+}
+
+/**
+ * O mudo do CALL.
+ *
+ * **Uma tecla só na tela, dois identificadores no canal.** Qual deles sai
+ * depende do estado que chegou em `call.estado` — é o que permite dizer "fique
+ * mudo" em vez de "alterne", sem a lista de ações do Agente deixar de ser
+ * fechada. Alternar por um canal que pode repetir uma mensagem deixaria a tecla
+ * dizendo o contrário do que está acontecendo no computador.
+ */
+export function controleDoCall(call: CallEstado | undefined): Controle | undefined {
+  if (!call?.disponivel || !call.emChamada) return undefined;
+  return call.mudo
+    ? {
+        actionId: "call.falar",
+        rotulo: "Voltar a falar",
+        icone: "MicrofoneMudo",
+        exigeGradeCompleta: false,
+      }
+    : {
+        actionId: "call.mudo",
+        rotulo: "Mudo no CALL",
+        icone: "Microfone",
+        exigeGradeCompleta: false,
+      };
+}
+
+/**
+ * Por que a tecla do CALL não está ali, em linguagem de produto.
+ *
+ * Devolve `undefined` quando não há nada a explicar — ou porque a tecla está na
+ * tela, ou porque aquele computador nem sabe o que é o CALL e prometer algo
+ * seria pior do que o silêncio.
+ *
+ * As duas ausências têm causas diferentes e ações diferentes: uma se resolve
+ * abrindo o CALL, a outra entrando num canal de voz. Um "indisponível" genérico
+ * deixaria a pessoa sem saber qual das duas é.
+ */
+export function explicarSemCall(call: CallEstado | undefined): string | undefined {
+  if (!call) return undefined;
+  if (!call.disponivel) return "Abra o CALL nesse computador para o mudo aparecer aqui.";
+  if (!call.emChamada) return "Entre num canal de voz do CALL para o mudo aparecer aqui.";
+  return undefined;
 }

@@ -57,6 +57,22 @@ export const CAPACIDADES = [
    * segunda, num notebook sem rede utilizável.
    */
   "energia.ponte",
+  /**
+   * Este Agente sabe falar com o CALL instalado naquele computador — mutar o
+   * microfone e receber de volta o que está acontecendo na chamada.
+   *
+   * **Não é anunciada por par**, diferente de `action.atalhos` e
+   * `energia.controle`: mutar entra sob `system.media`, que o pareamento já
+   * concede, pela mesma razão do volume — mexer numa chamada que já está
+   * acontecendo é a mesma autoridade que mexer no que já está tocando. Exigir
+   * marcação na janela obrigaria a reparear todo aparelho existente para ganhar
+   * um botão de mudo.
+   *
+   * Ela também não promete que o CALL está aberto. Isso é `disponivel`, em
+   * `call.estado`: capacidade é o que o Agente sabe fazer, estado é o que dá
+   * para fazer agora.
+   */
+  "call.controle",
   "state.system",
   "state.media",
   "context.rules",

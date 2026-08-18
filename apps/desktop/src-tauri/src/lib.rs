@@ -1,5 +1,6 @@
 mod acoes;
 mod atalhos;
+mod call;
 mod diagnostico;
 mod energia;
 mod favicon;
@@ -634,11 +635,21 @@ pub fn run() {
                 // sobreviver ao fechamento do Agente.
                 let api = ClienteApi::com_sessao(endereco_api(), &pasta);
                 let avisos_de_permissao = transporte::canal_de_avisos();
+                // A ligação com o CALL sobe junto do transporte e nunca desiste:
+                // o CALL abrir e fechar várias vezes numa tarde é uso normal, e
+                // cada volta dele precisa reencontrar o painel sozinha.
+                let (call, pedidos_de_mudo) = call::LigacaoComOCall::nova();
+                tauri::async_runtime::spawn(call::manter_ligacao(
+                    call.clone(),
+                    avisos_de_permissao.clone(),
+                    pedidos_de_mudo,
+                ));
                 let tarefa = tauri::async_runtime::spawn(transporte::executar(
                     api.clone(),
                     identidade.clone(),
                     pares.clone(),
                     atalhos.clone(),
+                    call,
                     avisos_de_permissao.clone(),
                 ));
                 // A vigilância do primeiro plano roda ao lado do transporte, e

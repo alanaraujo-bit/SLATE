@@ -264,6 +264,38 @@ export const energiaEstado = z.object({
 
 export type EnergiaEstado = z.infer<typeof energiaEstado>;
 
+/**
+ * O que o CALL está fazendo naquele computador agora.
+ *
+ * Mensagem própria, e não capacidades no hello, pelo mesmo motivo de
+ * `energia.estado`: isto muda a toda hora — a pessoa entra num canal, sai, muta
+ * — e capacidade é coisa que se negocia uma vez por sessão. Renegociar o hello
+ * a cada aperto do microfone seria usar a ferramenta errada.
+ *
+ * A capacidade `call.controle` diz que aquele Agente **sabe** falar com o CALL;
+ * `disponivel` aqui diz se ele está falando **agora**. As duas perguntas são
+ * diferentes: um Agente novo com o CALL fechado responde sim para a primeira e
+ * não para a segunda, e é exatamente esse caso que precisa ser explicável na
+ * tela em vez de virar uma tecla que não faz nada.
+ */
+export const callEstado = z.object({
+  /** Se o Agente está conectado ao CALL. Falso quando o CALL não está aberto. */
+  disponivel: z.boolean(),
+  /**
+   * Se há um canal de voz com microfone aberto.
+   *
+   * Campo próprio, e não algo deduzido de `mudo`, porque é ele que decide se a
+   * tecla existe: fora de uma chamada o CALL não tem o que mutar, e desenhar o
+   * botão assim mesmo seria a mesma promessa vazia que o ADR-0006 proíbe na
+   * grade de energia.
+   */
+  emChamada: z.boolean(),
+  mudo: z.boolean(),
+  transmitindo: z.boolean(),
+});
+
+export type CallEstado = z.infer<typeof callEstado>;
+
 export const contextoAlterado = z.object({
   /** Perfil que passou a valer. */
   profileId: z.string().min(1).max(128),
@@ -293,6 +325,7 @@ export const SCHEMAS = {
   "state.media": estadoMidia,
   "deck.estado": deckEstado,
   "energia.estado": energiaEstado,
+  "call.estado": callEstado,
   "context.changed": contextoAlterado,
 } as const;
 
@@ -340,6 +373,11 @@ export const ESCOPO_EXIGIDO: Record<TipoConhecido, Escopo | null> = {
   // não pode desligar deixaria a interface sem como explicar por que o botão
   // não está lá.
   "energia.estado": "state.read",
+  // Mesmo raciocínio de `energia.estado`: saber que você está mudo não é poder
+  // mutar. Quem autoriza mexer é `system.media`, verificado na ação — e é o
+  // mesmo escopo do volume, porque mexer no microfone de uma chamada que já
+  // está acontecendo é a mesma autoridade que mexer no que já está tocando.
+  "call.estado": "state.read",
   "context.changed": "state.read",
 };
 

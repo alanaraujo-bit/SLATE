@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Icone, Marca, Rotulo } from "@slate/design-system";
 import type {
   AtalhoDeDeck,
+  CallEstado,
   ItemDePerfilDeck,
   PerfilDeDeck,
   PerfilEnergia,
@@ -13,7 +14,9 @@ import {
   CONTROLES_MIDIA,
   CONTROLES_VOLUME,
   acaoDoPrograma,
+  controleDoCall,
   energiaVisivel,
+  explicarSemCall,
   explicarSemRetorno,
   textoProntoParaRetorno,
   visiveis,
@@ -121,6 +124,7 @@ export function ControlesBasicos({
   perfilPadraoId,
   perfilSugerido,
   perfilEnergia,
+  call,
 }: {
   executar: (actionId: string) => Promise<ResultadoExecucaoAcao>;
   /**
@@ -154,6 +158,14 @@ export function ControlesBasicos({
    * que respondem "escopo negado".
    */
   perfilEnergia?: PerfilEnergia;
+  /**
+   * O que o CALL daquele computador está fazendo agora.
+   *
+   * Ausente é o normal: só chega de Agentes que anunciam `call.controle`. E
+   * mesmo presente ele costuma dizer que não há o que mutar — o CALL fechado é
+   * o estado comum, não a exceção.
+   */
+  call?: CallEstado;
 }) {
   /**
    * Só o erro vira texto na tela.
@@ -180,6 +192,9 @@ export function ControlesBasicos({
   // não por uma capacidade única como os outros grupos. Duas máquinas com o
   // mesmo Agente mostram grades diferentes, e é isso que o ADR-0006 pede.
   const energia = energiaVisivel(perfilEnergia);
+  // Uma tecla ou nenhuma, e qual delas depende de estar mudo agora.
+  const teclaDoCall = controleDoCall(call);
+  const semCall = explicarSemCall(call);
 
   if (perfis.length > 0) {
     return (
@@ -192,6 +207,8 @@ export function ControlesBasicos({
         acionar={acionar}
         erro={erro}
         perfilEnergia={perfilEnergia}
+        teclaDoCall={teclaDoCall}
+        semCall={semCall}
       />
     );
   }
@@ -263,6 +280,20 @@ export function ControlesBasicos({
             <h2>Volume</h2>
           </div>
           <div className="grade-teclas">{volume.map(botao)}</div>
+        </div>
+      )}
+
+      {(teclaDoCall || semCall) && (
+        <div className="painel__grupo painel__grupo--call">
+          <div className="painel__cabecalho">
+            <h2>CALL</h2>
+            {semCall && (
+              <Rotulo tamanho="xs" tom="sutil">
+                {semCall}
+              </Rotulo>
+            )}
+          </div>
+          {teclaDoCall && <div className="grade-teclas">{botao(teclaDoCall)}</div>}
         </div>
       )}
 
@@ -357,6 +388,8 @@ function PainelDePerfis({
   acionar,
   erro,
   perfilEnergia,
+  teclaDoCall,
+  semCall,
 }: {
   perfis: readonly PerfilDeDeck[];
   perfilPadraoId?: string;
@@ -366,6 +399,8 @@ function PainelDePerfis({
   acionar: (actionId: string) => void;
   erro: string | null;
   perfilEnergia?: PerfilEnergia;
+  teclaDoCall?: Controle;
+  semCall?: string;
 }) {
   const perfilInicial =
     perfis.find((perfil) => perfil.id === perfilPadraoId)?.id ?? perfis[0]?.id ?? "";
@@ -539,6 +574,35 @@ function PainelDePerfis({
           </div>
         )}
       </div>
+
+      {/*
+        O CALL fica fora das páginas pelo mesmo motivo que a energia, e o furo
+        que a energia já pagou é o mesmo que este bloco evita: se a tecla
+        existisse só na grade clássica, ninguém com Agente novo — ou seja,
+        ninguém com perfis — jamais a veria.
+
+        E ela não pode ser item de página porque não é um atalho que alguém
+        arranjou: ela aparece quando há chamada aberta e some quando não há.
+        Como item, sumiria ao trocar de painel e voltaria noutro.
+      */}
+      {(teclaDoCall || semCall) && (
+        <div className="faixa-call">
+          {teclaDoCall ? (
+            <button
+              type="button"
+              className="tecla tecla--energia"
+              onClick={() => acionar(teclaDoCall.actionId)}
+            >
+              <Representacao controle={teclaDoCall} />
+              <span>{teclaDoCall.rotulo}</span>
+            </button>
+          ) : (
+            <Rotulo tamanho="xs" tom="sutil">
+              {semCall}
+            </Rotulo>
+          )}
+        </div>
+      )}
 
       {/*
         Energia fica fora das páginas do painel, e é de propósito.

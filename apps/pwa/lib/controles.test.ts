@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { PerfilEnergia } from "@slate/protocol";
+import type { CallEstado, PerfilEnergia } from "@slate/protocol";
 import {
   CONTROLES_ATALHOS,
   CONTROLES_ENERGIA,
   CONTROLES_MIDIA,
   CONTROLES_VOLUME,
+  controleDoCall,
   energiaVisivel,
+  explicarSemCall,
   explicarSemRetorno,
   textoProntoParaRetorno,
   visiveis,
@@ -194,5 +196,51 @@ describe("grade de energia", () => {
     for (const controle of CONTROLES_ENERGIA) {
       expect(controle.rotulo).not.toMatch(tecnico);
     }
+  });
+});
+
+describe("mudo do CALL", () => {
+  const estado = (partes: Partial<CallEstado> = {}): CallEstado => ({
+    disponivel: true,
+    emChamada: true,
+    mudo: false,
+    transmitindo: false,
+    ...partes,
+  });
+
+  it("manda os identificadores que o Agente reconhece", () => {
+    // Fixados do outro lado em `o_mudo_do_call_chega_como_dois_identificadores`,
+    // em `apps/desktop/src-tauri/src/acoes.rs`. Um identificador aqui sem a
+    // ação lá vira um botão que responde "ação não encontrada".
+    expect(controleDoCall(estado({ mudo: false }))?.actionId).toBe("call.mudo");
+    expect(controleDoCall(estado({ mudo: true }))?.actionId).toBe("call.falar");
+  });
+
+  it("manda o valor desejado, e nunca um alternar", () => {
+    // O identificador enviado é o oposto do estado atual. É isso que torna o
+    // toque idempotente: dois toques que chegam como um deixam o computador no
+    // mesmo lugar em que a tela diz que ele está.
+    expect(controleDoCall(estado({ mudo: false }))?.actionId).not.toBe("call.falar");
+    expect(controleDoCall(estado({ mudo: true }))?.actionId).not.toBe("call.mudo");
+  });
+
+  it("não desenha tecla quando não há o que mutar", () => {
+    // As três ausências, e as três precisam sumir a tecla: sem Agente que
+    // saiba do CALL, com o CALL fechado, e com o CALL aberto fora de uma
+    // chamada — que é onde `alternarMicrofone` desiste na primeira linha.
+    expect(controleDoCall(undefined)).toBeUndefined();
+    expect(controleDoCall(estado({ disponivel: false }))).toBeUndefined();
+    expect(controleDoCall(estado({ emChamada: false }))).toBeUndefined();
+  });
+
+  it("explica cada ausência com a ação que a resolve", () => {
+    // Um "indisponível" genérico deixaria a pessoa sem saber se abre o CALL ou
+    // se entra num canal. São ações diferentes, então são frases diferentes.
+    expect(explicarSemCall(estado({ disponivel: false }))).toMatch(/abra o call/i);
+    expect(explicarSemCall(estado({ emChamada: false }))).toMatch(/canal de voz/i);
+    // Com a tecla na tela não há ausência a explicar; e sem Agente que conheça
+    // o CALL, prometer qualquer coisa seria pior do que o silêncio.
+    expect(explicarSemCall(estado())).toBeUndefined();
+    expect(explicarSemCall(undefined)).toBeUndefined();
   });
 });

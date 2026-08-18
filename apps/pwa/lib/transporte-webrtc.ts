@@ -10,11 +10,13 @@ import {
   acaoExecutarResposta,
   acaoResultado,
   criarEnvelope,
+  callEstado,
   contextoAlterado,
   deckEstado,
   energiaEstado,
   hello,
   type AtalhoDeDeck,
+  type CallEstado,
   type EnergiaEstado,
   type PerfilDeDeck,
   mensagemServidorSinalizacao,
@@ -67,6 +69,16 @@ export interface OpcoesTransporteWebRtc {
    * permissão marcada na janela daquele computador (ADR-0006).
    */
   aoReceberEnergia?: (energia: EnergiaEstado | undefined) => void;
+  /**
+   * O que o CALL daquele computador está fazendo agora.
+   *
+   * Chamada com `undefined` quando o canal cai, pelo mesmo motivo do perfil de
+   * energia: o estado descreve **aquela** máquina, e mantê-lo depois da queda
+   * deixaria na tela um botão de mudo para uma chamada que ninguém alcança.
+   *
+   * Só chega de Agentes que anunciam `call.controle`.
+   */
+  aoReceberCall?: (call: CallEstado | undefined) => void;
   /** Usado pelo teste de relay; produção deixa o ICE escolher o melhor caminho. */
   politicaIce?: RTCIceTransportPolicy;
 }
@@ -549,6 +561,13 @@ export class TransporteWebRtc {
       return;
     }
 
+    if (envelope.valor.k === "call.estado") {
+      const estado = callEstado.safeParse(conteudo.valor);
+      if (!estado.success) return;
+      this.opcoes.aoReceberCall?.(estado.data);
+      return;
+    }
+
     if (envelope.valor.k === "energia.estado") {
       const estado = energiaEstado.safeParse(conteudo.valor);
       if (!estado.success) return;
@@ -667,6 +686,9 @@ export class TransporteWebRtc {
     // desligar depois da queda ofereceria desligar um computador que já não
     // está do outro lado.
     this.opcoes.aoReceberEnergia?.(undefined);
+    // E o CALL junto: um botão de mudo sobrevivente apontaria para uma chamada
+    // que este aparelho já não alcança.
+    this.opcoes.aoReceberCall?.(undefined);
     for (const [id] of this.pendentes) {
       this.concluirPendente(id, {
         ok: false,

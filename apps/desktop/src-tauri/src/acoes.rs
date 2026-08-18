@@ -36,6 +36,13 @@ pub enum Acao {
     /// qual estado é o certo depende do que a máquina comprovadamente suporta,
     /// e essa decisão não pode vir do celular.
     ProntoParaRetorno,
+    /// Manda o CALL deste computador ficar mudo, ou voltar a falar.
+    ///
+    /// Carrega o valor desejado, e não um "alterne", porque o celular já sabe
+    /// o estado do CALL — ele chega em `call.estado`. Alternar por um canal
+    /// que pode repetir uma mensagem deixaria as duas pontas discordando sem
+    /// ninguém perceber; dizer "fique mudo" converge sozinho.
+    Call(bool),
     /// Pede a **este** Agente que emita o pacote que acorda outra máquina.
     ///
     /// O alvo está desligado, então quem recebe o pedido é sempre uma ponte —
@@ -174,6 +181,11 @@ pub fn receber(
         "volume.aumentar" => Acao::AumentarVolume,
         "volume.diminuir" => Acao::DiminuirVolume,
         "volume.mudo" => Acao::Mudo,
+        // CALL: dois identificadores para um botão só do outro lado. É o que
+        // mantém a lista fechada sem parâmetro — o celular escolhe qual mandar
+        // a partir do estado que já recebeu, e nada vindo do canal vira valor.
+        "call.mudo" => Acao::Call(true),
+        "call.falar" => Acao::Call(false),
         "atalho.youtube" => Acao::AbrirAtalho(Atalho::YouTube),
         "atalho.twitch" => Acao::AbrirAtalho(Atalho::Twitch),
         "atalho.netflix" => Acao::AbrirAtalho(Atalho::Netflix),
@@ -249,7 +261,11 @@ pub fn escopo_exigido(acao: &Acao) -> &'static str {
         | Acao::Parar
         | Acao::AumentarVolume
         | Acao::DiminuirVolume
-        | Acao::Mudo => "system.media",
+        | Acao::Mudo
+        // Mutar uma chamada que já está acontecendo é a mesma autoridade que
+        // mexer no que já está tocando. Escopo próprio obrigaria a reparear
+        // todo aparelho existente para ganhar um botão de mudo.
+        | Acao::Call(_) => "system.media",
         // Abrir site e abrir programa são a mesma autoridade: os dois criam
         // processo. Separar em dois escopos daria duas caixas para marcar sem
         // nenhum ganho de segurança.
@@ -283,6 +299,14 @@ pub enum Execucao {
     /// Emitir o pacote que acorda o dispositivo de id informado. Quem resolve o
     /// endereço é a nuvem, nunca o pedido que chegou pelo canal.
     AcordarAlvo(String),
+    /// Deixar o CALL deste computador mudo, ou não.
+    ///
+    /// Sai daqui pelo mesmo motivo de `AcordarAlvo`: a ligação com o CALL é
+    /// assíncrona e pode não existir, e isso não cabe numa função que devolve
+    /// em microssegundos. Obrigar o chamador a tratar este caminho pelo
+    /// compilador é o que impede o defeito de sempre — recurso pronto dos dois
+    /// lados e nada ligando um ao outro no meio.
+    CallMudo(bool),
 }
 
 pub fn executar(
@@ -292,6 +316,9 @@ pub fn executar(
 ) -> Execucao {
     if let Acao::Acordar(alvo) = acao {
         return Execucao::AcordarAlvo(alvo);
+    }
+    if let Acao::Call(mudo) = acao {
+        return Execucao::CallMudo(mudo);
     }
     Execucao::Concluida(executar_local(acao, cadastrados, perfil))
 }
@@ -351,10 +378,11 @@ fn executar_local(
                 Err("este computador não consegue voltar sozinho depois de desligar")
             }
         },
-        // Tratado em `executar`, antes de chegar aqui: acordar precisa da
-        // nuvem. O braço existe para o compilador cobrar quem acrescentar uma
-        // ação, e nunca é alcançado.
+        // Tratados em `executar`, antes de chegar aqui: os dois precisam de algo
+        // fora deste processo. Os braços existem para o compilador cobrar quem
+        // acrescentar uma ação, e nunca são alcançados.
         Acao::Acordar(_) => Err("acordar é resolvido pela ponte"),
+        Acao::Call(_) => Err("o mudo é resolvido pela ligação com o CALL"),
         Acao::ReproduzirPausar
         | Acao::ProximaFaixa
         | Acao::FaixaAnterior
@@ -385,7 +413,8 @@ fn apertar_tecla_de_midia(acao: Acao) -> Result<(), &'static str> {
             | Acao::AbrirPrograma(_)
             | Acao::Energia(_)
             | Acao::ProntoParaRetorno
-            | Acao::Acordar(_) => return Err("essa ação não é tecla de mídia"),
+            | Acao::Acordar(_)
+            | Acao::Call(_) => return Err("essa ação não é tecla de mídia"),
         };
         // A ação é deliberadamente limitada a teclas de mídia registradas;
         // nenhum código, atalho ou conteúdo arbitrário chega ao Windows.
@@ -671,6 +700,38 @@ mod testes {
                 id: "um".into(),
                 acao: Acao::AbrirAtalho(Atalho::YouTube),
             }
+        );
+    }
+
+    #[test]
+    fn o_mudo_do_call_chega_como_dois_identificadores() {
+        // Um botão só na tela, dois identificadores no canal. O celular escolhe
+        // qual mandar a partir do estado que recebeu — é o que permite dizer
+        // "fique mudo" sem a lista de ações deixar de ser fechada.
+        let par = par(&["action.execute", "system.media"]);
+        let mut estado = EstadoComandos::depois_do_hello();
+
+        assert_eq!(
+            receber(&pedido("a", 1, 10_000, "call.mudo"), &par, &mut estado, 10_000),
+            RecepcaoAcao::Aceita { id: "a".into(), acao: Acao::Call(true) }
+        );
+        assert_eq!(
+            receber(&pedido("b", 2, 10_000, "call.falar"), &par, &mut estado, 10_000),
+            RecepcaoAcao::Aceita { id: "b".into(), acao: Acao::Call(false) }
+        );
+    }
+
+    #[test]
+    fn o_mudo_do_call_sai_de_executar_em_vez_de_ser_feito_ali() {
+        // Como acordar, e pelo mesmo motivo: quem executa é a ligação com o
+        // CALL, que é assíncrona e pode não existir. Se este braço voltasse a
+        // cair em `executar_local`, o celular receberia "deu certo" sem nada ter
+        // acontecido do outro lado.
+        let atalhos = atalhos_vazios();
+        let perfil = perfil_de_teste();
+        assert_eq!(
+            executar(Acao::Call(true), &atalhos, &perfil),
+            Execucao::CallMudo(true)
         );
     }
 

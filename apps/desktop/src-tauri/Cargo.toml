@@ -1,6 +1,6 @@
 [package]
 name = "slate-agente"
-version = "0.1.10"
+version = "0.1.11"
 description = "Agente do SLATE para Windows"
 authors = ["Aionixdev"]
 edition = "2021"
@@ -45,7 +45,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 reqwest_cookie_store = "0.9"
 cookie_store = { version = "0.22", features = ["serde_json"] }
 
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util"] }
 
 # Transporte em tempo real. `webrtc` fornece a pilha completa (ICE, TURN,
 # DTLS, SCTP e DataChannel); usar `str0m` exigiria implementar descoberta de

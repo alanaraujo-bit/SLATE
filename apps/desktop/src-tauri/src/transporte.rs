@@ -1,5 +1,6 @@
 use crate::acoes::{self, EstadoComandos, RecepcaoAcao};
 use crate::atalhos::{Atalho, AtalhosPersonalizados, ConfiguracaoDeck, PerfilDeDeck};
+use crate::call::LigacaoComOCall;
 use crate::api::ClienteApi;
 use crate::energia;
 use crate::identidade::{
@@ -128,6 +129,7 @@ async fn anunciar_sessao(
     canal: &Arc<dyn DataChannel>,
     pares: &ParesConfiaveis,
     atalhos: &AtalhosPersonalizados,
+    call: &LigacaoComOCall,
     destino: &str,
     dispositivo_id: &str,
     proxima_sequencia: &mut i64,
@@ -142,6 +144,10 @@ async fn anunciar_sessao(
         "action.media.completo",
         "state.system",
         "state.media",
+        // Não é por par: mutar entra sob `system.media`, que o pareamento já
+        // concede — mesma razão do volume. E ela não promete que o CALL está
+        // aberto; isso é `disponivel`, em `call.estado`, logo abaixo.
+        "call.controle",
     ];
     let pode_abrir_programas = pares
         .buscar(destino)
@@ -243,6 +249,14 @@ async fn anunciar_sessao(
         }
     }
 
+    // O estado do CALL vai para todo mundo, e não só a quem tem alguma
+    // concessão extra: o escopo que o mudo exige é `system.media`, que o
+    // pareamento concede. Quem recebe `disponivel: false` desenha a ausência
+    // com o motivo, em vez de uma tecla que não faz nada.
+    if !anunciar_call(canal, call, proxima_sequencia).await {
+        return false;
+    }
+
     true
 }
 
@@ -266,6 +280,29 @@ struct AtalhoNoCanal<'a> {
     cor: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     icone: Option<&'a str>,
+}
+
+/// Manda o estado do CALL daquele computador.
+///
+/// Vai depois do hello e a cada mudança. É por ele que a tecla de mudo sabe se
+/// deve existir e o que deve dizer — sem isto o celular teria um botão que
+/// promete alternar algo sobre o qual ele não sabe nada.
+async fn anunciar_call(
+    canal: &Arc<dyn DataChannel>,
+    call: &LigacaoComOCall,
+    proxima_sequencia: &mut i64,
+) -> bool {
+    let mensagem = json!({
+        "v": VERSAO_PROTOCOLO,
+        "id": uuid::Uuid::new_v4().to_string(),
+        "t": "evt",
+        "k": "call.estado",
+        "ts": agora_ms(),
+        "seq": *proxima_sequencia,
+        "p": call.estado()
+    });
+    *proxima_sequencia += 1;
+    canal.send_text(&mensagem.to_string()).await.is_ok()
 }
 
 /// Avisa uma sessão aberta de que outro painel passou a valer.
@@ -477,6 +514,14 @@ enum SaidaSinalizacao {
 pub enum Aviso {
     /// A permissão de um aparelho mudou. Carrega o destino, ou `AVISO_TODOS`.
     Permissao(String),
+    /// O CALL deste computador mudou de estado — entrou numa chamada, mutou,
+    /// começou a transmitir, ou fechou.
+    ///
+    /// **Não carrega o estado**, pelo mesmo motivo de `Permissao` carregar só o
+    /// destino: quem reage lê da `LigacaoComOCall`, que é a única fonte. Duas
+    /// cópias da mesma resposta divergem no dia em que uma das duas mudar, e o
+    /// defeito só aparece muito depois.
+    Call,
     /// O programa em primeiro plano pede outro painel. Carrega só o id do
     /// painel: **o nome do programa não sai desta máquina**. O celular não
     /// precisa dele para trocar de painel, e ele é a lista de programas deste
@@ -508,6 +553,7 @@ struct EventosPar {
     dispositivo_id: String,
     pares: Arc<ParesConfiaveis>,
     atalhos: Arc<AtalhosPersonalizados>,
+    call: Arc<LigacaoComOCall>,
     avisos: AvisoDePermissao,
 }
 
@@ -540,6 +586,7 @@ impl PeerConnectionEventHandler for EventosPar {
         let dispositivo_id = self.dispositivo_id.clone();
         let pares = self.pares.clone();
         let atalhos = self.atalhos.clone();
+        let call = self.call.clone();
         let mut avisos = self.avisos.subscribe();
         tokio::spawn(async move {
             let Ok(rotulo) = canal.label().await else {
@@ -578,8 +625,23 @@ impl PeerConnectionEventHandler for EventosPar {
                                     &canal,
                                     &pares,
                                     &atalhos,
+                                    &call,
                                     &destino,
                                     &dispositivo_id,
+                                    &mut proxima_sequencia_saida,
+                                )
+                                .await
+                                {
+                                    break;
+                                }
+                            }
+                            // O CALL abriu, fechou, entrou numa chamada ou
+                            // mudou de mudo. Vale para todo aparelho ligado —
+                            // é estado da máquina, não permissão de ninguém.
+                            Ok(Aviso::Call) if aberto => {
+                                if !anunciar_call(
+                                    &canal,
+                                    &call,
                                     &mut proxima_sequencia_saida,
                                 )
                                 .await
@@ -624,6 +686,7 @@ impl PeerConnectionEventHandler for EventosPar {
                             &canal,
                             &pares,
                             &atalhos,
+                            &call,
                             &destino,
                             &dispositivo_id,
                             &mut proxima_sequencia_saida,
@@ -710,6 +773,11 @@ impl PeerConnectionEventHandler for EventosPar {
                                     acoes::Execucao::AcordarAlvo(_) => {
                                         Err("acordar outro computador ainda não está disponível")
                                     }
+                                    // A recusa vem com motivo — CALL fechado e
+                                    // CALL sem chamada são coisas diferentes, e
+                                    // quem apertou do outro lado da casa não tem
+                                    // como descobrir qual é olhando para a tela.
+                                    acoes::Execucao::CallMudo(valor) => call.pedir_mudo(valor),
                                 };
                                 // A chave `error` é omitida quando deu certo, em
                                 // vez de ir como `null`: ausente é o que o
@@ -753,6 +821,7 @@ pub async fn executar(
     identidade: Identidade,
     pares: Arc<ParesConfiaveis>,
     atalhos: Arc<AtalhosPersonalizados>,
+    call: Arc<LigacaoComOCall>,
     avisos: AvisoDePermissao,
 ) {
     let mut espera = Duration::from_secs(1);
@@ -762,6 +831,7 @@ pub async fn executar(
             &identidade,
             pares.clone(),
             atalhos.clone(),
+            call.clone(),
             avisos.clone(),
         )
         .await
@@ -778,6 +848,7 @@ async fn executar_sessao(
     identidade: &Identidade,
     pares: Arc<ParesConfiaveis>,
     atalhos: Arc<AtalhosPersonalizados>,
+    call: Arc<LigacaoComOCall>,
     avisos: AvisoDePermissao,
 ) -> Result<(), ErroTransporte> {
     let desafio = api
@@ -906,6 +977,7 @@ async fn executar_sessao(
                                 &superficie,
                                 pares.clone(),
                                 atalhos.clone(),
+                                call.clone(),
                                 avisos.clone(),
                                 servidores_ice.clone(),
                                 &sessao_id,
@@ -1051,6 +1123,7 @@ async fn criar_resposta(
     superficie: &ParConfiavel,
     pares: Arc<ParesConfiaveis>,
     atalhos: Arc<AtalhosPersonalizados>,
+    call: Arc<LigacaoComOCall>,
     avisos: AvisoDePermissao,
     servidores_ice: Vec<RTCIceServer>,
     sessao_id: &str,
@@ -1083,6 +1156,7 @@ async fn criar_resposta(
             dispositivo_id: dispositivo_id.to_string(),
             pares,
             atalhos,
+            call,
             avisos,
         }))
         .with_runtime(runtime)
