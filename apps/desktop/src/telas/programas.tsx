@@ -329,7 +329,7 @@ export function TelaProgramas({ podeUsar }: { podeUsar: boolean }) {
 
       {criandoSite && (
         <ModalEndereco
-          corSugerida={CORES[atalhos.length % CORES.length]}
+          corSugerida={CORES[atalhos.length % CORES.length] ?? "violet"}
           aoCriar={(url, nome, cor, icone) => void criarSite(url, nome, cor, icone)}
           aoFechar={() => setCriandoSite(false)}
         />
