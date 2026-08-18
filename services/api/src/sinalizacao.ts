@@ -102,6 +102,23 @@ export function criarSinalizacao({
     const anterior = conexoes.get(credencial.id);
     if (anterior && anterior !== socket) anterior.close(4001, "conexao_substituida");
     conexoes.set(credencial.id, socket);
+    /*
+     * Rastro mínimo da sessão.
+     *
+     * **Existe porque a alternativa custou uma noite.** Quando a conexão não
+     * sobe, ninguém — nem quem está na frente do computador — consegue saber em
+     * que etapa ela morreu: o celular diz "Conectando" e o Agente diz "nenhum
+     * aparelho conectado", que é a mesma frase para "não chegou aqui", "chegou
+     * e foi recusado" e "conectou e caiu depois".
+     *
+     * Só identificador e tipo de mensagem. Nada de SDP, candidato ou qualquer
+     * conteúdo: o que se quer saber é quem falou com quem e em que ordem, e
+     * gravar o resto seria guardar a topologia da rede de quem usa.
+     */
+    console.log(`[sinal] entrou ${credencial.papel} ${credencial.id}`);
+    socket.on("close", (codigo) => {
+      console.log(`[sinal] saiu ${credencial.papel} ${credencial.id} codigo=${codigo}`);
+    });
 
     let ice: ConfiguracaoIce;
     try {
@@ -183,11 +200,13 @@ export function criarSinalizacao({
     if (!origem) return falhar(socket, "nao_autenticado", true);
 
     if (!(await podeAlcancar(origem, mensagem.destino))) {
+      console.log(`[sinal] recusado ${mensagem.tipo} ${origem.id} -> ${mensagem.destino}`);
       return falhar(socket, "destino_invalido");
     }
 
     const destino = conexoes.get(mensagem.destino);
     if (!destino || destino.readyState !== WebSocket.OPEN) {
+      console.log(`[sinal] ausente ${mensagem.tipo} ${origem.id} -> ${mensagem.destino}`);
       enviar(socket, {
         tipo: "indisponivel",
         dispositivoId: mensagem.destino,
@@ -197,8 +216,13 @@ export function criarSinalizacao({
     }
 
     if (destino.bufferedAmount > MAX_FILA_BYTES) {
+      console.log(`[sinal] fila cheia ${origem.id} -> ${mensagem.destino}`);
       return falhar(socket, "limite_excedido");
     }
+
+    // Candidato é o que mais aparece, e o volume dele é justamente o sinal:
+    // muitos candidatos e nenhum "conectado" é ICE que não fecha.
+    console.log(`[sinal] ${mensagem.tipo} ${origem.id} -> ${mensagem.destino}`);
 
     const { destino: _destino, ...conteudo } = mensagem;
     destino.send(JSON.stringify({ ...conteudo, origem: origem.id }));
