@@ -24,6 +24,27 @@ export interface Config {
     tokenApi: string;
     ttlSegundos: number;
   };
+  /**
+   * Relay TURN de credencial fixa, para quando não há emissor de credencial
+   * temporária configurado.
+   *
+   * **É a rota de reserva, e sem ela a conexão depende da sorte do NAT de cada
+   * casa.** Sem relay, celular e computador só se falam se conseguirem se achar
+   * diretamente; onde o roteador isola clientes da mesma Wi-Fi — comportamento
+   * padrão em muito roteador de operadora e em toda rede de visitante — não
+   * existe caminho nenhum, nem pela rede local nem pelo endereço público, que
+   * exigiria hairpin.
+   *
+   * A credencial fixa é inferior à temporária da Cloudflare, e isso é aceito de
+   * propósito: uma credencial que vaza dá a terceiros o uso do relay, não
+   * acesso ao conteúdo — o DTLS é fim a fim, e o relay encaminha bytes cifrados
+   * sem poder lê-los. `turnCloudflare` continua tendo precedência quando existe.
+   */
+  turnFixo?: {
+    urls: string[];
+    usuario: string;
+    senha: string;
+  };
   /** Acesso servidor-servidor às releases privadas; nunca é enviado ao Agente. */
   releasesGitHub?: {
     token: string;
@@ -114,6 +135,25 @@ export function carregarConfig(env: NodeJS.ProcessEnv = process.env): Config {
     );
   }
 
+  // Relay de credencial fixa. As três variáveis andam juntas: um relay sem
+  // usuário e senha não atende ninguém, e recusar na subida é melhor do que
+  // anunciar aos clientes uma rota que vai falhar em toda tentativa.
+  const urlsTurnFixo = (env.TURN_URLS ?? "")
+    .split(",")
+    .map((url) => url.trim())
+    .filter(Boolean);
+  const usuarioTurnFixo = env.TURN_USUARIO?.trim();
+  const senhaTurnFixo = env.TURN_SENHA?.trim();
+  const partesTurnFixo = [urlsTurnFixo.length > 0, Boolean(usuarioTurnFixo), Boolean(senhaTurnFixo)];
+  if (partesTurnFixo.some(Boolean) && !partesTurnFixo.every(Boolean)) {
+    throw new ConfiguracaoInvalida(
+      "TURN_URLS, TURN_USUARIO e TURN_SENHA precisam ser definidos juntos.",
+    );
+  }
+  if (urlsTurnFixo.some((url) => !/^turns?:/.test(url))) {
+    throw new ConfiguracaoInvalida("TURN_URLS aceita apenas endereços turn: ou turns:.");
+  }
+
   const tokenReleases = env.GITHUB_RELEASE_TOKEN?.trim();
   const repositorioReleases = (env.GITHUB_RELEASE_REPOSITORY ?? "alanaraujo-bit/SLATE").trim();
   const urlPublicaApiBruta = (
@@ -146,6 +186,15 @@ export function carregarConfig(env: NodeJS.ProcessEnv = process.env): Config {
             chaveId: chaveTurn,
             tokenApi: tokenTurn,
             ttlSegundos: ttlTurn,
+          },
+        }
+      : {}),
+    ...(urlsTurnFixo.length > 0 && usuarioTurnFixo && senhaTurnFixo
+      ? {
+          turnFixo: {
+            urls: urlsTurnFixo,
+            usuario: usuarioTurnFixo,
+            senha: senhaTurnFixo,
           },
         }
       : {}),

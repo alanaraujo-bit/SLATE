@@ -26,6 +26,35 @@ export async function obterConfiguracaoIce(
   agora: () => number = Date.now,
 ): Promise<ConfiguracaoIce> {
   if (!config.turnCloudflare) {
+    /*
+     * Relay de credencial fixa, quando há um configurado.
+     *
+     * **STUN sozinho não é rota, é um espelho.** Ele só conta a cada lado qual
+     * é o endereço público dele; quem precisa atravessar continua sendo os
+     * dois. Onde o roteador isola clientes da mesma Wi-Fi, o caminho de dentro
+     * não existe e o de fora exigiria hairpin — e o resultado é uma tela de
+     * "Conectando" que nunca sai disso, sem erro em lugar nenhum.
+     *
+     * O STUN continua na lista junto do relay, e na frente: o caminho direto é
+     * mais rápido e mais barato, e o ICE escolhe o relay só quando ele é o
+     * único que fecha.
+     */
+    const { turnFixo } = config;
+    if (turnFixo) {
+      return {
+        servidoresIce: [
+          ...STUN_PUBLICO,
+          {
+            urls: turnFixo.urls,
+            username: turnFixo.usuario,
+            credential: turnFixo.senha,
+          },
+        ],
+        // Credencial fixa não vence, então não há quando renovar. `null` é o
+        // que faz o cliente parar de reagendar a busca por credencial nova.
+        iceExpiraEm: null,
+      };
+    }
     return { servidoresIce: STUN_PUBLICO, iceExpiraEm: null };
   }
 
